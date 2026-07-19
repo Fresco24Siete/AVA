@@ -35,5 +35,10 @@ c.Spawner.auth_state_hook = auth_state_a_env
 
 c.Spawner.default_url = '/lab/tree/cuadernillo_datos_lti.ipynb'
 
+# JupyterHub debe escuchar en todas las interfaces internas del contenedor
+c.JupyterHub.ip = '0.0.0.0'
+c.JupyterHub.port = 8000
+
+# El Hub API también debe ser accesible internamente
 c.JupyterHub.hub_ip = '0.0.0.0'
-c.JupyterHub.bind_url = 'https://jupyteruisproyecto.duckdns.org'
+c.JupyterHub.hub_connect_ip = 'jupyterhub'
