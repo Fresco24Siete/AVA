@@ -23,15 +23,12 @@ services:
     container_name: jupyterhub
     restart: always
     volumes:
-      # Permite que JupyterHub controle el Docker
       - /var/run/docker.sock:/var/run/docker.sock
-      # El archivo de configuración de reglas
       - ./hub_config/jupyterhub_config.py:/srv/jupyterhub/jupyterhub_config.py
     networks:
       - moodle_jupyter_net
     environment:
       - DOCKER_NETWORK_NAME=moodle_jupyter_net
-      # REEMPLAZA EL TEXTO DE ABAJO CON LA CLAVE GENERADA
       - JUPYTERHUB_CRYPT_KEY=b201854d5b762ee4a7db36f002ce85d726ecd8a6ef1be1fd835b80714af06a79
 
 volumes:

@@ -15,12 +15,10 @@ RUN pip install --no-cache-dir jupyterlab nbgrader jupyterhub
 # Habilitar las extensiones de nbgrader para el profesor (Formgrader)
 RUN jupyter server extension enable --sys-prefix nbgrader.server_extensions.formgrader
 
-# Directorio de trabajo dentro del contenedor
-WORKDIR /app
+COPY notebook/notebooks/ /home/jovyan/
+
+# Directorio de trabajo dentro del contenedor (DEBE coincidir con la ruta de arriba)
+WORKDIR /home/jovyan/
 
 # Puerto estándar de Jupyter que DockerSpawner espera
 EXPOSE 8888
-
-# ELIMINAMOS EL CMD.
-# No necesitamos decirle cómo arrancar. JupyterHub inyectará automáticamente
-# el comando correcto para enlazar este contenedor con la sesión del alumno.

@@ -15,7 +15,6 @@ c.LTI11Authenticator.consumers = {
     "moodle-llave-publica": "secreto-super-seguro-000000"
 }
 
-c.Spawner.default_url = '/lab'
 c.LTI11Authenticator.username_key = 'lis_person_contact_email_primary'
 c.Authenticator.enable_auth_state = True
 
@@ -33,8 +32,8 @@ async def auth_state_a_env(spawner):
 c.Spawner.auth_state_hook = auth_state_a_env
 
 
-c.Spawner.default_url = '/lab/tree/cuadernillo_datos_lti.ipynb'
-
+#c.Spawner.default_url = '/lab/tree/cuadernillo_datos_lti.ipynb'
+c.Spawner.auth_state_hook = auth_state_a_env
 # JupyterHub debe escuchar en todas las interfaces internas del contenedor
 c.JupyterHub.ip = '0.0.0.0'
 c.JupyterHub.port = 8000
