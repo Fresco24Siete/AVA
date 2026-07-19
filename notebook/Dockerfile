@@ -15,7 +15,7 @@ RUN pip install --no-cache-dir jupyterlab nbgrader jupyterhub
 # Habilitar las extensiones de nbgrader para el profesor (Formgrader)
 RUN jupyter server extension enable --sys-prefix nbgrader.server_extensions.formgrader
 
-COPY notebook/notebooks/ /home/jovyan/
+COPY notebooks/ /home/jovyan/
 
 # Directorio de trabajo dentro del contenedor (DEBE coincidir con la ruta de arriba)
 WORKDIR /home/jovyan/
