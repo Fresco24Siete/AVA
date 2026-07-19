@@ -1,0 +1,3 @@
+jupyteruisproyecto.duckdns.org {
+    reverse_proxy jupyterhub:8000
+}

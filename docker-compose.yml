@@ -1,12 +1,38 @@
+version: '3.8'
+
+networks:
+  moodle_jupyter_net:
+    driver: bridge
+
 services:
-  notebook:
-    build:
-      context: ./notebook
-      dockerfile: Dockerfile
-    container_name: mi-jupyter-dev
+  caddy:
+    image: caddy:latest
+    container_name: proxy_caddy
+    restart: always
     ports:
-      - "8888:8888"
+      - "80:80"   
+      - "443:443"     
     volumes:
-  
-      - ./:/app
-    restart: unless-stopped
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+    networks:
+      - moodle_jupyter_net
+
+  jupyterhub:
+    build:
+      context: ./hub_config
+      dockerfile: Dockerfile.hub
+    container_name: jupyterhub
+    restart: always
+    volumes:
+      # Permite que JupyterHub controle el Docker
+      - /var/run/docker.sock:/var/run/docker.sock
+      # El archivo de configuración de reglas
+      - ./hub_config/jupyterhub_config.py:/srv/jupyterhub/jupyterhub_config.py
+    networks:
+      - moodle_jupyter_net
+    environment:
+      - DOCKER_NETWORK_NAME=moodle_jupyter_net
+      
+volumes:
+  caddy_data:
