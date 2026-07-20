@@ -1,7 +1,6 @@
 import os
 c = get_config()
 
-
 c.JupyterHub.spawner_class = 'dockerspawner.DockerSpawner'
 c.DockerSpawner.image = 'mi_imagen_jupyterlab:latest'
 
@@ -19,8 +18,8 @@ c.LTI11Authenticator.consumers = {
 c.LTI11Authenticator.username_key = 'lis_person_contact_email_primary'
 c.Authenticator.enable_auth_state = True
 
-async def auth_state_a_env(spawner):
-    auth_state = await spawner.user.get_auth_state()
+# Función corregida para aceptar (spawner, auth_state)
+async def auth_state_a_env(spawner, auth_state):
     if not auth_state:
         return
     spawner.environment['ALUMNO_ID']     = str(auth_state.get('user_id', ''))
@@ -30,12 +29,11 @@ async def auth_state_a_env(spawner):
     spawner.environment['CURSO_ID']      = str(auth_state.get('context_id', ''))
     spawner.environment['CURSO_NOMBRE']  = str(auth_state.get('context_title', ''))
 
-
+c.Spawner.auth_state_hook = auth_state_a_env
 
 # Fuerza el redireccionamiento directo al spawn después de loguearse
 c.JupyterHub.default_url = '/hub/spawn'
-#c.Spawner.default_url = '/lab/tree/cuadernillo_datos_lti.ipynb'
-c.Spawner.auth_state_hook = auth_state_a_env
+
 # JupyterHub debe escuchar en todas las interfaces internas del contenedor
 c.JupyterHub.ip = '0.0.0.0'
 c.JupyterHub.port = 8000
