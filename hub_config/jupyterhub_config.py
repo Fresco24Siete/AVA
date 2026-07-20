@@ -14,7 +14,7 @@ c.Authenticator.allow_all = True
 c.LTI11Authenticator.consumers = {
     "moodle-llave-publica": "secreto-super-seguro-000000"
 }
-
+c.DockerSpawner.network_name = 'moodle_jupyter_net'
 c.LTI11Authenticator.username_key = 'lis_person_contact_email_primary'
 c.Authenticator.enable_auth_state = True
 
