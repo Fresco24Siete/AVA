@@ -30,7 +30,7 @@ async def auth_state_a_env(spawner):
     spawner.environment['CURSO_ID']      = str(auth_state.get('context_id', ''))
     spawner.environment['CURSO_NOMBRE']  = str(auth_state.get('context_title', ''))
 
-c.Spawner.auth_state_hook = auth_state_a_env
+
 
 # Fuerza a que tras procesar el LTI, el usuario vaya directo al spawn
 c.LTI11Authenticator.post_launch_url = '/hub/spawn'
