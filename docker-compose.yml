@@ -1,6 +1,7 @@
 networks:
   moodle_jupyter_net:
     driver: bridge
+    name: moodle_jupyter_net
 
 services:
   caddy:
@@ -28,6 +29,7 @@ services:
     networks:
       - moodle_jupyter_net
     environment:
+
       - DOCKER_NETWORK_NAME=moodle_jupyter_net
       - JUPYTERHUB_CRYPT_KEY=b201854d5b762ee4a7db36f002ce85d726ecd8a6ef1be1fd835b80714af06a79
 
