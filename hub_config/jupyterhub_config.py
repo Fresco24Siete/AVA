@@ -10,6 +10,7 @@ c.DockerSpawner.use_internal_ip = True
 c.DockerSpawner.network_name = network_name
 c.DockerSpawner.remove = True
 c.JupyterHub.authenticator_class = 'ltiauthenticator.lti11.auth.LTI11Authenticator'
+c.Authenticator.allow_all = True
 
 c.LTI11Authenticator.consumers = {
     "moodle-llave-publica": "secreto-super-seguro-000000"
@@ -31,7 +32,8 @@ async def auth_state_a_env(spawner):
 
 c.Spawner.auth_state_hook = auth_state_a_env
 
-
+# Fuerza a que tras procesar el LTI, el usuario vaya directo al spawn
+c.LTI11Authenticator.post_launch_url = '/hub/spawn'
 #c.Spawner.default_url = '/lab/tree/cuadernillo_datos_lti.ipynb'
 c.Spawner.auth_state_hook = auth_state_a_env
 # JupyterHub debe escuchar en todas las interfaces internas del contenedor
