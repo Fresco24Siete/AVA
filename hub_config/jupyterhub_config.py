@@ -4,10 +4,12 @@ c = get_config()
 c.JupyterHub.spawner_class = 'dockerspawner.DockerSpawner'
 c.DockerSpawner.image = 'mi_imagen_jupyterlab:latest'
 
+
+
 network_name = os.environ.get('DOCKER_NETWORK_NAME', 'bridge')
 c.DockerSpawner.use_internal_ip = True
 c.DockerSpawner.network_name = network_name
-c.DockerSpawner.remove = True
+c.DockerSpawner.remove = False
 c.JupyterHub.authenticator_class = 'ltiauthenticator.lti11.auth.LTI11Authenticator'
 c.Authenticator.allow_all = True
 
