@@ -8,10 +8,9 @@ RUN apt-get update && apt-get install -y curl git \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# CRÍTICO: jupyterhub debe estar instalado; jupyterhub-singleuser viene incluido dentro de jupyterhub
+
 RUN pip install --no-cache-dir jupyterlab nbgrader jupyterhub
 
-# Crear el usuario por defecto 'jovyan' (UID 1000) que DockerSpawner espera
 RUN useradd -m -s /bin/bash -u 1000 jovyan
 
 # Copiar los cuadernillos y darles permisos correctos al usuario jovyan
@@ -26,5 +25,4 @@ WORKDIR /home/jovyan/work
 # Puerto estándar de JupyterLab
 EXPOSE 8888
 
-# Comando por defecto que JupyterHub llamará para iniciar el servidor del usuario
 CMD ["jupyterhub-singleuser"]
