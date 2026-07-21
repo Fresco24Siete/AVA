@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir jupyterlab nbgrader jupyterhub
 RUN useradd -m -s /bin/bash -u 1000 jovyan
 
 # Copiar los cuadernillos y darles permisos correctos al usuario jovyan
-COPY --chown=jovyan:jovyan notebooks/ /home/jovyan/work/
+COPY --chown=jovyan:jovyan notebook_semana/ /home/jovyan/work/
 
 # Cambiar al usuario jovyan para seguridad y buen funcionamiento
 USER jovyan
