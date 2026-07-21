@@ -33,8 +33,8 @@ async def auth_state_a_env(spawner, auth_state):
 
 c.Spawner.auth_state_hook = auth_state_a_env
 
-# Fuerza el redireccionamiento directo al spawn después de loguearse
-c.JupyterHub.default_url = '/hub/spawn'
+
+c.Spawner.default_url = 'lab/tree/notebook/notebook_semana/cuadernillo_poc_backend.ipynb?mode=single'
 
 # JupyterHub debe escuchar en todas las interfaces internas del contenedor
 c.JupyterHub.ip = '0.0.0.0'
