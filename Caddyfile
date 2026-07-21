@@ -3,7 +3,6 @@ jupyteruisproyecto.duckdns.org {
 
 
     header {
-
         -X-Frame-Options
         Content-Security-Policy "frame-ancestors 'self' https://lms.uis.edu.co"
     }
