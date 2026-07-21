@@ -9,7 +9,11 @@ RUN apt-get update && apt-get install -y curl git \
     && rm -rf /var/lib/apt/lists/*
 
 
-RUN pip install --no-cache-dir jupyterlab nbgrader jupyterhub
+# Instalamos notebook y nbclassic. Quitamos jupyterlab de la lista explícitamente.
+RUN pip install --no-cache-dir notebook nbclassic nbgrader jupyterhub
+
+# Desactivamos la extensión de JupyterLab por si se instaló como dependencia oculta (el || true evita que el build falle si no existe)
+RUN jupyter server extension disable jupyterlab || true
 
 RUN useradd -m -s /bin/bash -u 1000 jovyan
 
