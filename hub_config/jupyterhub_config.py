@@ -35,8 +35,7 @@ c.Spawner.auth_state_hook = auth_state_a_env
 
 
 c.JupyterHub.default_url = '/hub/spawn'
-
-c.Spawner.default_url = '/lab/tree/notebook_semana/cuadernillo_poc_backend.ipynb?mode=single'
+c.Spawner.default_url = '/lab/tree/cuadernillo_poc_backend.ipynb?mode=single'
 
 # JupyterHub debe escuchar en todas las interfaces internas del contenedor
 c.JupyterHub.ip = '0.0.0.0'
