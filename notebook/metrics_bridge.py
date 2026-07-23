@@ -1,17 +1,3 @@
-"""
-Puente local: recibe eventos de ejecución de celdas (desde custom.js, mismo
-origen que el propio servidor de Jupyter del estudiante) y los reenvía al
-backend Go con el token escaneado de ESE estudiante para ESE cuadernillo.
-
-El navegador nunca ve ningún secreto: solo llama a esta ruta local
-(/nbgrader-metrics/evento), protegida por la propia sesión/cookie de
-Jupyter. Este handler es quien conoce STUDENT_METRICS_TOKEN, leído de una
-variable de entorno del contenedor.
-
-Si ENVIAR_AL_BACKEND está en "false" (por defecto), el evento se imprime
-bonito en los logs del contenedor para inspección sin fallar por falta de red.
-Cuando el backend esté disponible, cambia ENVIAR_AL_BACKEND a "true".
-"""
 import json
 import os
 
