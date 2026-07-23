@@ -100,7 +100,7 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
             '<div style="background: #0f172a; border-radius: 0 0 8px 8px; border: 1px solid rgba(255,255,255,0.08); border-top: none; padding: 10px 14px;">',
                 '<details style="color: #94a3b8;">',
                     '<summary style="cursor: pointer; font-size: 12px; font-weight: 600; color: #38bdf8; user-select: none;">',
-                        '📡 Ver JSON que se enviaría al Backend (Click para desplegar)',
+                        'Ver JSON que se enviaría al Backend (Click para desplegar)',
                     '</summary>',
                     '<pre style="margin-top: 8px; margin-bottom: 0; background: #020617; padding: 12px; border-radius: 6px; font-family: \'Fira Code\', monospace; font-size: 12px; color: #38bdf8; overflow-x: auto; border: 1px solid rgba(56, 189, 248, 0.2);">' + jsonFormatted + '</pre>',
                 '</details>',
