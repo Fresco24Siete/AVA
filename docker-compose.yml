@@ -32,6 +32,7 @@ services:
 
       - DOCKER_NETWORK_NAME=moodle_jupyter_net
       - JUPYTERHUB_CRYPT_KEY=b201854d5b762ee4a7db36f002ce85d726ecd8a6ef1be1fd835b80714af06a79
+      - ENVIAR_AL_BACKEND=${ENVIAR_AL_BACKEND:-false}
 
 volumes:
   caddy_data:

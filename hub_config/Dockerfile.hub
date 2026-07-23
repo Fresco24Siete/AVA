@@ -3,4 +3,5 @@ FROM jupyterhub/jupyterhub:latest
 # Instalar los plugins necesarios 
 RUN pip install --no-cache-dir \
     dockerspawner \
-    jupyterhub-ltiauthenticator
+    jupyterhub-ltiauthenticator \
+    httpx
