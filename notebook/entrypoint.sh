@@ -23,6 +23,17 @@ if [ "$ALUMNO_ROL" = "instructor" ]; then
     jupyter nbextension disable   --sys-prefix assignment_list/main || true
     jupyter serverextension disable --sys-prefix nbgrader.server_extensions.assignment_list || true
     jupyter server extension disable --sys-prefix nbgrader.server_extensions.assignment_list || true
+
+    # Poblar automáticamente las tareas de muestra de notebook_semana en la carpeta source del curso
+    mkdir -p "/srv/nbgrader/${CURSO_ID}/source/semana_1"
+    mkdir -p "/srv/nbgrader/${CURSO_ID}/source/poc_backend"
+
+    if [ -f "/home/jovyan/work/cuadernillo_ejercicios.ipynb" ]; then
+        cp -n "/home/jovyan/work/cuadernillo_ejercicios.ipynb" "/srv/nbgrader/${CURSO_ID}/source/semana_1/cuadernillo_ejercicios.ipynb" 2>/dev/null || true
+    fi
+    if [ -f "/home/jovyan/work/cuadernillo_poc_backend.ipynb" ]; then
+        cp -n "/home/jovyan/work/cuadernillo_poc_backend.ipynb" "/srv/nbgrader/${CURSO_ID}/source/poc_backend/cuadernillo_poc_backend.ipynb" 2>/dev/null || true
+    fi
 else
     echo "[entrypoint] Rol: estudiante. Activando assignment_list."
     jupyter nbextension enable     --sys-prefix assignment_list/main || true
