@@ -1,7 +1,7 @@
 FROM jupyterhub/jupyterhub:latest
 
-# Instalar los plugins necesarios 
-RUN pip install --no-cache-dir \
+# Instalar los plugins necesarios directamente en el entorno virtual de JupyterHub (/srv/venv)
+RUN /srv/venv/bin/pip install --no-cache-dir \
     dockerspawner \
     jupyterhub-ltiauthenticator \
     httpx

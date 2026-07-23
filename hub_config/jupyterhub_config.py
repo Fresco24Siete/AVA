@@ -1,5 +1,12 @@
 import os
-import httpx
+import json
+import urllib.request
+
+try:
+    import httpx
+except ImportError:
+    httpx = None
+
 from ltiauthenticator.lti11.auth import LTI11Authenticator
 
 c = get_config()
@@ -84,44 +91,35 @@ async def auth_state_a_env(spawner, auth_state):
     spawner.environment['CURSO_NOMBRE']   = str(auth_state.get('context_title', ''))
     spawner.environment['ENVIAR_AL_BACKEND'] = os.environ.get('ENVIAR_AL_BACKEND', 'false')
 
-    # El cuadernillo activo lo decide el instructor (vía tu backend, no en
-    # Moodle -- así puede cambiarlo sin tocar la actividad LTI). Se resuelve
-    # en cada login preguntándole al backend cuál está activo AHORA para
-    # este curso.
+    # El cuadernillo activo lo decide el instructor (vía tu backend).
+    # Se resuelve en cada login preguntándole al backend cuál está activo AHORA.
     cuadernillo_id = ''
     try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            resp = await client.get(
-                os.environ.get(
-                    'CUADERNILLO_ACTIVO_URL',
-                    'http://backend_go:8080/internal/cursos'
-                ) + f'/{curso_id}/cuadernillo-activo',
-                headers={'Authorization': f"Bearer {os.environ.get('METRICS_API_TOKEN', '')}"},
-            )
-            if resp.status_code == 200:
-                cuadernillo_id = resp.json().get('cuadernillo_codigo', '')
+        url_activo = os.environ.get('CUADERNILLO_ACTIVO_URL', 'http://backend_go:8080/internal/cursos') + f'/{curso_id}/cuadernillo-activo'
+        headers = {'Authorization': f"Bearer {os.environ.get('METRICS_API_TOKEN', '')}"}
+        
+        if httpx is not None:
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.get(url_activo, headers=headers)
+                if resp.status_code == 200:
+                    cuadernillo_id = resp.json().get('cuadernillo_codigo', '')
+        else:
+            req = urllib.request.Request(url_activo, headers=headers)
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                if resp.status == 200:
+                    data = json.loads(resp.read().decode('utf-8'))
+                    cuadernillo_id = data.get('cuadernillo_codigo', '')
     except Exception as exc:
         spawner.log.warning(f"No se pudo resolver el cuadernillo activo: {exc}")
 
     spawner.environment['CUADERNILLO_ID'] = cuadernillo_id
 
-    # SOLO el contenedor del instructor necesita hablar con el backend para
-    # exportar métricas -- y ni siquiera con credenciales de Postgres, sino
-    # con un token de servicio hacia un endpoint interno de tu API Go.
-    # Los estudiantes NO reciben ningún secreto (tienen shell propia y no
-    # deben poder llegar a la base de datos ni al backend directamente).
     if es_instructor:
         spawner.environment['METRICS_API_URL'] = os.environ.get(
             'METRICS_API_URL', 'http://backend_go:8080/internal/metrics'
         )
         spawner.environment['METRICS_API_TOKEN'] = os.environ.get('METRICS_API_TOKEN', '')
     else:
-        # Telemetría en tiempo real (errores por celda + tiempos). El Hub
-        # llama a tu backend con el token MAESTRO para pedir uno escaneado
-        # (corta duración, solo válido para este estudiante+cuadernillo).
-        # Ese token escaneado, y SOLO ese, es lo que entra al contenedor del
-        # estudiante -- si se filtra, el daño posible está acotado a mandar
-        # eventos falsos de un cuadernillo, no a leer ni escribir notas.
         spawner.environment['STUDENT_METRICS_API_URL'] = os.environ.get(
             'STUDENT_METRICS_EVENT_URL', 'http://backend_go:8080/public/metrics/evento'
         )
@@ -129,41 +127,42 @@ async def auth_state_a_env(spawner, auth_state):
             master_url = os.environ.get('METRICS_MINT_URL',
                                          'http://backend_go:8080/internal/lti/mint-metrics-token')
             master_token = os.environ.get('METRICS_API_TOKEN', '')
-            async with httpx.AsyncClient(timeout=5) as client:
-                resp = await client.post(
-                    master_url,
-                    json={
-                        'estudiante_id': str(auth_state.get('user_id', '')),
-                        'curso_id': curso_id,
-                        'cuadernillo_id': spawner.environment.get('CUADERNILLO_ID', ''),
-                    },
-                    headers={'Authorization': f'Bearer {master_token}'},
-                )
-                resp.raise_for_status()
-                spawner.environment['STUDENT_METRICS_TOKEN'] = resp.json().get('token', '')
+            payload_data = json.dumps({
+                'estudiante_id': str(auth_state.get('user_id', '')),
+                'curso_id': curso_id,
+                'cuadernillo_id': spawner.environment.get('CUADERNILLO_ID', ''),
+            }).encode('utf-8')
+
+            if httpx is not None:
+                async with httpx.AsyncClient(timeout=5) as client:
+                    resp = await client.post(
+                        master_url,
+                        content=payload_data,
+                        headers={'Authorization': f'Bearer {master_token}', 'Content-Type': 'application/json'},
+                    )
+                    if resp.status_code == 200:
+                        spawner.environment['STUDENT_METRICS_TOKEN'] = resp.json().get('token', '')
+            else:
+                req = urllib.request.Request(master_url, data=payload_data, headers={'Authorization': f'Bearer {master_token}', 'Content-Type': 'application/json'}, method='POST')
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    if resp.status == 200:
+                        data = json.loads(resp.read().decode('utf-8'))
+                        spawner.environment['STUDENT_METRICS_TOKEN'] = data.get('token', '')
         except Exception as exc:
-            # Si el backend no responde, el estudiante igual puede trabajar;
-            # solo se pierde la telemetría en tiempo real de esta sesión.
             spawner.log.warning(f"No se pudo mintear STUDENT_METRICS_TOKEN: {exc}")
             spawner.environment['STUDENT_METRICS_TOKEN'] = ''
 
     if es_instructor:
-        # El instructor entra directo al formgrader de SU curso.
         spawner.default_url = '/formgrader'
     else:
-        # El estudiante entra directo al cuadernillo activo. El nombre del
-        # archivo lo resuelve entrypoint.sh (copia/enlaza el release correcto
-        # a work/cuadernillo_actual.ipynb antes de levantar el servidor).
         spawner.default_url = '/notebooks/work/cuadernillo_actual.ipynb'
 
 c.Spawner.auth_state_hook = auth_state_a_env
 
 c.JupyterHub.default_url = '/hub/spawn'
 
-# El Hub debe escuchar en todas las interfaces internas del contenedor
 c.JupyterHub.ip = '0.0.0.0'
 c.JupyterHub.port = 8000
 
-# El Hub API también debe ser accesible internamente
 c.JupyterHub.hub_ip = '0.0.0.0'
 c.JupyterHub.hub_connect_ip = 'jupyterhub'
