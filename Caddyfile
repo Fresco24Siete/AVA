@@ -1,7 +1,6 @@
 jupyteruisproyecto.duckdns.org {
     reverse_proxy jupyterhub:8000
 
-
     header {
         -X-Frame-Options
         Content-Security-Policy "frame-ancestors 'self' https://lms.uis.edu.co"

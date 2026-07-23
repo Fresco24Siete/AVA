@@ -18,8 +18,8 @@ RUN jupyter server extension disable jupyterlab || true
 
 # Instala (pero no activa todavía) las extensiones de nbgrader; el rol
 # exacto que se activa en cada arranque lo decide entrypoint.sh
-RUN jupyter nbextension install --sys-prefix --py nbgrader --overwrite \
-    && jupyter serverextension enable --sys-prefix --py nbgrader
+RUN (jupyter nbextension install --sys-prefix --py nbgrader --overwrite || true) \
+    && (jupyter serverextension enable --sys-prefix --py nbgrader || true)
 
 RUN useradd -m -s /bin/bash -u 1000 jovyan
 
@@ -29,7 +29,7 @@ COPY nbgrader_config.py /etc/jupyter/nbgrader_config.py
 COPY plugins/api_export.py /etc/jupyter/api_export.py
 COPY metrics_bridge.py /etc/jupyter/metrics_bridge.py
 COPY jupyter_server_config.py /etc/jupyter/jupyter_server_config.py
-ENV PYTHONPATH="/etc/jupyter:${PYTHONPATH}"
+ENV PYTHONPATH="/etc/jupyter"
 
 # custom.js debe vivir en el jupyter_config_dir del usuario que corre el
 # servidor (jovyan), no en /etc/jupyter

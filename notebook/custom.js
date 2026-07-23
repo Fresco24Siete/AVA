@@ -119,6 +119,50 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
     var primer_intento_time = {};
     var intentos_count = {};
 
+    function verificar_finalizacion_cuadernillo() {
+        if (!Jupyter || !Jupyter.notebook) return;
+        var cells = Jupyter.notebook.get_cells();
+        var evalCells = cells.filter(function (c) {
+            return c && c.metadata && c.metadata.nbgrader && c.metadata.nbgrader.grade && c.metadata.nbgrader.grade_id;
+        });
+
+        if (evalCells.length === 0) return;
+
+        var puntajeObtenido = 0;
+        var puntajeMaximo = 0;
+        var todosAprobados = true;
+
+        for (var i = 0; i < evalCells.length; i++) {
+            var cell = evalCells[i];
+            var pMax = cell.metadata.nbgrader.points || 1;
+            puntajeMaximo += pMax;
+
+            var outputs = (cell.output_area && cell.output_area.outputs) || [];
+            var errores = outputs.filter(function (o) { return o.output_type === 'error'; });
+            var ejecutada = outputs.length > 0;
+            var exito = ejecutada && errores.length === 0;
+
+            if (exito) {
+                puntajeObtenido += pMax;
+            } else {
+                todosAprobados = false;
+            }
+        }
+
+        if (todosAprobados) {
+            var payloadFin = {
+                tipo_evento: "intento_cuadernillo_completado",
+                estado: "terminado",
+                fecha_fin: new Date().toISOString(),
+                puntaje_total: puntajeObtenido,
+                puntaje_maximo: puntajeMaximo
+            };
+
+            enviar_evento(payloadFin);
+            console.log('[nbgrader-metrics] ¡Cuadernillo completado en su totalidad!', payloadFin);
+        }
+    }
+
     function on_execute(evt, data) {
         var cell = data.cell;
         if (!es_celda_de_ejercicio(cell)) return;
@@ -181,11 +225,14 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
 
         // Enviar evento de telemetría en tiempo real al puente local
         enviar_evento(payload);
+
+        // Verificar si el estudiante acaba de completar y aprobar TODOS los ejercicios del cuadernillo
+        verificar_finalizacion_cuadernillo();
     }
 
     if (Jupyter && Jupyter.notebook && Jupyter.notebook.events) {
         Jupyter.notebook.events.on('execute.CodeCell', on_execute);
         Jupyter.notebook.events.on('finished_execute.CodeCell', on_finished_execute);
-        console.log('[nbgrader-metrics] listo, escuchando celdas de ejercicio con visor JSON interactivo');
+        console.log('[nbgrader-metrics] listo, escuchando celdas de ejercicio con visor JSON interactivo y verificación de finalización');
     }
 });

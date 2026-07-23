@@ -1,13 +1,4 @@
 """
-Exporta las calificaciones de nbgrader hacia tu backend Go (SmartCase-style),
-vía HTTP, en vez de conectarse directo a Postgres. El contenedor de notebook
-NUNCA conoce credenciales de base de datos -- solo un token de servicio para
-llamar a un endpoint interno.
-
-Uso manual:
-    nbgrader export --exporter=api_export.ApiExportPlugin
-
-Variables de entorno esperadas (solo deben inyectarse en el contenedor del
 INSTRUCTOR, ver jupyterhub_config.py):
     METRICS_API_URL    ej. http://backend_go:8080/internal/metrics
     METRICS_API_TOKEN  token de servicio compartido entre jupyterhub y el backend
@@ -68,6 +59,7 @@ class ApiExportPlugin(ExportPlugin):
                     'curso_id': curso_id,
                     'cuadernillo_codigo': cuadernillo_codigo,
                     'estudiante_id': student.id,
+                    'estado': 'terminado',
                     'fecha_fin': str(submission.timestamp) if submission.timestamp else None,
                     'puntaje_total': puntaje_total,
                     'puntaje_maximo': assignment.max_score,

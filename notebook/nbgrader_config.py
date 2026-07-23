@@ -19,7 +19,7 @@ c.Exchange.root = '/srv/nbgrader/exchange'
 # JupyterHub para depurar problemas de permisos/rutas.
 c.NbGrader.logfile = '/srv/nbgrader/logs/nbgrader.log'
 
-# Plugin de exportación hacia tu backend Go (ver plugins/api_export.py).
+# Plugin de exportación hacia backend Go
 # Este envía el SNAPSHOT FINAL por ejercicio (aprobado/puntos) al terminar
 # de autogradear. Los errores y tiempos en vivo, mientras el estudiante
 # trabaja, van por un canal aparte -- ver metrics_bridge.py + custom.js.
