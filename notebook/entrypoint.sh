@@ -25,8 +25,8 @@ if [ "$ALUMNO_ROL" = "instructor" ]; then
     # Crear carpetas base para el profesor
     mkdir -p "/srv/nbgrader/${CURSO_ID}/source/semana_1"
     
-    if [ -f "/home/jovyan/work/notebook_semana/cuadernillo_ejercicios.ipynb" ]; then
-        cp -n "/home/jovyan/work/notebook_semana/cuadernillo_ejercicios.ipynb" "/srv/nbgrader/${CURSO_ID}/source/semana_1/cuadernillo_ejercicios.ipynb" 2>/dev/null || true
+    if [ -f "/home/jovyan/work/cuadernillo_ejercicios.ipynb" ]; then
+        cp -n "/home/jovyan/work/cuadernillo_ejercicios.ipynb" "/srv/nbgrader/${CURSO_ID}/source/semana_1/cuadernillo_ejercicios.ipynb" 2>/dev/null || true
     fi
 
 else

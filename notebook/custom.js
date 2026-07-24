@@ -4,7 +4,13 @@
 require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
 
     function es_celda_de_ejercicio(cell) {
+        // CORREGIDO: antes solo revisaba que existiera grade_id, lo que también
+        // es cierto para la celda de SOLUCIÓN (solution: true, grade: false).
+        // Eso hacía que ejecutar la solución (definir la función) ya disparara
+        // un evento de telemetría como si fuera una verificación real.
+        // Ahora exige explícitamente que sea una celda de prueba (grade: true).
         return !!(cell && cell.metadata && cell.metadata.nbgrader &&
+                  cell.metadata.nbgrader.grade === true &&
                   cell.metadata.nbgrader.grade_id);
     }
 
@@ -31,7 +37,11 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
 
     function enviar_evento(payload) {
         var xsrf = utils.get_cookie ? utils.get_cookie('_xsrf') : '';
-        fetch('nbgrader-metrics/evento', {
+        // CORREGIDO: la URL relativa se resolvía contra la URL actual del navegador
+        // (p.ej. /user/xxx/notebooks/work/...), no contra la base real del servidor,
+        // así que la petición nunca llegaba a la ruta que registra metrics_bridge.py.
+        var base_url = (Jupyter && Jupyter.notebook && Jupyter.notebook.base_url) || '/';
+        fetch(base_url + 'nbgrader-metrics/evento', {
             method: 'POST',
             credentials: 'same-origin',
             headers: {

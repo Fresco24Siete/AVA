@@ -2,6 +2,8 @@ networks:
   moodle_jupyter_net:
     driver: bridge
     name: moodle_jupyter_net
+  mi_puente:
+    driver: bridge
 
 services:
   caddy:
@@ -33,6 +35,36 @@ services:
       - DOCKER_NETWORK_NAME=moodle_jupyter_net
       - JUPYTERHUB_CRYPT_KEY=b201854d5b762ee4a7db36f002ce85d726ecd8a6ef1be1fd835b80714af06a79
       - ENVIAR_AL_BACKEND=${ENVIAR_AL_BACKEND:-false}
+  postgres-database:
+    image: postgres:latest
+    container_name: postgres-db
+    ports: 
+      - "5436:5432"
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: "1098622199"
+      POSTGRES_DB: smartcase
+    volumes:
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      - postgres-data:/var/lib/postgresql
+    networks: 
+      - mi_puente
+
+  backend_go:
+    build: ./backend
+    container_name: mi-backend-api
+    ports:
+      - "8080:8080"
+    environment:
+      DB_HOST: postgres-database 
+      DB_USER: root
+      DB_PASSWORD: "1098622199"
+      DB_NAME: smartcase
+    depends_on:
+      - postgres-database
+    networks:
+      - mi_puente
 
 volumes:
   caddy_data:
+  postgres-data:
