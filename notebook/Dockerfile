@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y curl git \
 # Instalamos notebook y nbclassic. Quitamos jupyterlab de la lista explícitamente.
 # requests: para que el plugin de exportación hable con el backend Go por
 # HTTP (este contenedor NO se conecta directo a Postgres, por seguridad).
-RUN pip install --no-cache-dir notebook nbclassic nbgrader jupyterhub requests
+RUN pip install --no-cache-dir "notebook<7" nbclassic nbgrader jupyterhub requests
 
 # Desactivamos la extensión de JupyterLab por si se instaló como dependencia oculta
 RUN jupyter server extension disable jupyterlab || true

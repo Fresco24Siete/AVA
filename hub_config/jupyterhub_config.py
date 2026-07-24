@@ -155,7 +155,7 @@ async def auth_state_a_env(spawner, auth_state):
     if es_instructor:
         spawner.default_url = '/formgrader'
     else:
-        spawner.default_url = '/notebooks/work/cuadernillo_actual.ipynb'
+        spawner.default_url = '/notebooks/work/cuadernillo_ejercicios.ipynb'
 
 c.Spawner.auth_state_hook = auth_state_a_env
 
