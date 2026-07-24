@@ -1,128 +1,154 @@
--- =============================================================================
--- ESQUEMA DE BASE DE DATOS POSTGRESQL - ECOSISTEMA AVA
--- Integración: LTI + JupyterHub + nbgrader + Backend Go
--- =============================================================================
+-- ============================================================================
+-- ESQUEMA DE BASE DE DATOS: TELEMETRÍA Y CALIFICACIONES JUPYTER / NBGRADER
+-- ============================================================================
 
--- Habilitar extensión para UUIDs si es necesario
+-- Habilitar extensión para UUIDs (opcional pero muy útil si usas UUIDs en PKs)
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- =============================================================================
--- 1. ENTIDADES DOCENTES Y CURSOS (Gestionadas por Interfaz Web Frontend)
--- =============================================================================
+-- ----------------------------------------------------------------------------
+-- 1. TABLAS PRINCIPALES (Entidades del Sistema)
+-- ----------------------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS profesor (
-    profesor_id   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    codigo        varchar(50) UNIQUE NOT NULL,
-    password_hash text NOT NULL,
-    creado_en     timestamptz NOT NULL DEFAULT now()
-);
-
+-- Cursos registrados desde LTI o JupyterHub
 CREATE TABLE IF NOT EXISTS cursos (
-    curso_id      int PRIMARY KEY,
-    nombre_curso  varchar(150) NOT NULL,
-    profesor_id   uuid REFERENCES profesor(profesor_id) ON DELETE SET NULL,
-    creado_en     timestamptz NOT NULL DEFAULT now()
+    curso_id VARCHAR(100) PRIMARY KEY, -- LTI context_id
+    nombre VARCHAR(255),
+    creado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- =============================================================================
--- 2. ESTUDIANTES (Poblados dinámicamente desde LTI Launch)
--- =============================================================================
-
+-- Estudiantes autenticados mediante LTI
 CREATE TABLE IF NOT EXISTS estudiantes (
-    estudiante_id   varchar(255) PRIMARY KEY, -- Proviene de 'user_id' de LTI
-    nombre_completo varchar(150) NOT NULL,
-    correo          varchar(150),
-    curso_id        int REFERENCES cursos(curso_id) ON DELETE CASCADE,
-    creado_en       timestamptz NOT NULL DEFAULT now(),
-    actualizado_en  timestamptz NOT NULL DEFAULT now()
+    estudiante_id VARCHAR(100) PRIMARY KEY, -- LTI user_id
+    nombre_completo VARCHAR(255),
+    correo VARCHAR(255),
+    creado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    actualizado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Tabla intermedia opcional si un estudiante se matricula en múltiples cursos
-CREATE TABLE IF NOT EXISTS estudiante_curso (
-    estudiante_id varchar(255) REFERENCES estudiantes(estudiante_id) ON DELETE CASCADE,
-    curso_id      int REFERENCES cursos(curso_id) ON DELETE CASCADE,
-    registrado_en timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (estudiante_id, curso_id)
+-- Cuadernillos (Assignments) por Curso
+CREATE TABLE IF NOT EXISTS cuadernillos (
+    cuadernillo_codigo VARCHAR(100) NOT NULL, -- ej: "semana_1"
+    curso_id VARCHAR(100) NOT NULL REFERENCES cursos(curso_id) ON DELETE CASCADE,
+    titulo VARCHAR(255),
+    creado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (curso_id, cuadernillo_codigo)
 );
 
--- =============================================================================
--- 3. PLANTILLAS DE CUADERNILLOS Y EJERCICIOS (Definición de Contenidos)
--- =============================================================================
-
-CREATE TABLE IF NOT EXISTS cuadernillo (
-    cuadernillo_id smallserial PRIMARY KEY,
-    codigo         varchar(100) NOT NULL,    -- Identificador en nbgrader (ej. 'cuadernillo_ejercicios')
-    nombre         varchar(150) NOT NULL,
-    curso_id       int REFERENCES cursos(curso_id) ON DELETE CASCADE,
-    activo         boolean NOT NULL DEFAULT false, -- Indica el cuadernillo activo para LTI
-    creado_en      timestamptz NOT NULL DEFAULT now(),
-    UNIQUE (curso_id, codigo)
+-- Ejercicios que forman parte de un cuadernillo (Llave de negocio: codigo_ejercicio)
+CREATE TABLE IF NOT EXISTS ejercicios (
+    curso_id VARCHAR(100) NOT NULL,
+    cuadernillo_codigo VARCHAR(100) NOT NULL,
+    codigo_ejercicio VARCHAR(100) NOT NULL, -- ej: "ejercicio_1" (sin prefijo test_)
+    codigo_celda VARCHAR(100),               -- ej: "test_ejercicio_1"
+    orden INT,
+    descripcion TEXT,
+    puntos_maximos NUMERIC(5, 2) DEFAULT 0.00,
+    creado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (curso_id, cuadernillo_codigo, codigo_ejercicio),
+    FOREIGN KEY (curso_id, cuadernillo_codigo) REFERENCES cuadernillos(curso_id, cuadernillo_codigo) ON DELETE CASCADE
 );
 
--- REGLA DE NEGOCIO: Solo un cuadernillo puede estar activo a la vez por cada curso
-CREATE UNIQUE INDEX IF NOT EXISTS idx_cuadernillo_activo 
-ON cuadernillo (curso_id) 
-WHERE (activo = true);
 
-CREATE TABLE IF NOT EXISTS ejercicio (
-    ejercicio_id   smallserial PRIMARY KEY,
-    cuadernillo_id smallint REFERENCES cuadernillo(cuadernillo_id) ON DELETE CASCADE,
-    codigo_celda   varchar(100) NOT NULL,    -- grade_id de nbgrader (ej. 'ejercicio_1')
-    descripcion    varchar(255),
-    puntos_maximos smallint NOT NULL DEFAULT 1,
-    orden          smallint NOT NULL DEFAULT 1,
-    UNIQUE (cuadernillo_id, codigo_celda)
+-- ----------------------------------------------------------------------------
+-- 2. TABLAS DE TELEMETRÍA EN VIVO (/public/metrics/evento)
+-- ----------------------------------------------------------------------------
+
+-- Registro detallado de ejecuciones de celdas de prueba en tiempo real
+CREATE TABLE IF NOT EXISTS telemetria_ejercicios (
+    id BIGSERIAL PRIMARY KEY,
+    -- Identidad e Identificadores
+    estudiante_id VARCHAR(100) NOT NULL REFERENCES estudiantes(estudiante_id) ON DELETE CASCADE,
+    curso_id VARCHAR(100) NOT NULL,
+    cuadernillo_codigo VARCHAR(100) NOT NULL,
+    codigo_ejercicio VARCHAR(100) NOT NULL,
+    codigo_celda VARCHAR(100) NOT NULL,
+    
+    -- Métricas de la Ejecución
+    orden INT,
+    puntos_maximos NUMERIC(5, 2),
+    descripcion TEXT,
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+    primer_intento TIMESTAMP WITH TIME ZONE,
+    num_intentos INT DEFAULT 1,
+    duracion_segundos NUMERIC(10, 3),
+    exito BOOLEAN NOT NULL,
+    
+    -- Traza de Errores
+    tipo_error VARCHAR(100),
+    mensaje TEXT,
+    traceback TEXT,
+    
+    -- Metadatos adicionales creados al recibir
+    recibido_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (curso_id, cuadernillo_codigo, codigo_ejercicio) 
+        REFERENCES ejercicios(curso_id, cuadernillo_codigo, codigo_ejercicio) ON DELETE CASCADE
 );
 
--- =============================================================================
--- 4. INSTANCIAS DE EJECUCIÓN (Métricas de Intentos por Estudiante)
--- =============================================================================
+-- Registro de intentos completados enviados por el frontend
+CREATE TABLE IF NOT EXISTS intentos_cuadernillo (
+    id BIGSERIAL PRIMARY KEY,
+    estudiante_id VARCHAR(100) NOT NULL REFERENCES estudiantes(estudiante_id) ON DELETE CASCADE,
+    curso_id VARCHAR(100) NOT NULL,
+    cuadernillo_codigo VARCHAR(100) NOT NULL,
+    estado VARCHAR(50) NOT NULL, -- ej: "terminado"
+    fecha_fin TIMESTAMP WITH TIME ZONE NOT NULL,
+    puntaje_total NUMERIC(5, 2),
+    puntaje_maximo NUMERIC(5, 2),
+    recibido_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 
-CREATE TABLE IF NOT EXISTS intento_cuadernillo (
-    intento_id     bigserial PRIMARY KEY,
-    cuadernillo_id smallint REFERENCES cuadernillo(cuadernillo_id) ON DELETE CASCADE,
-    estudiante_id  varchar(255) REFERENCES estudiantes(estudiante_id) ON DELETE CASCADE,
-    estado         varchar(20) NOT NULL DEFAULT 'en_progreso'
-                   CHECK (estado IN ('en_progreso', 'terminado')),
-    fecha_inicio   timestamptz NOT NULL DEFAULT now(),
-    fecha_fin      timestamptz,
-    puntaje_total  smallint DEFAULT 0,
-    puntaje_maximo smallint DEFAULT 0,
-    creado_en      timestamptz NOT NULL DEFAULT now(),
-    UNIQUE (cuadernillo_id, estudiante_id)
+    FOREIGN KEY (curso_id, cuadernillo_codigo) 
+        REFERENCES cuadernillos(curso_id, cuadernillo_codigo) ON DELETE CASCADE,
+    -- Restricción opcional si deseas forzar la idempotencia por DB (1 intento por alumno/cuadernillo):
+    CONSTRAINT unique_intento_estudiante UNIQUE (curso_id, cuadernillo_codigo, estudiante_id)
 );
 
-CREATE TABLE IF NOT EXISTS resultado_ejercicio (
-    resultado_id      bigserial PRIMARY KEY,
-    intento_id        bigint REFERENCES intento_cuadernillo(intento_id) ON DELETE CASCADE,
-    ejercicio_id      smallint REFERENCES ejercicio(ejercicio_id) ON DELETE CASCADE,
-    aprobado          boolean NOT NULL DEFAULT false,
-    puntos_obtenidos  smallint NOT NULL DEFAULT 0,
-    num_intentos      smallint NOT NULL DEFAULT 1,
-    duracion_segundos numeric(10,2) DEFAULT 0,
-    actualizado_en    timestamptz NOT NULL DEFAULT now(),
-    UNIQUE (intento_id, ejercicio_id)
+
+-- ----------------------------------------------------------------------------
+-- 3. TABLAS DE NOTAS OFICIALES NBGRADER (/internal/metrics)
+-- ----------------------------------------------------------------------------
+
+-- Cabecera de la entrega oficial evaluada por nbgrader
+CREATE TABLE IF NOT EXISTS notas_oficiales_cuadernillo (
+    id BIGSERIAL PRIMARY KEY,
+    curso_id VARCHAR(100) NOT NULL,
+    cuadernillo_codigo VARCHAR(100) NOT NULL,
+    estudiante_id VARCHAR(100) NOT NULL REFERENCES estudiantes(estudiante_id) ON DELETE CASCADE,
+    estado VARCHAR(50) NOT NULL,
+    fecha_fin TIMESTAMP WITH TIME ZONE,
+    puntaje_total NUMERIC(5, 2) NOT NULL,
+    puntaje_maximo NUMERIC(5, 2) NOT NULL,
+    exportado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (curso_id, cuadernillo_codigo) 
+        REFERENCES cuadernillos(curso_id, cuadernillo_codigo) ON DELETE CASCADE,
+    -- Un estudiante solo tiene un registro oficial final por cuadernillo (actualizable mediante UPSERT)
+    CONSTRAINT unique_nota_oficial UNIQUE (curso_id, cuadernillo_codigo, estudiante_id)
 );
 
--- =============================================================================
--- 5. TRAZABILIDAD DE ERRORES (Telemetría de Fallos por Celda)
--- =============================================================================
-
-CREATE TABLE IF NOT EXISTS error (
-    error_id     bigserial PRIMARY KEY,
-    resultado_id bigint REFERENCES resultado_ejercicio(resultado_id) ON DELETE CASCADE,
-    tipo_error   text NOT NULL,              -- Ej: 'AssertionError', 'ZeroDivisionError'
-    mensaje      text,                       -- Mensaje limpio de la excepción
-    traceback    text,                       -- Traceback completo si está disponible
-    fecha        timestamptz NOT NULL DEFAULT now()
+-- Detalle por ejercicio dentro de la nota oficial nbgrader
+CREATE TABLE IF NOT EXISTS notas_oficiales_ejercicios (
+    id BIGSERIAL PRIMARY KEY,
+    nota_cuadernillo_id BIGINT NOT NULL REFERENCES notas_oficiales_cuadernillo(id) ON DELETE CASCADE,
+    codigo_ejercicio VARCHAR(100) NOT NULL,
+    codigo_celda VARCHAR(100) NOT NULL,
+    orden INT,
+    descripcion TEXT,
+    puntos_obtenidos NUMERIC(5, 2) NOT NULL,
+    puntos_maximos NUMERIC(5, 2) NOT NULL,
+    aprobado BOOLEAN NOT NULL
 );
 
--- =============================================================================
--- ÍNDICES PARA OPTIMIZACIÓN DE CONSULTAS Y REPORTES
--- =============================================================================
 
-CREATE INDEX IF NOT EXISTS idx_estudiantes_curso ON estudiantes(curso_id);
-CREATE INDEX IF NOT EXISTS idx_intento_estudiante ON intento_cuadernillo(estudiante_id);
-CREATE INDEX IF NOT EXISTS idx_intento_estado ON intento_cuadernillo(estado);
-CREATE INDEX IF NOT EXISTS idx_resultado_intento ON resultado_ejercicio(intento_id);
-CREATE INDEX IF NOT EXISTS idx_error_resultado ON error(resultado_id);
+-- ----------------------------------------------------------------------------
+-- 4. ÍNDICES PARA CONSULTAS Y RENDIMIENTO
+-- ----------------------------------------------------------------------------
+
+-- Índices para consultar telemetría rápidamente en dashboards / backend
+CREATE INDEX IF NOT EXISTS idx_telemetria_estudiante ON telemetria_ejercicios (estudiante_id);
+CREATE INDEX IF NOT EXISTS idx_telemetria_cuadernillo ON telemetria_ejercicios (curso_id, cuadernillo_codigo);
+CREATE INDEX IF NOT EXISTS idx_telemetria_ejercicio_clave ON telemetria_ejercicios (curso_id, cuadernillo_codigo, codigo_ejercicio);
+CREATE INDEX IF NOT EXISTS idx_telemetria_timestamp ON telemetria_ejercicios (timestamp DESC);
+
+-- Índice para cruzar la nota oficial con la telemetría del alumno
+CREATE INDEX IF NOT EXISTS idx_notas_estudiante_cuadernillo ON notas_oficiales_cuadernillo (curso_id, cuadernillo_codigo, estudiante_id);
