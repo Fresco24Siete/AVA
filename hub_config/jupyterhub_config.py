@@ -218,6 +218,14 @@ async def auth_state_a_env(spawner, auth_state):
 
 c.Spawner.auth_state_hook = auth_state_a_env
 
+# --- Tiempos de arranque --------------------------------------------------
+# La VM es una e2-micro (2 vCPU compartidas, 1 GB RAM). El servidor de usuario
+# arranca bien pero tarda: con el default de 30 s el Hub lo mataba (Exit 137)
+# antes de que respondiera a /api. Se suben los márgenes. Si algún día se pasa
+# a una máquina más holgada, se pueden bajar de nuevo.
+c.Spawner.start_timeout = 300   # espera a que el contenedor arranque
+c.Spawner.http_timeout = 120    # espera a que el server responda tras arrancar
+
 c.JupyterHub.default_url = '/hub/spawn'
 
 c.JupyterHub.ip = '0.0.0.0'
