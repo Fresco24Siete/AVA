@@ -14,6 +14,14 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
                   cell.metadata.nbgrader.grade_id);
     }
 
+    // Cada ejercicio son dos celdas: "ejercicio_1" (solución) y
+    // "test_ejercicio_1" (prueba). Solo la de prueba dispara telemetría, así que
+    // normalizamos para que el backend tenga una clave de negocio estable e
+    // idéntica a la que manda la exportación de nbgrader (api_export.py).
+    function normalizar_codigo_ejercicio(grade_id) {
+        return grade_id.indexOf('test_') === 0 ? grade_id.slice(5) : grade_id;
+    }
+
     function obtener_orden_celda(cell) {
         if (!Jupyter || !Jupyter.notebook) return 0;
         var cells = Jupyter.notebook.get_cells();
@@ -126,8 +134,54 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
         }
     }
 
-    var primer_intento_time = {};
-    var intentos_count = {};
+    // --- Estado persistente ------------------------------------------------
+    // Antes vivía solo en memoria: al refrescar la pestaña (F5) los contadores
+    // volvían a cero y un alumno con 4 intentos fallidos reportaba "1 intento".
+    // Se guarda por notebook, así que cada cuadernillo lleva su propia cuenta.
+    function clave_estado() {
+        var path = (Jupyter && Jupyter.notebook && Jupyter.notebook.notebook_path) || 'notebook';
+        return 'nbgrader-metrics:' + path;
+    }
+
+    function cargar_estado() {
+        try {
+            var raw = window.localStorage.getItem(clave_estado());
+            var st = raw ? JSON.parse(raw) : {};
+            st.intentos = st.intentos || {};
+            st.primer_intento = st.primer_intento || {};
+            return st;
+        } catch (e) {
+            return { intentos: {}, primer_intento: {} };
+        }
+    }
+
+    function guardar_estado(st) {
+        try {
+            window.localStorage.setItem(clave_estado(), JSON.stringify(st));
+        } catch (e) {
+            console.warn('[nbgrader-metrics] no se pudo persistir el estado', e);
+        }
+    }
+
+    var estado = cargar_estado();
+
+    // Fuente única de verdad sobre si una celda de prueba está aprobada.
+    // Antes había dos criterios distintos: on_finished_execute miraba solo si
+    // había errores, y la verificación de finalización exigía además
+    // outputs.length > 0. Eso hacía que una celda con solo asserts (que al pasar
+    // no imprime NADA) se reportara como exitosa pero nunca contara como
+    // aprobada, y el evento de cuadernillo completado jamás se disparaba.
+    function evaluar_celda(cell) {
+        var outputs = (cell.output_area && cell.output_area.outputs) || [];
+        var errores = outputs.filter(function (o) { return o.output_type === 'error'; });
+        var n = cell.input_prompt_number;
+        var ejecutada = (n !== undefined && n !== null && n !== '*');
+        return {
+            ejecutada: ejecutada,
+            errores: errores,
+            exito: ejecutada && errores.length === 0
+        };
+    }
 
     function verificar_finalizacion_cuadernillo() {
         if (!Jupyter || !Jupyter.notebook) return;
@@ -147,30 +201,34 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
             var pMax = cell.metadata.nbgrader.points || 1;
             puntajeMaximo += pMax;
 
-            var outputs = (cell.output_area && cell.output_area.outputs) || [];
-            var errores = outputs.filter(function (o) { return o.output_type === 'error'; });
-            var ejecutada = outputs.length > 0;
-            var exito = ejecutada && errores.length === 0;
-
-            if (exito) {
+            if (evaluar_celda(cell).exito) {
                 puntajeObtenido += pMax;
             } else {
                 todosAprobados = false;
             }
         }
 
-        if (todosAprobados) {
-            var payloadFin = {
-                tipo_evento: "intento_cuadernillo_completado",
-                estado: "terminado",
-                fecha_fin: new Date().toISOString(),
-                puntaje_total: puntajeObtenido,
-                puntaje_maximo: puntajeMaximo
-            };
+        if (!todosAprobados) return;
 
-            enviar_evento(payloadFin);
-            console.log('[nbgrader-metrics] ¡Cuadernillo completado en su totalidad!', payloadFin);
-        }
+        // Se emite UNA sola vez por cuadernillo. Sin este flag, cada
+        // re-ejecución de cualquier celda de prueba tras completar el
+        // cuadernillo mandaba otro evento "completado" y el backend terminaba
+        // pisando la fecha_fin original.
+        if (estado.completado_enviado) return;
+
+        var payloadFin = {
+            tipo_evento: "intento_cuadernillo_completado",
+            estado: "terminado",
+            fecha_fin: new Date().toISOString(),
+            puntaje_total: puntajeObtenido,
+            puntaje_maximo: puntajeMaximo
+        };
+
+        estado.completado_enviado = true;
+        guardar_estado(estado);
+
+        enviar_evento(payloadFin);
+        console.log('[nbgrader-metrics] ¡Cuadernillo completado en su totalidad!', payloadFin);
     }
 
     function on_execute(evt, data) {
@@ -178,10 +236,11 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
         if (!es_celda_de_ejercicio(cell)) return;
         var grade_id = cell.metadata.nbgrader.grade_id;
 
-        if (!primer_intento_time[grade_id]) {
-            primer_intento_time[grade_id] = Date.now();
+        if (!estado.primer_intento[grade_id]) {
+            estado.primer_intento[grade_id] = Date.now();
         }
-        intentos_count[grade_id] = (intentos_count[grade_id] || 0) + 1;
+        estado.intentos[grade_id] = (estado.intentos[grade_id] || 0) + 1;
+        guardar_estado(estado);
     }
 
     function on_finished_execute(evt, data) {
@@ -189,12 +248,12 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
         if (!es_celda_de_ejercicio(cell)) return;
         var grade_id = cell.metadata.nbgrader.grade_id;
 
-        var outputs = (cell.output_area && cell.output_area.outputs) || [];
-        var errores = outputs.filter(function (o) { return o.output_type === 'error'; });
-        var exito = errores.length === 0;
+        var evaluacion = evaluar_celda(cell);
+        var errores = evaluacion.errores;
+        var exito = evaluacion.exito;
 
         var ahora = Date.now();
-        var inicio = primer_intento_time[grade_id] || ahora;
+        var inicio = estado.primer_intento[grade_id] || ahora;
         var duracion_seg = Math.max(0, (ahora - inicio) / 1000.0);
         duracion_seg = Math.round(duracion_seg * 100) / 100;
 
@@ -213,10 +272,13 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
             }
         }
 
-        var num_intentos = intentos_count[grade_id] || 1;
+        var num_intentos = estado.intentos[grade_id] || 1;
 
         var payload = {
+            // Discriminador para que el backend enrute sin adivinar por forma.
+            tipo_evento: "resultado_ejercicio",
             codigo_celda: grade_id,
+            codigo_ejercicio: normalizar_codigo_ejercicio(grade_id),
             orden: obtener_orden_celda(cell),
             puntos_maximos: nbgrader_meta.points || 1,
             descripcion: grade_id,

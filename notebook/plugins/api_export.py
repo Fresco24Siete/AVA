@@ -14,6 +14,18 @@ from nbgrader.api import MissingEntry, Gradebook
 from nbgrader.plugins import ExportPlugin
 
 
+def normalizar_codigo_ejercicio(grade_id: str) -> str:
+    """Convierte el grade_id de una celda de prueba en el código del ejercicio.
+
+    En el cuadernillo cada ejercicio son DOS celdas: la de solución
+    ("ejercicio_1", grade=false) y la de prueba ("test_ejercicio_1", grade=true).
+    Solo la de prueba genera nota en nbgrader y solo ella dispara telemetría,
+    así que ambos lados ven "test_ejercicio_1". Quitando el prefijo obtenemos
+    una clave única por ejercicio, que es la que debe usar el backend.
+    """
+    return grade_id[5:] if grade_id.startswith('test_') else grade_id
+
+
 class ApiExportPlugin(ExportPlugin):
     """Envía notas de nbgrader al backend Go en vez de escribir a Postgres
     directamente."""
@@ -47,7 +59,14 @@ class ApiExportPlugin(ExportPlugin):
                 for notebook in submission.notebooks:
                     for idx, grade in enumerate(notebook.grades, 1):
                         ejercicios.append({
-                            'codigo_celda': grade.name,       # p.ej. "ejercicio_1"
+                            # nbgrader solo crea Grade para celdas con grade=true,
+                            # es decir las de PRUEBA: aquí grade.name vale
+                            # "test_ejercicio_1", NO "ejercicio_1".
+                            'codigo_celda': grade.name,
+                            # Clave de negocio estable, normalizada igual que en
+                            # custom.js, para que telemetría y exportación final
+                            # crucen contra la misma fila de 'ejercicio'.
+                            'codigo_ejercicio': normalizar_codigo_ejercicio(grade.name),
                             'orden': idx,
                             'descripcion': grade.name,
                             'puntos_obtenidos': grade.score,
