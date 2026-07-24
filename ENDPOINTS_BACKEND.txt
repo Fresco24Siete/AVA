@@ -1,0 +1,357 @@
+===============================================================================
+CONTRATO JUPYTERHUB / JUPYTER SERVER / NBGRADER  ->  BACKEND GO
+Documento de arranque para el backend.        Generado: 2026-07-23
+===============================================================================
+
+Este archivo describe TODO lo que el lado de Jupyter va a llamar. Nada de esto
+existe todavía en el backend: son los 4 endpoints que hay que implementar.
+
+Mientras ENVIAR_AL_BACKEND=false (valor por defecto hoy), nada sale a la red:
+metrics_bridge.py y api_export.py imprimen el JSON en el log del contenedor.
+Eso sirve para ver los payloads exactos antes de escribir una sola línea de Go.
+
+Para ver los payloads sin backend:
+    docker logs -f <contenedor_del_alumno>
+
+
+===============================================================================
+1. ENDPOINTS A IMPLEMENTAR
+===============================================================================
+
+-------------------------------------------------------------------------------
+1.1  GET /internal/cursos/{curso_id}/cuadernillo-activo
+-------------------------------------------------------------------------------
+Quién llama : jupyterhub_config.py (proceso del Hub)
+Cuándo      : en CADA login LTI, antes de crear el contenedor
+Auth        : Authorization: Bearer <METRICS_API_TOKEN>   (token de servicio)
+Timeout     : 5 s
+
+Respuesta 200 esperada:
+    {
+      "cuadernillo_codigo": "semana_1",
+      "notebook_archivo":   "cuadernillo_ejercicios.ipynb"
+    }
+
+  - "cuadernillo_codigo" es el CÓDIGO de negocio, no un id numérico.
+    Se inyecta en el contenedor como CUADERNILLO_CODIGO y viaja en cada evento.
+  - "notebook_archivo" es OPCIONAL pero muy recomendable: es el nombre del
+    .ipynb que se le va a abrir al alumno. Si no lo mandas, el Hub asume
+    "<cuadernillo_codigo>.ipynb"; si tampoco existe eso, cae a
+    "cuadernillo_ejercicios.ipynb".
+    -> Mándalo siempre. Así el código del cuadernillo ("semana_1") no tiene que
+       coincidir con el nombre del archivo.
+
+Si respondes != 200, o hay timeout, el Hub NO falla: registra un warning y abre
+el cuadernillo por defecto. Considera esto: es el camino crítico del login, si
+tardas 5 s, el alumno espera 5 s de más para entrar.
+
+-------------------------------------------------------------------------------
+1.2  POST /internal/lti/mint-metrics-token
+-------------------------------------------------------------------------------
+Quién llama : jupyterhub_config.py
+Cuándo      : en cada login de ESTUDIANTE (no de instructor)
+Auth        : Authorization: Bearer <METRICS_API_TOKEN>
+Timeout     : 5 s
+
+Body que recibes:
+    {
+      "estudiante_id":      "<user_id del LTI>",
+      "curso_id":           "<context_id del LTI>",
+      "cuadernillo_codigo": "semana_1"
+    }
+
+Respuesta 200 esperada:
+    { "token": "<jwt u opaco>" }
+
+*** ESTE ES EL ENDPOINT MÁS IMPORTANTE PARA LA SEGURIDAD. LEER 3.1. ***
+
+El token que emitas aquí se inyecta en el contenedor del alumno y es lo único
+que autentica los eventos de telemetría. Tiene que quedar ACOTADO a ese
+estudiante + curso + cuadernillo, y con expiración corta (la sesión de clase).
+
+Si fallas o devuelves != 200, el Hub lo registra como ERROR y el alumno arranca
+sin token: toda su telemetría se descarta. Si prefieres que en ese caso no se
+pueda entrar, arranca el Hub con METRICS_REQUERIDO=true y el spawn aborta con
+un mensaje al usuario en vez de dejarlo trabajar sin registro.
+
+-------------------------------------------------------------------------------
+1.3  POST /public/metrics/evento
+-------------------------------------------------------------------------------
+Quién llama : metrics_bridge.py, DENTRO del contenedor del alumno
+Cuándo      : cada vez que el alumno ejecuta una celda de prueba
+Auth        : Authorization: Bearer <token emitido en 1.2>
+Timeout     : 5 s (asíncrono, ya no bloquea el Jupyter del alumno)
+
+Es "public" porque lo llama el contenedor del alumno, no la red interna.
+Debe estar expuesto pero SOLO acepta el token acotado de 1.2, nunca el token
+de servicio METRICS_API_TOKEN.
+
+Recibe dos tipos de evento, distinguibles por "tipo_evento":
+
+  (a) tipo_evento = "resultado_ejercicio"   -> una celda de prueba ejecutada
+  (b) tipo_evento = "intento_cuadernillo_completado" -> todos los ejercicios OK
+
+Ver los payloads exactos en la sección 2.
+
+Respuesta esperada: cualquier 2xx. Si respondes 4xx/5xx, el puente ahora lo
+registra como ERROR con el cuerpo de tu respuesta y devuelve 502 al navegador
+(antes se tragaba el error en silencio y el evento se perdía sin rastro).
+
+-------------------------------------------------------------------------------
+1.4  POST /internal/metrics
+-------------------------------------------------------------------------------
+Quién llama : plugins/api_export.py, en el contenedor del INSTRUCTOR
+Cuándo      : cuando el profesor corre manualmente `nbgrader export`
+Auth        : Authorization: Bearer <METRICS_API_TOKEN>
+Timeout     : 10 s
+
+Es la nota oficial de nbgrader, ya calificada. Un POST por (cuadernillo,
+estudiante). Ver payload en 2.3.
+
+
+===============================================================================
+2. PAYLOADS EXACTOS
+===============================================================================
+
+-------------------------------------------------------------------------------
+2.1  Evento de ejercicio  (POST /public/metrics/evento)
+-------------------------------------------------------------------------------
+{
+  "tipo_evento":       "resultado_ejercicio",
+  "codigo_celda":      "test_ejercicio_1",
+  "codigo_ejercicio":  "ejercicio_1",
+  "orden":             5,
+  "puntos_maximos":    5,
+  "descripcion":       "test_ejercicio_1",
+  "timestamp":         "2026-07-24T02:48:56.000Z",
+  "primer_intento":    "2026-07-24T02:45:10.000Z",
+  "num_intentos":      3,
+  "duracion_segundos": 226.5,
+  "exito":             false,
+  "tipo_error":        "AssertionError",
+  "mensaje":           "AssertionError: Error: 2 + 3 debe ser 5",
+  "traceback":         "...traceback sin códigos ANSI...",
+
+  // --- estos 5 los pone el SERVIDOR, no el navegador (ver 3.1) ---
+  "estudiante_id":      "...",
+  "nombre_completo":    "...",
+  "correo":             "...",
+  "curso_id":           "...",
+  "cuadernillo_codigo": "semana_1"
+}
+
+OJO CON LAS DOS CLAVES DE CELDA:
+  En el cuadernillo cada ejercicio son DOS celdas de nbgrader:
+      "ejercicio_1"       -> celda de solución  (grade=false, solution=true)
+      "test_ejercicio_1"  -> celda de prueba    (grade=true,  points=5)
+  nbgrader solo califica la de prueba, y solo la de prueba dispara telemetría.
+  Por eso "codigo_celda" siempre trae el nombre CON prefijo test_.
+  "codigo_ejercicio" es el mismo nombre sin el prefijo, y es la clave que debes
+  usar como llave de negocio en la tabla `ejercicio`. Va idéntica en la
+  telemetría en vivo y en la exportación de nbgrader, así que cruzan sin
+  ambigüedad. (Responde la pregunta abierta #4.)
+
+-------------------------------------------------------------------------------
+2.2  Evento de cuadernillo completado  (POST /public/metrics/evento)
+-------------------------------------------------------------------------------
+{
+  "tipo_evento":    "intento_cuadernillo_completado",
+  "estado":         "terminado",
+  "fecha_fin":      "2026-07-24T03:10:22.000Z",
+  "puntaje_total":  10,
+  "puntaje_maximo": 10,
+
+  // + los mismos 5 campos de identidad de 2.1
+}
+
+Se emite UNA sola vez por cuadernillo y por navegador (hay un flag persistido
+en localStorage). Aun así trátalo como idempotente: si el alumno usa otro
+navegador o borra el storage, puede llegar repetido. Ver 3.3.
+
+-------------------------------------------------------------------------------
+2.3  Exportación de notas de nbgrader  (POST /internal/metrics)
+-------------------------------------------------------------------------------
+{
+  "curso_id":           "...",
+  "cuadernillo_codigo": "semana_1",
+  "estudiante_id":      "...",
+  "estado":             "terminado",
+  "fecha_fin":          "2026-07-24 03:10:22",
+  "puntaje_total":      8.0,
+  "puntaje_maximo":     10.0,
+  "ejercicios": [
+    {
+      "codigo_celda":     "test_ejercicio_1",
+      "codigo_ejercicio": "ejercicio_1",
+      "orden":            1,
+      "descripcion":      "test_ejercicio_1",
+      "puntos_obtenidos": 5.0,
+      "puntos_maximos":   5.0,
+      "aprobado":         true
+    }
+  ]
+}
+
+Nota: "fecha_fin" aquí NO es ISO-8601, es el str() del timestamp de nbgrader
+("2026-07-24 03:10:22"). Si prefieres ISO en ambos lados, dilo y lo cambio en
+api_export.py.
+
+
+===============================================================================
+3. CONSIDERACIONES IMPORTANTES ANTES DE ESCRIBIR CÓDIGO
+===============================================================================
+
+-------------------------------------------------------------------------------
+3.1  LA IDENTIDAD SE SACA DEL TOKEN, NUNCA DEL BODY   <<< lo más importante
+-------------------------------------------------------------------------------
+El contenedor del alumno corre bajo su control. Aunque el puente de métricas
+ahora congela la identidad al arrancar y el alumno ya no tiene terminal, el
+token vive en el proceso de su propio contenedor y hay que asumir que un alumno
+motivado puede llegar a él.
+
+Con el token en la mano, cualquiera puede hacer:
+    curl -X POST .../public/metrics/evento \
+         -H "Authorization: Bearer <su_token>" \
+         -d '{"estudiante_id":"companero_victima", ...}'
+
+=> El backend DEBE ignorar "estudiante_id", "curso_id" y "cuadernillo_codigo"
+   del body y tomarlos de los claims del token emitido en 1.2.
+   Los campos del body sirven solo para depurar/loggear, no para escribir en BD.
+
+Si esto se hace bien, el peor caso es que un alumno ensucie SUS PROPIAS
+métricas, que es un problema muy menor. Si se hace mal, cualquier alumno puede
+escribir métricas a nombre de cualquier otro.
+
+-------------------------------------------------------------------------------
+3.2  Los eventos llegan desordenados y repetidos
+-------------------------------------------------------------------------------
+Es telemetría de navegador: hay reintentos, pestañas duplicadas, recargas.
+No asumas orden ni unicidad. Recomendación:
+  - "resultado_ejercicio": INSERT append-only en una tabla de intentos.
+    "num_intentos" ya viene calculado por el cliente y persiste entre recargas
+    (localStorage), pero no confíes en él como llave: úsalo como dato.
+  - Llave natural sugerida: (estudiante_id, cuadernillo_codigo, codigo_ejercicio,
+    timestamp).
+
+-------------------------------------------------------------------------------
+3.3  fecha_fin debe ser inmutable
+-------------------------------------------------------------------------------
+Si haces UPDATE simple de intento_cuadernillo.fecha_fin en cada evento
+"completado", un evento repetido pisa la fecha original. Usa
+    UPDATE ... SET fecha_fin = COALESCE(fecha_fin, $1)
+o guarda el primero y descarta el resto.
+
+-------------------------------------------------------------------------------
+3.4  Dos fuentes de nota para lo mismo
+-------------------------------------------------------------------------------
+La telemetría en vivo (1.3) y la exportación de nbgrader (1.4) describen el
+mismo hecho con números que pueden no coincidir: la telemetría dice "la celda
+corrió sin error", nbgrader dice "la celda vale 5/5 tras autograding".
+La telemetría es señal de proceso; nbgrader es la nota oficial.
+Recomendación: tablas separadas, y que la de nbgrader mande para calificar.
+(Es la pregunta abierta #2; hay que decidirlo, no lo resuelve el código.)
+
+-------------------------------------------------------------------------------
+3.5  Latencia en el login
+-------------------------------------------------------------------------------
+1.1 y 1.2 se llaman en serie durante el spawn, 5 s de timeout cada uno. Si el
+backend está lento, el alumno espera hasta 10 s extra para entrar a su
+cuadernillo. Mantén estos dos endpoints rápidos (idealmente < 200 ms) y
+cacheables del lado del backend.
+
+
+===============================================================================
+4. VARIABLES DE ENTORNO
+===============================================================================
+
+En el contenedor de JUPYTERHUB (docker-compose, servicio jupyterhub):
+
+  METRICS_API_TOKEN        Token de servicio compartido Hub <-> backend.
+                           Se usa en 1.1, 1.2 y 1.4.
+  CUADERNILLO_ACTIVO_URL   Default http://backend_go:8080/internal/cursos
+  METRICS_MINT_URL         Default http://backend_go:8080/internal/lti/mint-metrics-token
+  METRICS_API_URL          Default http://backend_go:8080/internal/metrics
+  STUDENT_METRICS_API_URL  Default http://backend_go:8080/public/metrics/evento
+                           (se sigue aceptando el nombre viejo
+                            STUDENT_METRICS_EVENT_URL por compatibilidad)
+  ENVIAR_AL_BACKEND        "true" para que salgan de verdad. Hoy "false".
+  METRICS_REQUERIDO        "true" => si no se puede emitir el token, se aborta
+                           el spawn en vez de dejar al alumno sin telemetría.
+                           Default "false".
+  SINGLEUSER_APP           Default nbclassic.notebookapp.NotebookApp
+  LTI_CLIENT_KEY           Llave del consumer LTI de Moodle.
+  LTI_CLIENT_SECRET        Secreto del consumer LTI.  <-- ver 6.
+
+Inyectadas automáticamente en el contenedor del ALUMNO (no las pongas a mano):
+  ALUMNO_ID, ALUMNO_NOMBRE, ALUMNO_EMAIL, ALUMNO_ROL, CURSO_ID, CURSO_NOMBRE,
+  CUADERNILLO_CODIGO (y CUADERNILLO_ID, alias por compatibilidad),
+  STUDENT_METRICS_API_URL, STUDENT_METRICS_TOKEN, JUPYTERHUB_SINGLEUSER_APP
+
+
+===============================================================================
+5. HUECO DE DISEÑO QUE HAY QUE RESOLVER
+===============================================================================
+
+Hoy NO existe un camino por el que el trabajo del alumno llegue al instructor.
+
+  - El alumno recibe una copia estática del .ipynb dentro de su contenedor.
+  - Ya no monta el volumen compartido (era por donde se filtraban las
+    soluciones), y tiene assignment_list deshabilitado.
+  - Entonces nunca hace `nbgrader submit`, y /srv/nbgrader/<curso>/submitted
+    se queda vacío.
+  - El formgrader del instructor lee justamente de ahí => no verá nada que
+    calificar, y `nbgrader export` (endpoint 1.4) no tendrá filas que exportar.
+
+O sea: hoy la ÚNICA fuente real de datos es la telemetría en vivo (1.3).
+
+Hay que elegir uno de estos caminos:
+  (a) El backend guarda las respuestas por telemetría y la nota sale de ahí.
+      El formgrader queda solo como herramienta de autoría del cuadernillo.
+  (b) Se implementa una entrega real: un botón "Entregar" que suba el notebook
+      al backend, y el backend lo deposite en submitted/ para que el
+      instructor lo califique con nbgrader.
+  (c) Se le devuelve al alumno acceso al exchange, pero con un volumen por
+      alumno y permisos correctos (más complejo de asegurar).
+
+Mi recomendación para empezar mañana: (a), y dejar (b) para después.
+Es lo que ya funciona con lo que hay construido.
+
+
+===============================================================================
+6. PENDIENTE FUERA DEL ALCANCE DE ESTE CAMBIO
+===============================================================================
+
+Solo se tocaron hub_config/ y notebook/. Queda pendiente en docker-compose.yml,
+que hay que editar aparte:
+
+  - JUPYTERHUB_CRYPT_KEY está hardcodeada en docker-compose.yml (línea 36) y
+    versionada en git. Cifra el auth_state en la BD del Hub.
+  - El secreto LTI ya NO está hardcodeado en jupyterhub_config.py: ahora se lee
+    de LTI_CLIENT_SECRET. Pero si no defines esa variable, sigue usando el
+    valor viejo de desarrollo e imprime un aviso al arrancar.
+    => Hay que crear un .env (fuera de git) con LTI_CLIENT_KEY,
+       LTI_CLIENT_SECRET y JUPYTERHUB_CRYPT_KEY, y añadir .env al .gitignore.
+  - Como los valores viejos ya están en el historial de git, hay que ROTARLOS,
+    no solo moverlos: generar una llave y un secreto nuevos y reconfigurar el
+    consumer en Moodle.
+
+
+===============================================================================
+7. DECISIONES DE NEGOCIO QUE SIGUEN ABIERTAS
+===============================================================================
+
+1. ¿Un intento fallido que el alumno abandona (cierra el navegador) cuenta como
+   intento en intento_cuadernillo, o solo cuentan las entregas explícitas?
+   -> Afecta a cómo interpretas los eventos "resultado_ejercicio" sueltos.
+
+2. ¿La exportación de nbgrader (1.4) pisa lo que registró la telemetría, o
+   conviven en tablas separadas?  (ver 3.4)
+
+3. Si el backend está caído, ¿el alumno entra igual y trabaja sin métricas, o
+   se le bloquea el acceso?
+   -> Ya está implementado como interruptor: METRICS_REQUERIDO. Falta decidir
+      el valor. Hoy está en "false" (entra igual).
+
+4. ¿Clave primaria de `ejercicio`: "ejercicio_1" o "test_ejercicio_1"?
+   -> RESUELTO en el código: usa "codigo_ejercicio" ("ejercicio_1"), que ya
+      viene normalizado e idéntico desde ambas fuentes.
