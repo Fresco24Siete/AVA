@@ -236,7 +236,8 @@ c.Spawner.auth_state_hook = auth_state_a_env
 # antes de que respondiera a /api. Se suben los márgenes. Si algún día se pasa
 # a una máquina más holgada, se pueden bajar de nuevo.
 c.Spawner.start_timeout = 300   # espera a que el contenedor arranque
-c.Spawner.http_timeout = 120    # espera a que el server responda tras arrancar
+c.Spawner.http_timeout = 180    # espera a que el server responda tras arrancar
+                                # (el arranque en frío en e2-micro llegó a ~120s)
 
 c.JupyterHub.default_url = '/hub/spawn'
 
