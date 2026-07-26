@@ -175,10 +175,18 @@ async def auth_state_a_env(spawner, auth_state):
         spawner.environment['METRICS_API_TOKEN'] = os.environ.get('METRICS_API_TOKEN', '')
     else:
         # El alumno debe quedarse en el notebook clásico. Sin esto, JupyterHub
-        # arranca SingleUserLabApp (JupyterLab) y el alumno puede irse a /lab,
-        # abrir un explorador de archivos completo y una terminal.
+        # arranca SingleUserLabApp (JupyterLab) y el alumno puede irse a /lab.
+        #
+        # Se usa jupyter_server.serverapp.ServerApp (NO nbclassic.notebookapp,
+        # que carece de login_handler_class y hace crashear make_singleuser_app
+        # de jupyterhub con AttributeError -> el contenedor del alumno moría con
+        # Exit 1). Con ServerApp:
+        #   - jupyterhub-singleuser arranca bien,
+        #   - se carga jupyter_server_config.py (terminal off, root_dir),
+        #   - nbclassic sirve /notebooks/<cuadernillo>,
+        #   - jupyterlab está deshabilitado -> /lab da 404.
         spawner.environment['JUPYTERHUB_SINGLEUSER_APP'] = os.environ.get(
-            'SINGLEUSER_APP', 'nbclassic.notebookapp.NotebookApp'
+            'SINGLEUSER_APP', 'jupyter_server.serverapp.ServerApp'
         )
 
         # El Hub puede recibir la URL con cualquiera de los dos nombres; dentro
