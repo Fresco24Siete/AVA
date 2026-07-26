@@ -214,7 +214,11 @@ async def auth_state_a_env(spawner, auth_state):
         archivo = cuadernillo_archivo or (
             f'{cuadernillo_codigo}.ipynb' if cuadernillo_codigo else CUADERNILLO_FALLBACK
         )
-        spawner.default_url = f'/notebooks/work/{archivo}'
+        # OJO: la raíz del server del alumno es /home/jovyan/work (root_dir en
+        # jupyter_server_config.py), así que la URL NO lleva 'work/' delante.
+        # Con '/notebooks/work/...' daba 404 y el spawn moría; por eso /tree
+        # sí cargaba pero el cuadernillo directo no.
+        spawner.default_url = f'/notebooks/{archivo}'
 
 c.Spawner.auth_state_hook = auth_state_a_env
 

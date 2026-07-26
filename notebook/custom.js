@@ -3,15 +3,28 @@
 
 require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
 
+    function meta_nbgrader(cell) {
+        return (cell && cell.metadata && cell.metadata.nbgrader) ? cell.metadata.nbgrader : null;
+    }
+
+    // Celda de PRUEBA (grade: true). Es la que dispara el evento de resultado
+    // y la que nbgrader califica. grade_id = "test_ejercicio_1".
+    function es_celda_de_prueba(cell) {
+        var m = meta_nbgrader(cell);
+        return !!(m && m.grade === true && m.grade_id);
+    }
+
+    // Celda de SOLUCIÓN (solution: true, grade: false): donde el estudiante
+    // escribe SU código. No dispara evento propio, pero SÍ nos interesa su
+    // error: es el error real del alumno. grade_id = "ejercicio_1".
+    function es_celda_de_solucion(cell) {
+        var m = meta_nbgrader(cell);
+        return !!(m && m.solution === true && m.grade !== true && m.grade_id);
+    }
+
+    // Mantiene compatibilidad con el nombre viejo (celda de prueba).
     function es_celda_de_ejercicio(cell) {
-        // CORREGIDO: antes solo revisaba que existiera grade_id, lo que también
-        // es cierto para la celda de SOLUCIÓN (solution: true, grade: false).
-        // Eso hacía que ejecutar la solución (definir la función) ya disparara
-        // un evento de telemetría como si fuera una verificación real.
-        // Ahora exige explícitamente que sea una celda de prueba (grade: true).
-        return !!(cell && cell.metadata && cell.metadata.nbgrader &&
-                  cell.metadata.nbgrader.grade === true &&
-                  cell.metadata.nbgrader.grade_id);
+        return es_celda_de_prueba(cell);
     }
 
     // Cada ejercicio son dos celdas: "ejercicio_1" (solución) y
@@ -147,11 +160,12 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
         try {
             var raw = window.localStorage.getItem(clave_estado());
             var st = raw ? JSON.parse(raw) : {};
-            st.intentos = st.intentos || {};
-            st.primer_intento = st.primer_intento || {};
+            st.intentos = st.intentos || {};       // nº de verificaciones por ejercicio
+            st.primer_intento = st.primer_intento || {}; // ts del 1er toque del ejercicio
+            st.error_codigo = st.error_codigo || {};     // último error de la celda de solución
             return st;
         } catch (e) {
-            return { intentos: {}, primer_intento: {} };
+            return { intentos: {}, primer_intento: {}, error_codigo: {} };
         }
     }
 
@@ -180,6 +194,22 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
             ejecutada: ejecutada,
             errores: errores,
             exito: ejecutada && errores.length === 0
+        };
+    }
+
+    // Extrae el error de una celda (o null si no hubo). Se usa tanto para la
+    // celda de prueba como para la de solución del estudiante.
+    function extraer_error(cell) {
+        var outputs = (cell.output_area && cell.output_area.outputs) || [];
+        var errores = outputs.filter(function (o) { return o.output_type === 'error'; });
+        if (!errores.length) return null;
+        var err = errores[0];
+        var tipo = err.ename || 'ExecutionError';
+        return {
+            tipo_error: tipo,
+            mensaje: err.evalue ? (tipo + ': ' + err.evalue) : tipo,
+            traceback: (err.traceback && err.traceback.length)
+                ? err.traceback.map(limpiar_ansi).join('\n') : null
         };
     }
 
@@ -233,52 +263,86 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
 
     function on_execute(evt, data) {
         var cell = data.cell;
-        if (!es_celda_de_ejercicio(cell)) return;
-        var grade_id = cell.metadata.nbgrader.grade_id;
+        var es_prueba = es_celda_de_prueba(cell);
+        var es_solucion = es_celda_de_solucion(cell);
+        if (!es_prueba && !es_solucion) return;
 
-        if (!estado.primer_intento[grade_id]) {
-            estado.primer_intento[grade_id] = Date.now();
+        // Se cronometra por EJERCICIO (clave de negocio), no por grade_id, para
+        // que la celda de solución y la de prueba compartan el mismo reloj.
+        // El primer_intento se fija en el primer toque de CUALQUIERA de las dos:
+        // así el tiempo cuenta desde que el alumno empezó a trabajar el ejercicio,
+        // no desde que corrió el test por primera vez (ese era el bug del tiempo).
+        var cod = normalizar_codigo_ejercicio(cell.metadata.nbgrader.grade_id);
+
+        if (!estado.primer_intento[cod]) {
+            estado.primer_intento[cod] = Date.now();
         }
-        estado.intentos[grade_id] = (estado.intentos[grade_id] || 0) + 1;
+        // Solo las corridas de la celda de PRUEBA cuentan como "intentos" de
+        // verificación. Ejecutar la solución no es un intento.
+        if (es_prueba) {
+            estado.intentos[cod] = (estado.intentos[cod] || 0) + 1;
+        }
         guardar_estado(estado);
     }
 
     function on_finished_execute(evt, data) {
         var cell = data.cell;
-        if (!es_celda_de_ejercicio(cell)) return;
+
+        // --- Celda de SOLUCIÓN: capturamos el error real del alumno ----------
+        // No emite evento (correr la solución no es una verificación), pero
+        // guardamos su error para adjuntarlo a la próxima corrida del test.
+        // Si esta vez corrió limpia, borramos el error viejo (ya lo corrigió).
+        if (es_celda_de_solucion(cell)) {
+            var cod_sol = normalizar_codigo_ejercicio(cell.metadata.nbgrader.grade_id);
+            var err_sol = extraer_error(cell);
+            if (err_sol) {
+                estado.error_codigo[cod_sol] = err_sol;
+            } else {
+                delete estado.error_codigo[cod_sol];
+            }
+            guardar_estado(estado);
+            return;
+        }
+
+        // --- Celda de PRUEBA: evento de resultado del ejercicio --------------
+        if (!es_celda_de_prueba(cell)) return;
         var grade_id = cell.metadata.nbgrader.grade_id;
+        var cod = normalizar_codigo_ejercicio(grade_id);
 
         var evaluacion = evaluar_celda(cell);
-        var errores = evaluacion.errores;
         var exito = evaluacion.exito;
 
         var ahora = Date.now();
-        var inicio = estado.primer_intento[grade_id] || ahora;
+        var inicio = estado.primer_intento[cod] || ahora;
         var duracion_seg = Math.max(0, (ahora - inicio) / 1000.0);
         duracion_seg = Math.round(duracion_seg * 100) / 100;
 
         var nbgrader_meta = cell.metadata.nbgrader;
-        
+
+        // El error que reportamos: preferimos el de la celda de solución (el
+        // error REAL del estudiante), y solo si no existe usamos el del test
+        // (típicamente el AssertionError, que siempre es igual). Esto arregla el
+        // bug de que "siempre se enviaba el mismo error de la celda de prueba".
         var tipo_error = null;
         var mensaje_error = null;
         var traceback_limpio = null;
 
-        if (!exito && errores.length > 0) {
-            var err = errores[0];
-            tipo_error = err.ename || 'ExecutionError';
-            mensaje_error = err.evalue ? (tipo_error + ': ' + err.evalue) : tipo_error;
-            if (err.traceback && err.traceback.length) {
-                traceback_limpio = err.traceback.map(limpiar_ansi).join('\n');
+        if (!exito) {
+            var err = estado.error_codigo[cod] || extraer_error(cell);
+            if (err) {
+                tipo_error = err.tipo_error;
+                mensaje_error = err.mensaje;
+                traceback_limpio = err.traceback;
             }
         }
 
-        var num_intentos = estado.intentos[grade_id] || 1;
+        var num_intentos = estado.intentos[cod] || 1;
 
         var payload = {
             // Discriminador para que el backend enrute sin adivinar por forma.
             tipo_evento: "resultado_ejercicio",
             codigo_celda: grade_id,
-            codigo_ejercicio: normalizar_codigo_ejercicio(grade_id),
+            codigo_ejercicio: cod,
             orden: obtener_orden_celda(cell),
             puntos_maximos: nbgrader_meta.points || 1,
             descripcion: grade_id,
@@ -291,6 +355,15 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
             mensaje: mensaje_error,
             traceback: traceback_limpio
         };
+
+        // Al aprobar, se limpia el reloj/contador del ejercicio para que una
+        // re-ejecución posterior no infle la duración ni los intentos.
+        if (exito) {
+            delete estado.primer_intento[cod];
+            delete estado.intentos[cod];
+            delete estado.error_codigo[cod];
+            guardar_estado(estado);
+        }
 
         // Renderizar tarjeta visual con visor JSON desplegable incorporado
         mostrar_feedback_ui(cell, exito, grade_id, num_intentos, tipo_error, mensaje_error, duracion_seg, payload);
