@@ -1,8 +1,14 @@
 import json
+import logging
 import os
 
 from tornado import web
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
+
+# tornado.web.RequestHandler NO tiene self.log (a diferencia del handler base de
+# notebook 6). Con jupyter_server hay que usar un logger propio, si no cada POST
+# revienta con AttributeError -> 500 y se pierde el evento.
+log = logging.getLogger("metrics_bridge")
 
 # ---------------------------------------------------------------------------
 # Identidad congelada al arrancar la extensión.
@@ -53,7 +59,7 @@ class MetricsEventoHandler(web.RequestHandler):
         evento.update(IDENTIDAD)
 
         if not enviar_backend:
-            self.log.info(
+            log.info(
                 "[metrics_bridge] ENVIAR_AL_BACKEND=false (Simulación activada). Evento capturado:\n%s",
                 json.dumps(evento, indent=2, ensure_ascii=False)
             )
@@ -64,7 +70,7 @@ class MetricsEventoHandler(web.RequestHandler):
         api_url = os.environ.get("STUDENT_METRICS_API_URL")
         token = os.environ.get("STUDENT_METRICS_TOKEN")
         if not api_url or not token:
-            self.log.error(
+            log.error(
                 "STUDENT_METRICS_API_URL/TOKEN no configurados; evento DESCARTADO. "
                 "Revisa el mint de token en jupyterhub_config.py."
             )
@@ -88,14 +94,14 @@ class MetricsEventoHandler(web.RequestHandler):
         try:
             resp = await AsyncHTTPClient().fetch(req, raise_error=False)
         except Exception as exc:
-            self.log.error("No se pudo reenviar evento de métricas: %s", exc)
+            log.error("No se pudo reenviar evento de métricas: %s", exc)
             self.set_status(502)
             self.finish(json.dumps({"status": "error_red", "enviado": False}))
             return
 
         if resp.code >= 300:
             cuerpo = (resp.body or b"")[:500].decode("utf-8", "replace")
-            self.log.error(
+            log.error(
                 "Backend rechazó el evento de métricas: %s %s", resp.code, cuerpo
             )
             self.set_status(502)
@@ -112,11 +118,21 @@ def _add_route(web_app):
     web_app.add_handlers(".*$", [(route, MetricsEventoHandler)])
 
 
+def _usar_logger_del_app(app):
+    # Reemplaza el logger de módulo por el del server (que sí tiene handler a
+    # INFO), para que el "Evento capturado" y los errores aparezcan en el log.
+    global log
+    if getattr(app, "log", None) is not None:
+        log = app.log
+
+
 def load_jupyter_server_extension(nbapp):
+    _usar_logger_del_app(nbapp)
     _add_route(nbapp.web_app)
 
 
 def _load_jupyter_server_extension(server_app):
+    _usar_logger_del_app(server_app)
     _add_route(server_app.web_app)
 
 
