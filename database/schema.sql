@@ -1,154 +1,101 @@
--- ============================================================================
--- ESQUEMA DE BASE DE DATOS: TELEMETRÍA Y CALIFICACIONES JUPYTER / NBGRADER
--- ============================================================================
+-- =========================================================
+-- Esquema PostgreSQL: telemetría de cuadernillos (Jupyter <-> backend)
+-- =========================================================
+-- No incluye tablas de curso/cuadernillo/ejercicio/estudiante como
+-- entidades propias: esos datos viven en Moodle/nbgrader vía LTI.
+-- Aquí solo se guardan los EVENTOS que llegan desde Jupyter.
 
--- Habilitar extensión para UUIDs (opcional pero muy útil si usas UUIDs en PKs)
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto"; -- para gen_random_uuid()
 
--- ----------------------------------------------------------------------------
--- 1. TABLAS PRINCIPALES (Entidades del Sistema)
--- ----------------------------------------------------------------------------
-
--- Cursos registrados desde LTI o JupyterHub
-CREATE TABLE IF NOT EXISTS cursos (
-    curso_id VARCHAR(100) PRIMARY KEY, -- LTI context_id
-    nombre VARCHAR(255),
-    creado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+-- ---------------------------------------------------------
+-- 1. Intentos de validación (un registro por cada intento)
+-- ---------------------------------------------------------
+CREATE TABLE exercise_attempts (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    course_id          VARCHAR(255) NOT NULL,   -- context_id de LTI
+    cuadernillo_id     VARCHAR(255) NOT NULL,
+    exercise_id        VARCHAR(255) NOT NULL,
+    student_id         VARCHAR(255) NOT NULL,   -- user_id de LTI
+    attempt_at         TIMESTAMPTZ NOT NULL,    -- momento del intento (lo manda Jupyter)
+    validation_result  VARCHAR(10) NOT NULL CHECK (validation_result IN ('passed', 'failed')),
+    received_at        TIMESTAMPTZ NOT NULL DEFAULT now() -- momento en que llegó al backend
 );
 
--- Estudiantes autenticados mediante LTI
-CREATE TABLE IF NOT EXISTS estudiantes (
-    estudiante_id VARCHAR(100) PRIMARY KEY, -- LTI user_id
-    nombre_completo VARCHAR(255),
-    correo VARCHAR(255),
-    creado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    actualizado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+-- Consulta más común del panel: "dame los intentos de este ejercicio en este cuadernillo"
+CREATE INDEX idx_attempts_lookup ON exercise_attempts (course_id, cuadernillo_id, exercise_id);
+-- Consulta: "dame el historial de un estudiante"
+CREATE INDEX idx_attempts_student ON exercise_attempts (student_id, cuadernillo_id);
+
+-- ---------------------------------------------------------
+-- 2. Errores capturados dentro de cada intento (1 a N por intento)
+-- ---------------------------------------------------------
+-- Se normaliza en tabla aparte (en vez de JSONB) porque el panel
+-- necesita agrupar/contar por error_type de forma eficiente.
+CREATE TABLE attempt_errors (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    attempt_id    UUID NOT NULL REFERENCES exercise_attempts(id) ON DELETE CASCADE,
+    cell_id       VARCHAR(255) NOT NULL,
+    error_type    VARCHAR(255) NOT NULL,
+    error_message TEXT NOT NULL,
+    occurred_at   TIMESTAMPTZ NOT NULL
 );
 
--- Cuadernillos (Assignments) por Curso
-CREATE TABLE IF NOT EXISTS cuadernillos (
-    cuadernillo_codigo VARCHAR(100) NOT NULL, -- ej: "semana_1"
-    curso_id VARCHAR(100) NOT NULL REFERENCES cursos(curso_id) ON DELETE CASCADE,
-    titulo VARCHAR(255),
-    creado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (curso_id, cuadernillo_codigo)
+CREATE INDEX idx_attempt_errors_attempt ON attempt_errors (attempt_id);
+-- Consulta: "cuáles son los errores más frecuentes en este ejercicio"
+CREATE INDEX idx_attempt_errors_type ON attempt_errors (error_type);
+
+-- ---------------------------------------------------------
+-- 3. Calificación del cuadernillo (una sola vez por estudiante/cuadernillo)
+-- ---------------------------------------------------------
+CREATE TABLE cuadernillo_ratings (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    course_id      VARCHAR(255) NOT NULL,
+    cuadernillo_id VARCHAR(255) NOT NULL,
+    student_id     VARCHAR(255) NOT NULL,
+    submitted_at   TIMESTAMPTZ NOT NULL,
+    rating         SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    comment        TEXT,
+    UNIQUE (course_id, cuadernillo_id, student_id) -- un estudiante califica una sola vez
 );
 
--- Ejercicios que forman parte de un cuadernillo (Llave de negocio: codigo_ejercicio)
-CREATE TABLE IF NOT EXISTS ejercicios (
-    curso_id VARCHAR(100) NOT NULL,
-    cuadernillo_codigo VARCHAR(100) NOT NULL,
-    codigo_ejercicio VARCHAR(100) NOT NULL, -- ej: "ejercicio_1" (sin prefijo test_)
-    codigo_celda VARCHAR(100),               -- ej: "test_ejercicio_1"
-    orden INT,
-    descripcion TEXT,
-    puntos_maximos NUMERIC(5, 2) DEFAULT 0.00,
-    creado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (curso_id, cuadernillo_codigo, codigo_ejercicio),
-    FOREIGN KEY (curso_id, cuadernillo_codigo) REFERENCES cuadernillos(curso_id, cuadernillo_codigo) ON DELETE CASCADE
-);
+-- =========================================================
+-- Vistas para el panel del profesor
+-- =========================================================
 
+-- Resumen por ejercicio: intentos totales, estudiantes que lo intentaron,
+-- cuántos pasaron. Base para ver qué ejercicios son más difíciles.
+CREATE VIEW exercise_stats AS
+SELECT
+    course_id,
+    cuadernillo_id,
+    exercise_id,
+    COUNT(*)                                                       AS total_attempts,
+    COUNT(DISTINCT student_id)                                     AS students_attempted,
+    COUNT(*) FILTER (WHERE validation_result = 'passed')           AS passed_attempts,
+    COUNT(DISTINCT student_id)
+        FILTER (WHERE validation_result = 'passed')                AS students_passed
+FROM exercise_attempts
+GROUP BY course_id, cuadernillo_id, exercise_id;
 
--- ----------------------------------------------------------------------------
--- 2. TABLAS DE TELEMETRÍA EN VIVO (/public/metrics/evento)
--- ----------------------------------------------------------------------------
+-- Errores más comunes por ejercicio, ordenados por frecuencia.
+CREATE VIEW exercise_common_errors AS
+SELECT
+    ea.course_id,
+    ea.cuadernillo_id,
+    ea.exercise_id,
+    ae.error_type,
+    COUNT(*) AS occurrences
+FROM attempt_errors ae
+JOIN exercise_attempts ea ON ea.id = ae.attempt_id
+GROUP BY ea.course_id, ea.cuadernillo_id, ea.exercise_id, ae.error_type
+ORDER BY occurrences DESC;
 
--- Registro detallado de ejecuciones de celdas de prueba en tiempo real
-CREATE TABLE IF NOT EXISTS telemetria_ejercicios (
-    id BIGSERIAL PRIMARY KEY,
-    -- Identidad e Identificadores
-    estudiante_id VARCHAR(100) NOT NULL REFERENCES estudiantes(estudiante_id) ON DELETE CASCADE,
-    curso_id VARCHAR(100) NOT NULL,
-    cuadernillo_codigo VARCHAR(100) NOT NULL,
-    codigo_ejercicio VARCHAR(100) NOT NULL,
-    codigo_celda VARCHAR(100) NOT NULL,
-    
-    -- Métricas de la Ejecución
-    orden INT,
-    puntos_maximos NUMERIC(5, 2),
-    descripcion TEXT,
-    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
-    primer_intento TIMESTAMP WITH TIME ZONE,
-    num_intentos INT DEFAULT 1,
-    duracion_segundos NUMERIC(10, 3),
-    exito BOOLEAN NOT NULL,
-    
-    -- Traza de Errores
-    tipo_error VARCHAR(100),
-    mensaje TEXT,
-    traceback TEXT,
-    
-    -- Metadatos adicionales creados al recibir
-    recibido_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-
-    FOREIGN KEY (curso_id, cuadernillo_codigo, codigo_ejercicio) 
-        REFERENCES ejercicios(curso_id, cuadernillo_codigo, codigo_ejercicio) ON DELETE CASCADE
-);
-
--- Registro de intentos completados enviados por el frontend
-CREATE TABLE IF NOT EXISTS intentos_cuadernillo (
-    id BIGSERIAL PRIMARY KEY,
-    estudiante_id VARCHAR(100) NOT NULL REFERENCES estudiantes(estudiante_id) ON DELETE CASCADE,
-    curso_id VARCHAR(100) NOT NULL,
-    cuadernillo_codigo VARCHAR(100) NOT NULL,
-    estado VARCHAR(50) NOT NULL, -- ej: "terminado"
-    fecha_fin TIMESTAMP WITH TIME ZONE NOT NULL,
-    puntaje_total NUMERIC(5, 2),
-    puntaje_maximo NUMERIC(5, 2),
-    recibido_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-
-    FOREIGN KEY (curso_id, cuadernillo_codigo) 
-        REFERENCES cuadernillos(curso_id, cuadernillo_codigo) ON DELETE CASCADE,
-    -- Restricción opcional si deseas forzar la idempotencia por DB (1 intento por alumno/cuadernillo):
-    CONSTRAINT unique_intento_estudiante UNIQUE (curso_id, cuadernillo_codigo, estudiante_id)
-);
-
-
--- ----------------------------------------------------------------------------
--- 3. TABLAS DE NOTAS OFICIALES NBGRADER (/internal/metrics)
--- ----------------------------------------------------------------------------
-
--- Cabecera de la entrega oficial evaluada por nbgrader
-CREATE TABLE IF NOT EXISTS notas_oficiales_cuadernillo (
-    id BIGSERIAL PRIMARY KEY,
-    curso_id VARCHAR(100) NOT NULL,
-    cuadernillo_codigo VARCHAR(100) NOT NULL,
-    estudiante_id VARCHAR(100) NOT NULL REFERENCES estudiantes(estudiante_id) ON DELETE CASCADE,
-    estado VARCHAR(50) NOT NULL,
-    fecha_fin TIMESTAMP WITH TIME ZONE,
-    puntaje_total NUMERIC(5, 2) NOT NULL,
-    puntaje_maximo NUMERIC(5, 2) NOT NULL,
-    exportado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-
-    FOREIGN KEY (curso_id, cuadernillo_codigo) 
-        REFERENCES cuadernillos(curso_id, cuadernillo_codigo) ON DELETE CASCADE,
-    -- Un estudiante solo tiene un registro oficial final por cuadernillo (actualizable mediante UPSERT)
-    CONSTRAINT unique_nota_oficial UNIQUE (curso_id, cuadernillo_codigo, estudiante_id)
-);
-
--- Detalle por ejercicio dentro de la nota oficial nbgrader
-CREATE TABLE IF NOT EXISTS notas_oficiales_ejercicios (
-    id BIGSERIAL PRIMARY KEY,
-    nota_cuadernillo_id BIGINT NOT NULL REFERENCES notas_oficiales_cuadernillo(id) ON DELETE CASCADE,
-    codigo_ejercicio VARCHAR(100) NOT NULL,
-    codigo_celda VARCHAR(100) NOT NULL,
-    orden INT,
-    descripcion TEXT,
-    puntos_obtenidos NUMERIC(5, 2) NOT NULL,
-    puntos_maximos NUMERIC(5, 2) NOT NULL,
-    aprobado BOOLEAN NOT NULL
-);
-
-
--- ----------------------------------------------------------------------------
--- 4. ÍNDICES PARA CONSULTAS Y RENDIMIENTO
--- ----------------------------------------------------------------------------
-
--- Índices para consultar telemetría rápidamente en dashboards / backend
-CREATE INDEX IF NOT EXISTS idx_telemetria_estudiante ON telemetria_ejercicios (estudiante_id);
-CREATE INDEX IF NOT EXISTS idx_telemetria_cuadernillo ON telemetria_ejercicios (curso_id, cuadernillo_codigo);
-CREATE INDEX IF NOT EXISTS idx_telemetria_ejercicio_clave ON telemetria_ejercicios (curso_id, cuadernillo_codigo, codigo_ejercicio);
-CREATE INDEX IF NOT EXISTS idx_telemetria_timestamp ON telemetria_ejercicios (timestamp DESC);
-
--- Índice para cruzar la nota oficial con la telemetría del alumno
-CREATE INDEX IF NOT EXISTS idx_notas_estudiante_cuadernillo ON notas_oficiales_cuadernillo (curso_id, cuadernillo_codigo, estudiante_id);
+-- Calificación promedio por cuadernillo.
+CREATE VIEW cuadernillo_rating_summary AS
+SELECT
+    course_id,
+    cuadernillo_id,
+    COUNT(*)         AS total_ratings,
+    ROUND(AVG(rating), 2) AS avg_rating
+FROM cuadernillo_ratings
+GROUP BY course_id, cuadernillo_id;
