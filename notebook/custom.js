@@ -160,12 +160,15 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
         try {
             var raw = window.localStorage.getItem(clave_estado());
             var st = raw ? JSON.parse(raw) : {};
-            st.intentos = st.intentos || {};       // nº de verificaciones por ejercicio
-            st.primer_intento = st.primer_intento || {}; // ts del 1er toque del ejercicio
-            st.error_codigo = st.error_codigo || {};     // último error de la celda de solución
+            st.intentos = st.intentos || {};       // nº de verificaciones (SOLO para la UI; el backend cuenta)
+            st.primer_intento = st.primer_intento || {}; // ts del 1er toque (SOLO UI)
+            // errores: buffer POR EJERCICIO. Acumula TODOS los errores de ejecución
+            // (celda de solución o de prueba) desde el último intento de validación.
+            // Persistido para no perderlo si el alumno recarga o cierra sin validar.
+            st.errores = st.errores || {};
             return st;
         } catch (e) {
-            return { intentos: {}, primer_intento: {}, error_codigo: {} };
+            return { intentos: {}, primer_intento: {}, errores: {} };
         }
     }
 
@@ -197,8 +200,7 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
         };
     }
 
-    // Extrae el error de una celda (o null si no hubo). Se usa tanto para la
-    // celda de prueba como para la de solución del estudiante.
+    // Extrae el error de una celda (o null si no hubo).
     function extraer_error(cell) {
         var outputs = (cell.output_area && cell.output_area.outputs) || [];
         var errores = outputs.filter(function (o) { return o.output_type === 'error'; });
@@ -211,6 +213,24 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
             traceback: (err.traceback && err.traceback.length)
                 ? err.traceback.map(limpiar_ansi).join('\n') : null
         };
+    }
+
+    // Acumula el error de una celda (solución o prueba) en el buffer del ejercicio.
+    // Un objeto por error con el shape de la sección 5.1 (cell_id, timestamp,
+    // error_type, error_message). Así NINGÚN error se pierde: se capturan a
+    // medida que ocurren, no solo cuando se corre el test.
+    function bufferizar_error(cod, cell) {
+        var err = extraer_error(cell);
+        if (!err) return;
+        if (!estado.errores[cod]) estado.errores[cod] = [];
+        estado.errores[cod].push({
+            cell_id: cell.metadata.nbgrader.grade_id,
+            timestamp: new Date().toISOString(),
+            error_type: err.tipo_error,
+            error_message: err.mensaje,
+            traceback: err.traceback
+        });
+        guardar_estado(estado);
     }
 
     function verificar_finalizacion_cuadernillo() {
@@ -240,25 +260,91 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
 
         if (!todosAprobados) return;
 
-        // Se emite UNA sola vez por cuadernillo. Sin este flag, cada
-        // re-ejecución de cualquier celda de prueba tras completar el
-        // cuadernillo mandaba otro evento "completado" y el backend terminaba
-        // pisando la fecha_fin original.
-        if (estado.completado_enviado) return;
+        // Cuadernillo completo. En vez de auto-enviar una nota, se le pide al
+        // alumno que CALIFIQUE el cuadernillo (retroalimentación 1-5 + comentario,
+        // sección 4/5.2). El evento de rating se envía una sola vez por alumno /
+        // cuadernillo (flag rating_enviado). Si ya lo calificó o ya se mostró el
+        // formulario, no hacemos nada.
+        if (estado.rating_enviado) return;
+        mostrar_rating_ui();
+    }
 
-        var payloadFin = {
-            tipo_evento: "intento_cuadernillo_completado",
-            estado: "terminado",
-            fecha_fin: new Date().toISOString(),
-            puntaje_total: puntajeObtenido,
-            puntaje_maximo: puntajeMaximo
-        };
-
-        estado.completado_enviado = true;
+    // --- UI de calificación del cuadernillo (sección 5.2) ---------------------
+    function enviar_rating(rating, comment) {
+        if (estado.rating_enviado) return;
+        estado.rating_enviado = true;
         guardar_estado(estado);
+        enviar_evento({
+            tipo_evento: "cuadernillo_rating",
+            submitted_at: new Date().toISOString(),
+            rating: rating,
+            comment: comment || null
+        });
+        console.log('[nbgrader-metrics] rating del cuadernillo enviado:', rating);
+    }
 
-        enviar_evento(payloadFin);
-        console.log('[nbgrader-metrics] ¡Cuadernillo completado en su totalidad!', payloadFin);
+    function mostrar_rating_ui() {
+        if (!Jupyter || !Jupyter.notebook) return;
+        if (document.getElementById('nbgrader-rating-card')) return; // ya visible
+
+        var cont = document.createElement('div');
+        cont.id = 'nbgrader-rating-card';
+        cont.style.cssText = 'margin:16px 0;padding:18px;border-radius:10px;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border:1px solid rgba(56,189,248,0.25);color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;box-shadow:0 6px 18px rgba(0,0,0,0.25);';
+
+        var estrellas = '';
+        for (var s = 1; s <= 5; s++) {
+            estrellas += '<span class="nbg-star" data-v="' + s + '" style="cursor:pointer;font-size:30px;color:#475569;transition:color .15s;">★</span>';
+        }
+
+        cont.innerHTML =
+            '<div style="font-size:16px;font-weight:700;color:#6ee7b7;margin-bottom:4px;">✅ ¡Completaste el cuadernillo!</div>' +
+            '<div style="font-size:13px;color:#94a3b8;margin-bottom:12px;">Antes de terminar, calíficalo para ayudarnos a mejorarlo.</div>' +
+            '<div id="nbg-stars" style="display:flex;gap:6px;margin-bottom:12px;">' + estrellas + '</div>' +
+            '<textarea id="nbg-comment" rows="2" placeholder="Comentario (opcional)" style="width:100%;box-sizing:border-box;background:#020617;color:#e2e8f0;border:1px solid rgba(148,163,184,0.3);border-radius:6px;padding:8px;font-size:13px;resize:vertical;"></textarea>' +
+            '<div style="margin-top:10px;display:flex;align-items:center;gap:10px;">' +
+                '<button id="nbg-rating-send" disabled style="background:#38bdf8;color:#04263a;border:none;border-radius:6px;padding:8px 16px;font-weight:700;font-size:13px;cursor:not-allowed;opacity:.5;">Enviar calificación</button>' +
+                '<span id="nbg-rating-msg" style="font-size:12px;color:#94a3b8;"></span>' +
+            '</div>';
+
+        // Insertar al final de la última celda evaluable
+        var cells = Jupyter.notebook.get_cells();
+        var last = null;
+        for (var i = 0; i < cells.length; i++) {
+            if (es_celda_de_prueba(cells[i])) last = cells[i];
+        }
+        var host = last && last.element && last.element[0] ? last.element[0] : document.body;
+        host.appendChild(cont);
+
+        var seleccion = 0;
+        var stars = cont.querySelectorAll('.nbg-star');
+        var btn = cont.querySelector('#nbg-rating-send');
+        function pintar(n) {
+            for (var k = 0; k < stars.length; k++) {
+                stars[k].style.color = (k < n) ? '#fbbf24' : '#475569';
+            }
+        }
+        for (var j = 0; j < stars.length; j++) {
+            (function (star) {
+                star.addEventListener('mouseenter', function () { pintar(parseInt(star.dataset.v, 10)); });
+                star.addEventListener('mouseleave', function () { pintar(seleccion); });
+                star.addEventListener('click', function () {
+                    seleccion = parseInt(star.dataset.v, 10);
+                    pintar(seleccion);
+                    btn.disabled = false;
+                    btn.style.cursor = 'pointer';
+                    btn.style.opacity = '1';
+                });
+            })(stars[j]);
+        }
+        btn.addEventListener('click', function () {
+            if (seleccion < 1) return;
+            var comment = cont.querySelector('#nbg-comment').value.trim();
+            enviar_rating(seleccion, comment);
+            btn.disabled = true;
+            btn.style.cursor = 'default';
+            btn.style.opacity = '.5';
+            cont.querySelector('#nbg-rating-msg').textContent = '¡Gracias por tu calificación!';
+        });
     }
 
     function on_execute(evt, data) {
@@ -287,97 +373,97 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
 
     function on_finished_execute(evt, data) {
         var cell = data.cell;
+        var es_solucion = es_celda_de_solucion(cell);
+        var es_prueba = es_celda_de_prueba(cell);
+        if (!es_solucion && !es_prueba) return;
 
-        // --- Celda de SOLUCIÓN: capturamos el error real del alumno ----------
-        // No emite evento (correr la solución no es una verificación), pero
-        // guardamos su error para adjuntarlo a la próxima corrida del test.
-        // Si esta vez corrió limpia, borramos el error viejo (ya lo corrigió).
-        if (es_celda_de_solucion(cell)) {
-            var cod_sol = normalizar_codigo_ejercicio(cell.metadata.nbgrader.grade_id);
-            var err_sol = extraer_error(cell);
-            if (err_sol) {
-                estado.error_codigo[cod_sol] = err_sol;
-            } else {
-                delete estado.error_codigo[cod_sol];
-            }
-            guardar_estado(estado);
-            return;
-        }
+        var cod = normalizar_codigo_ejercicio(cell.metadata.nbgrader.grade_id);
 
-        // --- Celda de PRUEBA: evento de resultado del ejercicio --------------
-        if (!es_celda_de_prueba(cell)) return;
+        // Todo error (celda de solución O de prueba) se ACUMULA en el buffer del
+        // ejercicio a medida que ocurre. Así no se pierde ningún error aunque el
+        // alumno nunca llegue a correr el test (bug que reportó Bryan).
+        bufferizar_error(cod, cell);
+
+        // La celda de solución solo acumula; el ENVÍO se dispara con el test.
+        if (!es_prueba) return;
+
+        // --- Celda de PRUEBA (validación): se arma y envía el intento --------
         var grade_id = cell.metadata.nbgrader.grade_id;
-        var cod = normalizar_codigo_ejercicio(grade_id);
-
-        var evaluacion = evaluar_celda(cell);
-        var exito = evaluacion.exito;
+        var nbgrader_meta = cell.metadata.nbgrader;
+        var exito = evaluar_celda(cell).exito;
 
         var ahora = Date.now();
         var inicio = estado.primer_intento[cod] || ahora;
-        var duracion_seg = Math.max(0, (ahora - inicio) / 1000.0);
-        duracion_seg = Math.round(duracion_seg * 100) / 100;
+        var duracion_seg = Math.round(Math.max(0, (ahora - inicio) / 1000.0) * 100) / 100;
+        var num_intentos = estado.intentos[cod] || 1;  // SOLO para la tarjeta visual
 
-        var nbgrader_meta = cell.metadata.nbgrader;
+        // Todos los errores acumulados desde el intento anterior (incluye el de
+        // la propia celda de prueba, ya bufferizado arriba).
+        var errores_acumulados = (estado.errores[cod] || []).slice();
 
-        // El error que reportamos: preferimos el de la celda de solución (el
-        // error REAL del estudiante), y solo si no existe usamos el del test
-        // (típicamente el AssertionError, que siempre es igual). Esto arregla el
-        // bug de que "siempre se enviaba el mismo error de la celda de prueba".
-        var tipo_error = null;
-        var mensaje_error = null;
-        var traceback_limpio = null;
-
-        if (!exito) {
-            var err = estado.error_codigo[cod] || extraer_error(cell);
-            if (err) {
-                tipo_error = err.tipo_error;
-                mensaje_error = err.mensaje;
-                traceback_limpio = err.traceback;
-            }
-        }
-
-        var num_intentos = estado.intentos[cod] || 1;
-
+        // Payload del intento (sección 5.1). La identidad (course_id, student_id,
+        // cuadernillo_id) la agrega metrics_bridge desde el contexto LTI, NO el
+        // cliente. attempts_count tampoco: lo cuenta el backend contando eventos.
         var payload = {
-            // Discriminador para que el backend enrute sin adivinar por forma.
-            tipo_evento: "resultado_ejercicio",
+            tipo_evento: "exercise_attempt",
+            exercise_id: cod,
             codigo_celda: grade_id,
-            codigo_ejercicio: cod,
             orden: obtener_orden_celda(cell),
             puntos_maximos: nbgrader_meta.points || 1,
-            descripcion: grade_id,
-            timestamp: new Date(ahora).toISOString(),
-            primer_intento: new Date(inicio).toISOString(),
-            num_intentos: num_intentos,
-            duracion_segundos: duracion_seg,
-            exito: exito,
-            tipo_error: tipo_error,
-            mensaje: mensaje_error,
-            traceback: traceback_limpio
+            attempt_at: new Date(ahora).toISOString(),
+            validation_result: exito ? "passed" : "failed",
+            errors: errores_acumulados
         };
 
-        // Al aprobar, se limpia el reloj/contador del ejercicio para que una
-        // re-ejecución posterior no infle la duración ni los intentos.
+        // El buffer se reinicia tras CADA envío, pase o falle (sección 2.4).
+        estado.errores[cod] = [];
         if (exito) {
             delete estado.primer_intento[cod];
             delete estado.intentos[cod];
-            delete estado.error_codigo[cod];
-            guardar_estado(estado);
         }
+        guardar_estado(estado);
 
-        // Renderizar tarjeta visual con visor JSON desplegable incorporado
-        mostrar_feedback_ui(cell, exito, grade_id, num_intentos, tipo_error, mensaje_error, duracion_seg, payload);
+        // Tarjeta visual: el error más reciente del intento (si hubo).
+        var ultimo = errores_acumulados.length ? errores_acumulados[errores_acumulados.length - 1] : null;
+        mostrar_feedback_ui(cell, exito, grade_id, num_intentos,
+            ultimo ? ultimo.error_type : null,
+            ultimo ? ultimo.error_message : null,
+            duracion_seg, payload);
 
-        // Enviar evento de telemetría en tiempo real al puente local
         enviar_evento(payload);
-
-        // Verificar si el estudiante acaba de completar y aprobar TODOS los ejercicios del cuadernillo
         verificar_finalizacion_cuadernillo();
     }
+
+    // Al cerrar/recargar la pestaña, si quedaron errores en buffer de ejercicios
+    // que el alumno NUNCA validó (no corrió el test), se envían igual para no
+    // perderlos. sendBeacon es lo único confiable durante 'unload'. El endpoint
+    // está eximido de XSRF, así que un POST sin headers especiales funciona.
+    function flush_errores_pendientes() {
+        if (!navigator.sendBeacon) return;
+        var base_url = (Jupyter && Jupyter.notebook && Jupyter.notebook.base_url) || '/';
+        var url = base_url + 'nbgrader-metrics/evento';
+        Object.keys(estado.errores || {}).forEach(function (cod) {
+            var errs = estado.errores[cod];
+            if (!errs || !errs.length) return;
+            var payload = {
+                tipo_evento: "exercise_attempt",
+                exercise_id: cod,
+                attempt_at: new Date().toISOString(),
+                validation_result: "sin_validar", // cerró sin correr el test
+                errors: errs.slice()
+            };
+            try {
+                navigator.sendBeacon(url, new Blob([JSON.stringify(payload)], { type: 'application/json' }));
+                estado.errores[cod] = [];
+            } catch (e) { /* best-effort */ }
+        });
+        guardar_estado(estado);
+    }
+    window.addEventListener('beforeunload', flush_errores_pendientes);
 
     if (Jupyter && Jupyter.notebook && Jupyter.notebook.events) {
         Jupyter.notebook.events.on('execute.CodeCell', on_execute);
         Jupyter.notebook.events.on('finished_execute.CodeCell', on_finished_execute);
-        console.log('[nbgrader-metrics] listo, escuchando celdas de ejercicio con visor JSON interactivo y verificación de finalización');
+        console.log('[nbgrader-metrics] listo: telemetría por intento (errors[] acumulados + rating de cuadernillo)');
     }
 });
