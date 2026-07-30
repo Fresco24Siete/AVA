@@ -50,7 +50,12 @@ RUN chmod +x /usr/local/bin/entrypoint.sh \
 # dinámicamente en work/cuadernillo.ipynb).
 COPY --chown=jovyan:jovyan notebook_semana/ /opt/plantillas/
 
-RUN mkdir -p /srv/nbgrader && chown -R jovyan:jovyan /srv/nbgrader
+# Crear /srv/nbgrader y /srv/publicados en la imagen con dueño jovyan: al montar
+# volúmenes nombrados vacíos sobre estas rutas, Docker los inicializa copiando
+# el dueño de la imagen -> jovyan puede escribir. Sin esto, el volumen queda de
+# root y publicar/entregar fallan con PermissionError.
+RUN mkdir -p /srv/nbgrader /srv/publicados \
+    && chown -R jovyan:jovyan /srv/nbgrader /srv/publicados
 
 # El workspace del alumno debe existir y pertenecer a jovyan. Antes lo creaba
 # implícitamente el COPY de notebook_semana; al quitarlo, WORKDIR lo crearía
