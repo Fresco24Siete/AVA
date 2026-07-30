@@ -1,5 +1,13 @@
 # Contrato JSON: JupyterHub → Backend Go
 
+> **NOTA (actualizado):** el modelo de telemetría vigente es el de la **sección 5**
+> (inglés: `POST /api/exercises/attempts` con `errors[]` y `validation_result`,
+> `POST /api/cuadernillos/ratings`). La fuente de verdad son **`database/schema.sql`**
+> y el backend en `backend/` (tablas `exercise_attempts`, `attempt_errors`,
+> `cuadernillo_ratings`). Los ejemplos de payload en español más abajo son de una
+> versión anterior y se conservan solo como referencia histórica; el shape real que
+> emite Jupyter hoy es el de la sección 5, ya verificado contra el backend.
+
 Mapeo exacto de los JSON que emite el lado de Jupyter contra `database/schema.sql`.
 Complementa a `ENDPOINTS_BACKEND.txt` (endpoints y consideraciones). Aquí está el
 **campo → columna** para que el backend se escriba sin adivinar.
@@ -138,29 +146,26 @@ Header → `notas_oficiales_cuadernillo` con **UPSERT** sobre
 
 ## Decisiones de arquitectura resueltas
 
-### 1. Activación del cuadernillo: nbgrader vs. backend
+### 1. Activación del cuadernillo — IMPLEMENTADO (nbgrader, NO backend)
 
-**Decisión: nbgrader es dueño del CONTENIDO y la CALIFICACIÓN; el backend es dueño
-de la ACTIVACIÓN (puntero) y el ACCESO (token). No compiten.**
+**Decisión final: nbgrader/instructor decide qué cuadernillo está activo y su
+ventana de tiempo. El backend NO participa en la activación** (solo almacena
+telemetría y ratings). Se eliminó la llamada del hub a `/cuadernillo-activo`.
 
-- El instructor autora en `source/<assignment>/` y hace **Generate** (produce
-  `release/` sin soluciones).
-- El backend solo guarda un puntero: *"para el curso X, el activo es `semana_1`"*.
-  No define el contenido del notebook.
-- En el spawn, el hub pregunta el activo (`/internal/cursos/{id}/cuadernillo-activo`),
-  entrega ese cuadernillo y mintea el token scoped a él.
-- Telemetría y notas usan la misma llave: el nombre del assignment = `cuadernillo_codigo`.
+Cómo funciona (ya en el código):
+- El instructor autora en `source/<tarea>/` y hace **Generate** → `release/`
+  (sin soluciones).
+- Publica con `publicar-cuadernillo <tarea> [abre_iso] [cierra_iso]`, que copia
+  la versión liberada a un volumen `cuadernillos_publicados` y escribe un
+  `manifest.json` con la ventana `{cuadernillo_id, notebook, abre, cierra}`.
+- El alumno monta `cuadernillos_publicados` **read-only** (nunca `nbgrader_shared`).
+  En el arranque, `entregar-cuadernillo` lee el manifest, valida la ventana y deja
+  el notebook activo en `work/cuadernillo.ipynb` (o un aviso cerrado/sin-cuadernillo).
+- El `cuadernillo_id` del manifest se exporta como `CUADERNILLO_CODIGO`, y así la
+  telemetría (`cuadernillo_id` en la sección 5) queda etiquetada correctamente.
 
-**Pendiente de decidir (entrega del notebook al alumno):** como el alumno ya no
-monta `/srv/nbgrader` (seguridad), hay dos opciones para hacerle llegar la versión
-`release/`:
-- **(a) corto plazo:** copiar en el spawn solo `release/<activo>/<nb>` al `work/` del
-  alumno (seguro, no tiene soluciones).
-- **(b) a futuro:** el backend guarda/sirve la versión release y el alumno la baja
-  con su token.
-
-Hoy, sin backend, el alumno recibe el cuadernillo estático que viene en la imagen.
-Cuando exista el backend, implementar (a).
+**Implicación para el backend:** NO necesitas exponer `/cuadernillo-activo` ni un
+mint-token que dependa del cuadernillo. Solo los dos endpoints de la sección 5.
 
 ### 2. ¿Eliminar el número de intentos por cuadernillo?
 
