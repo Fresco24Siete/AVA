@@ -54,7 +54,7 @@ def _url_backend(tipo_evento):
     base = os.environ.get("STUDENT_METRICS_API_BASE")
     if not base:
         vieja = os.environ.get("STUDENT_METRICS_API_URL", "")
-        base = vieja.split("/public/")[0].split("/api/")[0] if vieja else "http://backend_go:8080"
+        base = vieja.split("/public/")[0].split("/api/")[0] if vieja else "http://api_go:8080"
     return base.rstrip("/") + ruta
 
 

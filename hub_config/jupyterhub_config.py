@@ -83,7 +83,7 @@ c.Authenticator.enable_auth_state = True
 async def _mintear_token_estudiante(auth_state, curso_id, cuadernillo_codigo, spawner):
     """Pide al backend un token de métricas acotado a este estudiante."""
     url = os.environ.get('METRICS_MINT_URL',
-                         'http://backend_go:8080/internal/lti/mint-metrics-token')
+                         'http://api_go:8080/internal/lti/mint-metrics-token')
     master_token = os.environ.get('METRICS_API_TOKEN', '')
     payload = {
         'estudiante_id': str(auth_state.get('user_id', '')),
@@ -148,7 +148,7 @@ async def auth_state_a_env(spawner, auth_state):
 
     if es_instructor:
         spawner.environment['METRICS_API_URL'] = os.environ.get(
-            'METRICS_API_URL', 'http://backend_go:8080/internal/metrics'
+            'METRICS_API_URL', 'http://api_go:8080/internal/metrics'
         )
         spawner.environment['METRICS_API_TOKEN'] = os.environ.get('METRICS_API_TOKEN', '')
     else:
@@ -167,12 +167,16 @@ async def auth_state_a_env(spawner, auth_state):
             'SINGLEUSER_APP', 'jupyter_server.serverapp.ServerApp'
         )
 
-        # El Hub puede recibir la URL con cualquiera de los dos nombres; dentro
-        # del contenedor del alumno siempre se llama STUDENT_METRICS_API_URL.
+        # Base del backend a la que metrics_bridge reenvía (le agrega la ruta de
+        # sección 5). El nombre del servicio en docker-compose es 'api_go'.
+        spawner.environment['STUDENT_METRICS_API_BASE'] = os.environ.get(
+            'STUDENT_METRICS_API_BASE', 'http://api_go:8080'
+        )
+        # Compat: algunos consumidores viejos leen la URL completa.
         spawner.environment['STUDENT_METRICS_API_URL'] = (
             os.environ.get('STUDENT_METRICS_API_URL')
             or os.environ.get('STUDENT_METRICS_EVENT_URL')
-            or 'http://backend_go:8080/public/metrics/evento'
+            or 'http://api_go:8080/public/metrics/evento'
         )
 
         try:
