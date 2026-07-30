@@ -17,9 +17,12 @@ func NewAttemptErrorRepository (db *sqlx.DB) *AttemptErrorRepository{
 
 func (repository *AttemptErrorRepository) CreateErrorRepository(attemp *models.AttemptError) error{
 	
+	// Nota: la inserción de intento+errores ahora es transaccional dentro de
+	// ExerciseAttempsRepository.CreateAttemptWithErrors. Este método queda como
+	// utilidad puntual (faltaba el ':' en occurred_at, que lo rompía).
 	_, err := repository.db.NamedExec(`INSERT INTO attempt_errors
-									   (id, attempt_id, cell_id,error_type, error_message, occurred_at)
-									   VALUES (:id,:attempt_id,:cell_id,:error_type,:error_message, occurred_at)`,attemp)
-	
+									   (id, attempt_id, cell_id, error_type, error_message, occurred_at)
+									   VALUES (:id, :attempt_id, :cell_id, :error_type, :error_message, :occurred_at)`, attemp)
+
 	return err
 }

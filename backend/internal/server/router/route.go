@@ -17,7 +17,7 @@ func ConfigureRouter (db *sqlx.DB) *gin.Engine{
 	router := gin.Default()
 
 	router.Use(cors.New(cors.Config{
-		AllowOrigins: []string{"https://jupyteruisproyecto.dunkdns.org/"},
+		AllowOrigins: []string{"https://jupyteruisproyecto.duckdns.org"},
 		AllowMethods: []string{"GET", "POST"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		AllowCredentials: true,
@@ -39,7 +39,7 @@ func ConfigureRouter (db *sqlx.DB) *gin.Engine{
 	api := router.Group("/api")
 	{
 		api.POST("/exercises/attempts", exerciseHandler.CreateAttemptHandler)
-		api.POST("cuadernillos/ratings", cuadernilloHandler.CreateCuadernilloHandler)
+		api.POST("/cuadernillos/ratings", cuadernilloHandler.CreateCuadernilloHandler)
 
 	}
 
