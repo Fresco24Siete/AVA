@@ -37,12 +37,25 @@ RUN mkdir -p /home/jovyan/.jupyter/custom
 COPY custom.js /home/jovyan/.jupyter/custom/custom.js
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+# Entrega del cuadernillo activo (alumno) y publicación (instructor).
+COPY entregar_cuadernillo.py /usr/local/bin/entregar-cuadernillo
+COPY publicar_cuadernillo.py /usr/local/bin/publicar-cuadernillo
+RUN chmod +x /usr/local/bin/entrypoint.sh \
+             /usr/local/bin/entregar-cuadernillo \
+             /usr/local/bin/publicar-cuadernillo
 
-# Copiar los cuadernillos y darles permisos correctos al usuario jovyan
-COPY --chown=jovyan:jovyan notebook_semana/ /home/jovyan/work/
+# Plantillas de cuadernillos: van a /opt/plantillas, NO al work/ del usuario.
+# El instructor las usa para sembrar source/ en nbgrader; el alumno NO debe
+# tenerlas en su workspace (recibe solo el cuadernillo activo entregado
+# dinámicamente en work/cuadernillo.ipynb).
+COPY --chown=jovyan:jovyan notebook_semana/ /opt/plantillas/
 
 RUN mkdir -p /srv/nbgrader && chown -R jovyan:jovyan /srv/nbgrader
+
+# El workspace del alumno debe existir y pertenecer a jovyan. Antes lo creaba
+# implícitamente el COPY de notebook_semana; al quitarlo, WORKDIR lo crearía
+# como root y jovyan no podría escribir el cuadernillo entregado.
+RUN mkdir -p /home/jovyan/work && chown -R jovyan:jovyan /home/jovyan/work
 
 # entrypoint.sh corre como jovyan y necesita poder (des)activar extensiones
 # en cada arranque (el rol cambia según quién haga el LTI launch)
