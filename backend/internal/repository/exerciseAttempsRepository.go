@@ -16,7 +16,7 @@ func NewExerciseAttempsRepository (db *sqlx.DB) *ExerciseAttempsRepository{
 	return &ExerciseAttempsRepository{db : db}
 }
 
-func (repository *ExerciseAttempsRepository) CreateExercise(exercise *models.ExerciseAttempt) error{
+func (repository *ExerciseAttempsRepository) CreateExerciseRepository(exercise *models.ExerciseAttempt) error{
 	
 	_, err := repository.db.NamedExec(`INSERT INTO attempt_errors
 									   (id,course_id,cuadernillo_id,exercise_id,student_id,attempt_at,validation_result, received_at )

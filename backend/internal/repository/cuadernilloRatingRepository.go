@@ -16,7 +16,7 @@ func NewCuadernilloRatingRepository (db *sqlx.DB) *CuadernilloRatingRepository{
 	return &CuadernilloRatingRepository{db : db}
 }
 
-func (repository *CuadernilloRatingRepository) CreateCuadernillo(cuadernillo *models.CuadernilloRating) error{
+func (repository *CuadernilloRatingRepository) CreateCuadernilloRepository(cuadernillo *models.CuadernilloRating) error{
 	
 	_, err := repository.db.NamedExec(`INSERT INTO attempt_errors
 									   (id,course_id,cuadernillo_id,student_id,submitted_at,rating,comment )
