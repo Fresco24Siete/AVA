@@ -1,6 +1,6 @@
 """
 INSTRUCTOR, ver jupyterhub_config.py):
-    METRICS_API_URL    ej. http://backend_go:8080/internal/metrics
+    METRICS_API_URL    ej. http://api_go:8080/internal/metrics
     METRICS_API_TOKEN  token de servicio compartido entre jupyterhub y el backend
     ENVIAR_AL_BACKEND  "true" o "false" (por defecto "false")
 """

@@ -20,11 +20,12 @@ if not es_instructor:
     #    hija del proceso del servidor, hereda su entorno, y con un simple 'env'
     #    el alumno lee STUDENT_METRICS_TOKEN y puede mandar telemetría falsa
     #    directamente al backend saltándose el puente.
+    # El alumno corre nbclassic sobre jupyter_server, así que la config
+    # canónica es ServerApp.*. (Antes se ponía también NotebookApp.*, que solo
+    # generaba warnings de deprecación porque jupyter_server los reenvía.)
     c.ServerApp.terminals_enabled = False
-    c.NotebookApp.terminals_enabled = False
 
     # 2. Raíz acotada al workspace propio. Junto con NO montar el volumen
     #    nbgrader_shared (ver jupyterhub_config.py), el explorador de archivos
     #    solo puede ver los archivos del propio alumno.
     c.ServerApp.root_dir = '/home/jovyan/work'
-    c.NotebookApp.notebook_dir = '/home/jovyan/work'

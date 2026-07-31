@@ -27,11 +27,6 @@ c.DockerSpawner.remove = False
 # el explorador de archivos.
 c.DockerSpawner.volumes = {}
 
-NBGRADER_VOLUMEN = {'nbgrader_shared': '/srv/nbgrader'}
-
-# Cuadernillo por defecto si el backend no responde o aún no hay uno activo.
-CUADERNILLO_FALLBACK = 'cuadernillo_ejercicios.ipynb'
-
 
 # --- Autenticador LTI con enrutamiento de roles -----------------------------
 class LTIRoleAuthenticator(LTI11Authenticator):
@@ -85,36 +80,10 @@ c.LTI11Authenticator.username_key = 'lis_person_contact_email_primary'
 c.Authenticator.enable_auth_state = True
 
 
-async def _resolver_cuadernillo_activo(curso_id, headers, spawner):
-    """Pregunta al backend qué cuadernillo está activo AHORA para este curso.
-
-    Devuelve (codigo, archivo). Ante cualquier fallo devuelve ('', '') y el
-    llamador aplica el fallback estático.
-    """
-    base = os.environ.get('CUADERNILLO_ACTIVO_URL',
-                          'http://backend_go:8080/internal/cursos')
-    url = f'{base}/{curso_id}/cuadernillo-activo'
-    try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            resp = await client.get(url, headers=headers)
-        if resp.status_code != 200:
-            spawner.log.warning(
-                'Cuadernillo activo: backend respondió %s para %s',
-                resp.status_code, curso_id)
-            return '', ''
-        data = resp.json()
-        # 'notebook_archivo' es opcional: permite que el código de negocio
-        # ("semana_1") no tenga que coincidir con el nombre del .ipynb.
-        return data.get('cuadernillo_codigo', ''), data.get('notebook_archivo', '')
-    except Exception as exc:
-        spawner.log.warning('No se pudo resolver el cuadernillo activo: %s', exc)
-        return '', ''
-
-
 async def _mintear_token_estudiante(auth_state, curso_id, cuadernillo_codigo, spawner):
     """Pide al backend un token de métricas acotado a este estudiante."""
     url = os.environ.get('METRICS_MINT_URL',
-                         'http://backend_go:8080/internal/lti/mint-metrics-token')
+                         'http://api_go:8080/internal/lti/mint-metrics-token')
     master_token = os.environ.get('METRICS_API_TOKEN', '')
     payload = {
         'estudiante_id': str(auth_state.get('user_id', '')),
@@ -155,43 +124,66 @@ async def auth_state_a_env(spawner, auth_state):
     spawner.environment['CURSO_NOMBRE']   = str(auth_state.get('context_title', ''))
     spawner.environment['ENVIAR_AL_BACKEND'] = os.environ.get('ENVIAR_AL_BACKEND', 'false')
 
-    # Solo el instructor monta el volumen con soluciones y envíos.
-    spawner.volumes = dict(NBGRADER_VOLUMEN) if es_instructor else {}
+    # Montaje por rol:
+    #   - instructor: nbgrader_shared (soluciones/envíos) + publicados, ambos rw.
+    #   - estudiante: SOLO 'cuadernillos_publicados' en READ-ONLY. Nunca
+    #     nbgrader_shared. Se monta en /srv/publicados (fuera de root_dir), así
+    #     que el alumno ni lo ve en el explorador ni puede abrirlo (sin terminal).
+    if es_instructor:
+        spawner.volumes = {
+            'nbgrader_shared': '/srv/nbgrader',
+            'cuadernillos_publicados': '/srv/publicados',
+        }
+    else:
+        spawner.volumes = {
+            'cuadernillos_publicados': {'bind': '/srv/publicados', 'mode': 'ro'},
+        }
 
-    headers = {'Authorization': f"Bearer {os.environ.get('METRICS_API_TOKEN', '')}"}
-    cuadernillo_codigo, cuadernillo_archivo = await _resolver_cuadernillo_activo(
-        curso_id, headers, spawner)
-
-    # CUADERNILLO_CODIGO es el nombre canónico (el backend devuelve un CÓDIGO
-    # de negocio, no un id numérico). CUADERNILLO_ID se mantiene por
-    # compatibilidad con notebooks/plugins que aún lo lean.
-    spawner.environment['CUADERNILLO_CODIGO'] = cuadernillo_codigo
-    spawner.environment['CUADERNILLO_ID']     = cuadernillo_codigo
+    # QUÉ cuadernillo está activo lo decide nbgrader/instructor vía el manifest
+    # del volumen de publicados (publicar_cuadernillo.py -> entregar_cuadernillo.py),
+    # NO el backend. El entrypoint del alumno lo resuelve y exporta
+    # CUADERNILLO_CODIGO. Por eso el Hub ya NO le pregunta al backend cuál está
+    # activo: esa "doble responsabilidad" backend<->nbgrader era justo lo que
+    # había que eliminar.
 
     if es_instructor:
         spawner.environment['METRICS_API_URL'] = os.environ.get(
-            'METRICS_API_URL', 'http://backend_go:8080/internal/metrics'
+            'METRICS_API_URL', 'http://api_go:8080/internal/metrics'
         )
         spawner.environment['METRICS_API_TOKEN'] = os.environ.get('METRICS_API_TOKEN', '')
     else:
         # El alumno debe quedarse en el notebook clásico. Sin esto, JupyterHub
-        # arranca SingleUserLabApp (JupyterLab) y el alumno puede irse a /lab,
-        # abrir un explorador de archivos completo y una terminal.
+        # arranca SingleUserLabApp (JupyterLab) y el alumno puede irse a /lab.
+        #
+        # Se usa jupyter_server.serverapp.ServerApp (NO nbclassic.notebookapp,
+        # que carece de login_handler_class y hace crashear make_singleuser_app
+        # de jupyterhub con AttributeError -> el contenedor del alumno moría con
+        # Exit 1). Con ServerApp:
+        #   - jupyterhub-singleuser arranca bien,
+        #   - se carga jupyter_server_config.py (terminal off, root_dir),
+        #   - nbclassic sirve /notebooks/<cuadernillo>,
+        #   - jupyterlab está deshabilitado -> /lab da 404.
         spawner.environment['JUPYTERHUB_SINGLEUSER_APP'] = os.environ.get(
-            'SINGLEUSER_APP', 'nbclassic.notebookapp.NotebookApp'
+            'SINGLEUSER_APP', 'jupyter_server.serverapp.ServerApp'
         )
 
-        # El Hub puede recibir la URL con cualquiera de los dos nombres; dentro
-        # del contenedor del alumno siempre se llama STUDENT_METRICS_API_URL.
+        # Base del backend a la que metrics_bridge reenvía (le agrega la ruta de
+        # sección 5). El nombre del servicio en docker-compose es 'api_go'.
+        spawner.environment['STUDENT_METRICS_API_BASE'] = os.environ.get(
+            'STUDENT_METRICS_API_BASE', 'http://api_go:8080'
+        )
+        # Compat: algunos consumidores viejos leen la URL completa.
         spawner.environment['STUDENT_METRICS_API_URL'] = (
             os.environ.get('STUDENT_METRICS_API_URL')
             or os.environ.get('STUDENT_METRICS_EVENT_URL')
-            or 'http://backend_go:8080/public/metrics/evento'
+            or 'http://api_go:8080/public/metrics/evento'
         )
 
         try:
+            # El token va acotado a estudiante+curso (el cuadernillo lo resuelve
+            # el entrypoint, el Hub ya no lo conoce en este punto).
             spawner.environment['STUDENT_METRICS_TOKEN'] = await _mintear_token_estudiante(
-                auth_state, curso_id, cuadernillo_codigo, spawner)
+                auth_state, curso_id, '', spawner)
         except Exception as exc:
             # Sin token, el 100% de la telemetría de esta sesión se descarta.
             # Es un fallo grave, no un warning: que se vea en los logs.
@@ -209,12 +201,13 @@ async def auth_state_a_env(spawner, auth_state):
     if es_instructor:
         spawner.default_url = '/formgrader'
     else:
-        # El destino debe seguir al cuadernillo activo que reportó el backend;
-        # si se deja fijo, CUADERNILLO_CODIGO dice una cosa y el alumno abre otra.
-        archivo = cuadernillo_archivo or (
-            f'{cuadernillo_codigo}.ipynb' if cuadernillo_codigo else CUADERNILLO_FALLBACK
-        )
-        spawner.default_url = f'/notebooks/work/{archivo}'
+        # El alumno SIEMPRE abre work/cuadernillo.ipynb: un nombre FIJO cuyo
+        # CONTENIDO lo pone el entrypoint según el cuadernillo activo (o un aviso
+        # de "cerrado"/"sin cuadernillo"). Así el Hub no necesita saber el nombre
+        # real del notebook. La raíz del server es /home/jovyan/work (root_dir),
+        # por eso la URL NO lleva 'work/' delante (con '/notebooks/work/...' daba
+        # 404 y moría el spawn).
+        spawner.default_url = '/notebooks/cuadernillo.ipynb'
 
 c.Spawner.auth_state_hook = auth_state_a_env
 
@@ -224,7 +217,8 @@ c.Spawner.auth_state_hook = auth_state_a_env
 # antes de que respondiera a /api. Se suben los márgenes. Si algún día se pasa
 # a una máquina más holgada, se pueden bajar de nuevo.
 c.Spawner.start_timeout = 300   # espera a que el contenedor arranque
-c.Spawner.http_timeout = 120    # espera a que el server responda tras arrancar
+c.Spawner.http_timeout = 180    # espera a que el server responda tras arrancar
+                                # (el arranque en frío en e2-micro llegó a ~120s)
 
 c.JupyterHub.default_url = '/hub/spawn'
 

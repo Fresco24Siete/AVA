@@ -35,6 +35,11 @@ if [ "$ALUMNO_ROL" = "instructor" ]; then
     # nbgrader exige que la raíz del curso sea subdirectorio del root del server
     ln -sfn /srv/nbgrader /home/jovyan/work/nbgrader
 
+    # Carpeta de cuadernillos PUBLICADOS (versión liberada, sin soluciones) que
+    # verán los alumnos. El instructor publica ahí con 'publicar-cuadernillo'.
+    mkdir -p "/srv/publicados/${CURSO_ID}" 2>/dev/null || true
+    ln -sfn "/srv/publicados/${CURSO_ID}" /home/jovyan/work/publicados 2>/dev/null || true
+
     jupyter nbextension enable    --sys-prefix create_assignment/main || true
     jupyter serverextension enable --sys-prefix nbgrader.server_extensions.formgrader || true
     jupyter serverextension enable --sys-prefix nbgrader.server_extensions.course_list || true
@@ -45,9 +50,10 @@ if [ "$ALUMNO_ROL" = "instructor" ]; then
     jupyter server extension disable --sys-prefix nbgrader.server_extensions.assignment_list || true
 
     # Sembrar el cuadernillo plantilla en source/ la primera vez (cp -n no pisa
-    # lo que el profesor ya haya editado desde formgrader).
-    if [ -f "/home/jovyan/work/cuadernillo_ejercicios.ipynb" ]; then
-        cp -n "/home/jovyan/work/cuadernillo_ejercicios.ipynb" \
+    # lo que el profesor ya haya editado desde formgrader). La plantilla vive en
+    # /opt/plantillas (ya NO en work/, para que el alumno no la reciba estática).
+    if [ -f "/opt/plantillas/cuadernillo_ejercicios.ipynb" ]; then
+        cp -n "/opt/plantillas/cuadernillo_ejercicios.ipynb" \
               "/srv/nbgrader/${CURSO_ID}/source/semana_1/cuadernillo_ejercicios.ipynb" 2>/dev/null || true
     fi
 
@@ -69,10 +75,14 @@ else
     jupyter server extension disable --sys-prefix jupyterlab || true
     jupyter serverextension disable --sys-prefix jupyterlab || true
 
-    # Copiar el cuadernillo estático de la semana al espacio de trabajo
-    if [ -d "/home/jovyan/work/notebook_semana" ]; then
-        cp -rn /home/jovyan/work/notebook_semana/* /home/jovyan/work/ 2>/dev/null || true
-    fi
+    # Entregar el cuadernillo ACTIVO que publicó el instructor (nbgrader manda,
+    # no el backend). El script lee el manifest del volumen de publicados,
+    # valida la ventana de tiempo y deja el notebook en work/cuadernillo.ipynb.
+    # Devuelve el código del cuadernillo, que exportamos para la telemetría.
+    CUADERNILLO_CODIGO="$(python3 /usr/local/bin/entregar-cuadernillo 2>/dev/null || echo '')"
+    export CUADERNILLO_CODIGO
+    export CUADERNILLO_ID="$CUADERNILLO_CODIGO"
+    echo "[entrypoint] Cuadernillo activo entregado: '${CUADERNILLO_CODIGO:-(ninguno)}'"
 fi
 
 exec "$@"

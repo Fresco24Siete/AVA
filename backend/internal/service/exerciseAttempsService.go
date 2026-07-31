@@ -19,16 +19,8 @@ func NewExerciseAttempsService (repositoryExersice *repository.ExerciseAttempsRe
 }
 
 func (service *ExerciseAttempsService) CreateAttemptWithErrors(exercise *models.ExerciseAttempt, attempts []models.AttemptError) error {
-
-	if err := service.repositoryExersice.CreateExerciseRepository(exercise); err != nil {
-		return err
-	}
-
-	for _, at := range attempts {
-		if err := service.repositoryAttemp.CreateErrorRepository(&at); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	// Intento + errores en una sola transacción (ver el repositorio). Antes se
+	// insertaban por separado y sin transacción: un fallo a mitad dejaba el
+	// intento sin (o con parte de) sus errores.
+	return service.repositoryExersice.CreateAttemptWithErrors(exercise, attempts)
 }
