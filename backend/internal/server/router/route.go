@@ -40,6 +40,7 @@ func ConfigureRouter (db *sqlx.DB) *gin.Engine{
 	{
 		api.POST("/exercises/attempts", exerciseHandler.CreateAttemptHandler)
 		api.POST("/cuadernillos/ratings", cuadernilloHandler.CreateCuadernilloHandler)
+		api.GET("/exercise/tutorIA", handler.TutorHub)
 
 	}
 
