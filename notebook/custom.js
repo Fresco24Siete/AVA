@@ -466,4 +466,19 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
         Jupyter.notebook.events.on('finished_execute.CodeCell', on_finished_execute);
         console.log('[nbgrader-metrics] listo: telemetría por intento (errors[] acumulados + rating de cuadernillo)');
     }
+
+    // --- Tutor IA -----------------------------------------------------------
+    // El panel del tutor vive en su propio archivo para no mezclarlo con la
+    // telemetría. Lo sirve la extensión tutor_bridge.py (no el directorio
+    // custom/, cuyo servido depende de la versión de nbclassic).
+    (function cargar_tutor_ia() {
+        var base_url = (Jupyter && Jupyter.notebook && Jupyter.notebook.base_url) || '/';
+        var s = document.createElement('script');
+        s.src = base_url + 'tutor-ia/static/tutor_ia.js';
+        s.async = true;
+        s.onerror = function () {
+            console.warn('[tutor-ia] no se pudo cargar el panel; ¿está activa la extensión tutor_bridge?');
+        };
+        document.head.appendChild(s);
+    })();
 });

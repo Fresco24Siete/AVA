@@ -48,6 +48,9 @@ services:
       - DOCKER_NETWORK_NAME=moodle_jupyter_net
       - JUPYTERHUB_CRYPT_KEY=${JUPYTERHUB_CRYPT_KEY}
       - ENVIAR_AL_BACKEND=${ENVIAR_AL_BACKEND:-false}
+      # El Hub reenvía estas al contenedor del alumno (ver auth_state_a_env).
+      - TUTOR_IA_HABILITADO=${TUTOR_IA_HABILITADO:-true}
+      - TUTOR_MAX_PREGUNTAS=${TUTOR_MAX_PREGUNTAS:-5}
 
   api_go:
     build:
@@ -60,6 +63,10 @@ services:
       - "8080:8080"
     env_file:
       - .env
+    environment:
+      # Tutor IA: sin GOOGLE_API_KEY, /api/exercise/tutorIA responde 500.
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - TUTOR_ALIAS=${TUTOR_ALIAS:-Ava}
     depends_on:
       postgres-database:
         condition: service_healthy

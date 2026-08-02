@@ -40,7 +40,9 @@ func ConfigureRouter (db *sqlx.DB) *gin.Engine{
 	{
 		api.POST("/exercises/attempts", exerciseHandler.CreateAttemptHandler)
 		api.POST("/cuadernillos/ratings", cuadernilloHandler.CreateCuadernilloHandler)
-		api.GET("/exercise/tutorIA", handler.TutorHub)
+		// POST y no GET: el handler lee el body con ShouldBindJSON, y ni fetch()
+		// del navegador ni el cliente HTTP del puente pueden mandar cuerpo en un GET.
+		api.POST("/exercise/tutorIA", handler.TutorHub)
 
 	}
 

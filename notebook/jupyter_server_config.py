@@ -7,11 +7,13 @@ es_instructor = os.environ.get('ALUMNO_ROL', 'estudiante') == 'instructor'
 # Notebook clásico (Notebook 6.x / notebook.notebookapp)
 c.NotebookApp.nbserver_extensions = {
     "metrics_bridge": True,
+    "tutor_bridge": True,
 }
 
 # jupyter_server >=1.x (usado por nbclassic)
 c.ServerApp.jpserver_extensions = {
     "metrics_bridge": True,
+    "tutor_bridge": True,
 }
 
 if not es_instructor:

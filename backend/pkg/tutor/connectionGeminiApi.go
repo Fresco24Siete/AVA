@@ -106,12 +106,19 @@ func ConnecGeminiApi (data *models.ApiMessage) (string, error){
 		})
 	
 	if err != nil {
-		log.Print("falla en crear el cliente: %v", err)
+		log.Printf("falla en crear el cliente: %v", err)
 		return "", err
 	}
 
+	// El alias es el nombre con el que el tutor se presenta. Estaba fijo como
+	// placeholder; se saca a variable de entorno para no recompilar por cambiarlo.
+	alias := os.Getenv("TUTOR_ALIAS")
+	if alias == "" {
+		alias = "Ava"
+	}
+
 	prompt := BuildTutorPrompt(
- 		"Jonh Doe",
+ 		alias,
  		data.NombreEstudiante,
  		data.Historial,
  		data.ContextoEjercicio,
@@ -126,10 +133,13 @@ func ConnecGeminiApi (data *models.ApiMessage) (string, error){
 	)
 
 	if err != nil {
-		log.Print("falla en la pregunta: %v", err)
+		log.Printf("falla en la pregunta: %v", err)
 		return "", err
 	}
-	return fmt.Sprint(result.Text), nil
+	// Text es un MÉTODO, no un campo: fmt.Sprint(result.Text) imprimía el valor
+	// de la función (algo como "%!v(func() string=0x14000...)") en vez de la
+	// respuesta del tutor. Lo detectó 'go vet'.
+	return result.Text(), nil
 
 }
 

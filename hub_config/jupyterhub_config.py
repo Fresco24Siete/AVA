@@ -124,6 +124,16 @@ async def auth_state_a_env(spawner, auth_state):
     spawner.environment['CURSO_NOMBRE']   = str(auth_state.get('context_title', ''))
     spawner.environment['ENVIAR_AL_BACKEND'] = os.environ.get('ENVIAR_AL_BACKEND', 'false')
 
+    # --- Tutor IA -----------------------------------------------------------
+    # Interruptor de curso y tope de preguntas por cuadernillo. El cuadernillo
+    # puede además apagarlo por metadata (notebook.metadata.tutor_ia.enabled).
+    # Quien cuenta las preguntas es tutor_bridge.py dentro del contenedor.
+    spawner.environment['TUTOR_IA_HABILITADO'] = os.environ.get('TUTOR_IA_HABILITADO', 'true')
+    spawner.environment['TUTOR_MAX_PREGUNTAS'] = os.environ.get('TUTOR_MAX_PREGUNTAS', '5')
+    spawner.environment['TUTOR_API_BASE'] = os.environ.get(
+        'TUTOR_API_BASE', os.environ.get('STUDENT_METRICS_API_BASE', 'http://api_go:8080')
+    )
+
     # Montaje por rol:
     #   - instructor: nbgrader_shared (soluciones/envíos) + publicados, ambos rw.
     #   - estudiante: SOLO 'cuadernillos_publicados' en READ-ONLY. Nunca
