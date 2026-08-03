@@ -28,6 +28,10 @@ RUN useradd -m -s /bin/bash -u 1000 jovyan
 COPY nbgrader_config.py /etc/jupyter/nbgrader_config.py
 COPY plugins/api_export.py /etc/jupyter/api_export.py
 COPY metrics_bridge.py /etc/jupyter/metrics_bridge.py
+# Tutor IA: la extensión de servidor y el JS del panel, que ella misma sirve
+# en {base_url}tutor-ia/static/tutor_ia.js (por eso van al mismo directorio).
+COPY tutor_bridge.py /etc/jupyter/tutor_bridge.py
+COPY tutor_ia.js /etc/jupyter/tutor_ia.js
 COPY jupyter_server_config.py /etc/jupyter/jupyter_server_config.py
 ENV PYTHONPATH="/etc/jupyter"
 
@@ -61,6 +65,10 @@ RUN mkdir -p /srv/nbgrader /srv/publicados \
 # implícitamente el COPY de notebook_semana; al quitarlo, WORKDIR lo crearía
 # como root y jovyan no podría escribir el cuadernillo entregado.
 RUN mkdir -p /home/jovyan/work && chown -R jovyan:jovyan /home/jovyan/work
+
+# Estado del tutor (contador de preguntas). Va FUERA de root_dir para que no
+# aparezca en el explorador de archivos del alumno.
+RUN mkdir -p /home/jovyan/.tutor_ia && chown -R jovyan:jovyan /home/jovyan/.tutor_ia
 
 # entrypoint.sh corre como jovyan y necesita poder (des)activar extensiones
 # en cada arranque (el rol cambia según quién haga el LTI launch)
