@@ -2,19 +2,29 @@ package tutor
 
 import (
 	"context"
-	"fmt"
 	"log"
-	
+	"os"
+
 	"proxy-go/internal/models"
 
 
 	"google.golang.org/genai"
 )
 
+// Nombre con el que el tutor se presenta al estudiante. Sale del entorno para
+// no recompilar por cambiarlo; "Jonh Doe" era un placeholder y el alumno lo
+// veía tal cual en el saludo.
+func aliasTutor() string {
+	if alias := os.Getenv("TUTOR_ALIAS"); alias != "" {
+		return alias
+	}
+	return "Ava"
+}
+
 func ConnecGeminiApi(ctx context.Context, client *genai.Client, data *models.ApiMessage) (string, error) {
-	
+
 	prompt := BuildTutorPrompt(
-		"Jonh Doe",
+		aliasTutor(),
 		data.NombreEstudiante,
 		data.Historial,
 		data.ContextoEjercicio,
@@ -33,7 +43,10 @@ func ConnecGeminiApi(ctx context.Context, client *genai.Client, data *models.Api
 		return "", err
 	}
 	
-	return fmt.Sprint(result.Text), nil
+	// Text es un MÉTODO, no un campo: fmt.Sprint(result.Text) devolvía el valor
+	// de la función ("%!v(func() string=0x14000...)") en vez de la respuesta del
+	// tutor. Lo detecta 'go vet'.
+	return result.Text(), nil
 }
 
 

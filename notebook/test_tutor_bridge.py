@@ -54,8 +54,11 @@ RECIBIDOS = []
 MODO_FALLO = {"activo": False}
 
 
+MODO_TEXTO_PLANO = {"activo": False}
+
+
 class StubBackend(tornado.web.RequestHandler):
-    """Imita POST /api/exercise/tutorIA de tutorHub.go."""
+    """Imita POST /api/exercise/tutorIA de ChatHandler."""
     def post(self):
         if MODO_FALLO["activo"]:
             self.set_status(500)
@@ -63,9 +66,13 @@ class StubBackend(tornado.web.RequestHandler):
             return
         cuerpo = json.loads(self.request.body)
         RECIBIDOS.append({"body": cuerpo, "auth": self.request.headers.get("Authorization")})
-        self.finish(json.dumps({
-            "resultado": "Pista %d: ¿ya probaste el caso base?" % len(RECIBIDOS)
-        }))
+        texto = "Pista %d: ¿ya probaste el caso base?" % len(RECIBIDOS)
+        if MODO_TEXTO_PLANO["activo"]:
+            # ChatHandler responde con c.String: texto plano, sin JSON.
+            self.set_header("Content-Type", "text/plain; charset=utf-8")
+            self.finish(texto)
+            return
+        self.finish(json.dumps({"resultado": texto}))
 
 
 async def main():
@@ -169,6 +176,15 @@ async def main():
         os.remove(os.path.join(ESTADO_DIR, f))
     r = await preguntar("intento saltarme el limite")
     check("sigue bloqueado tras borrar el estado en disco", r.code == 429, r.code)
+
+    print("\n--- acepta texto plano (ChatHandler usa c.String) ---")
+    tutor_bridge.ESTADO._mem["semana_1"]["usadas"] = 0
+    MODO_TEXTO_PLANO["activo"] = True
+    r = await preguntar("pregunta con respuesta en texto plano")
+    MODO_TEXTO_PLANO["activo"] = False
+    check("responde 200 con texto plano", r.code == 200, r.body[:200])
+    check("toma el cuerpo crudo como respuesta",
+          json.loads(r.body)["respuesta"].startswith("Pista"), r.body[:200])
 
     print("\n--- rechaza mensaje vacío ---")
     tutor_bridge.ESTADO._mem["semana_1"]["usadas"] = 0

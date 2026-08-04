@@ -270,13 +270,20 @@ class TutorPreguntaHandler(_TutorHandlerBase):
                 self._responder(502, {"error": "El tutor no está disponible en este momento."})
                 return
 
+            # El backend ha respondido de las dos formas: antes JSON con
+            # {"resultado": "..."} y ahora texto plano (ChatHandler usa
+            # c.String). Se aceptan ambas para que un cambio de forma allá no
+            # deje al alumno sin tutor.
+            cuerpo = (resp.body or b"").decode("utf-8", "replace").strip()
             try:
-                datos = json.loads(resp.body or b"{}")
+                datos = json.loads(cuerpo)
             except Exception:
-                datos = {}
+                datos = None
 
-            # tutorHub.go responde {"resultado": "..."}.
-            respuesta = (datos.get("resultado") or datos.get("respuesta") or "").strip()
+            if isinstance(datos, dict):
+                respuesta = (datos.get("resultado") or datos.get("respuesta") or "").strip()
+            else:
+                respuesta = cuerpo
             if not respuesta:
                 log.error("[tutor_bridge] respuesta vacía del backend: %s", (resp.body or b"")[:300])
                 self._responder(502, {"error": "El tutor devolvió una respuesta vacía."})
