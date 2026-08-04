@@ -104,6 +104,7 @@ En `.env` (ver `.env.example`):
 | `GOOGLE_API_KEY_1` | — | Clave de Gemini. Sin ninguna, el tutor responde 503 |
 | `GOOGLE_API_KEY_2` | — | Segunda clave: dos clientes en paralelo |
 | `TUTOR_ALIAS` | `Ava` | Nombre con el que el tutor se presenta |
+| `TUTOR_MODELO` | `gemini-3.5-flash` | Modelo de Gemini. Google retira modelos; si da 404 se cambia aquí |
 | `TUTOR_IA_HABILITADO` | `true` | Interruptor de curso |
 | `TUTOR_MAX_PREGUNTAS` | `5` | Preguntas por cuadernillo |
 

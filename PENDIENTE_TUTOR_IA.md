@@ -3,18 +3,21 @@
 Estado: la extensión está completa y probada (ver `TUTOR_IA.md`). Esto es lo que
 queda antes de darla por entregada.
 
-## Antes de desplegar en la VM ampliada
+## Antes de desplegar
 
 - [ ] **Rotar la clave que se compartió por WhatsApp** (`AQ.Ab8RN6...`). Viajó en
       texto plano por el chat, así que hay que darla de baja y emitir otra.
-      Ninguna clave va al repo: solo al `.env` de la VM, que está en `.gitignore`.
-- [ ] **Confirmar el formato de las claves.** Las de Gemini (AI Studio) empiezan
-      por `AIza`. Una que empiece por `AQ.` parece un token temporal, no una API
-      key, y `genai.NewClient` con `BackendGeminiAPI` la rechazaría.
-- [ ] **Poner `GOOGLE_API_KEY_1` y `GOOGLE_API_KEY_2`** en el `.env` de la VM.
-- [ ] **Probar contra Gemini de verdad.** Todo lo verificado usó un backend
-      simulado con el mismo formato. La ruta, el JSON y el puente están probados;
-      la llamada real a Gemini no.
+      Ninguna clave va al repo: solo a los `.env`, que están en `.gitignore`.
+
+Ya resuelto (2026-08-04):
+
+- El tutor **responde de verdad**: probado contra Gemini con las claves reales,
+  5 preguntas seguidas + la 6ª bloqueada.
+- Las claves con formato `AQ...` **sí funcionan** (el aviso anterior sobre que
+  debían empezar por `AIza` era incorrecto).
+- El modelo dejó de estar fijo en el código. `gemini-2.5-flash` ya no está
+  disponible para cuentas nuevas y devolvía 404; ahora sale de `TUTOR_MODELO`
+  (default `gemini-3.5-flash`) y hay reintento ante congestión.
 
 ## Arreglado en `fix/tutor-gemini-pool` (revisar antes de mergear)
 

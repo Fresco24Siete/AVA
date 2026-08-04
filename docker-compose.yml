@@ -69,6 +69,7 @@ services:
       - GOOGLE_API_KEY_1=${GOOGLE_API_KEY_1:-}
       - GOOGLE_API_KEY_2=${GOOGLE_API_KEY_2:-}
       - TUTOR_ALIAS=${TUTOR_ALIAS:-Ava}
+      - TUTOR_MODELO=${TUTOR_MODELO:-gemini-3.5-flash}
     depends_on:
       postgres-database:
         condition: service_healthy

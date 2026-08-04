@@ -84,6 +84,30 @@ def _base_backend():
     return base.rstrip("/")
 
 
+# El prompt le pide al modelo cerrar con un bloque de estado para la siguiente
+# iteración. Eso es contabilidad interna del tutor: sirve como historial, pero al
+# alumno le aparecía en el chat ("Pista dada: ...", "Pendiente: ..."), que además
+# le adelanta lo que el tutor espera que responda.
+_MARCAS_ESTADO = (
+    "estado para la siguiente",
+    "[estado para la",
+    "estado para la próxima",
+)
+
+
+def _quitar_bloque_estado(texto):
+    lineas = texto.split("\n")
+    for i, linea in enumerate(lineas):
+        limpia = linea.strip().strip("*#[]_ ").lower()
+        if any(limpia.startswith(m) or m in limpia for m in _MARCAS_ESTADO):
+            # Se corta también el separador (--- o ***) que suele precederlo.
+            fin = i
+            while fin > 0 and lineas[fin - 1].strip().strip("-*_ ") == "":
+                fin -= 1
+            return "\n".join(lineas[:fin]).rstrip()
+    return texto
+
+
 def _recortar(texto, tope):
     # str() a la fuerza: el cuerpo lo manda el cliente y podría traer un número
     # o un objeto donde se espera texto; sin esto reventaría con 500.
@@ -291,10 +315,13 @@ class TutorPreguntaHandler(_TutorHandlerBase):
 
             # Solo se descuenta la pregunta cuando SÍ hubo respuesta: si Gemini
             # o la red fallan, el alumno no pierde una de sus 5.
+            # El historial guarda la respuesta COMPLETA (el bloque de estado es
+            # justo lo que le da continuidad al siguiente turno); al alumno se le
+            # muestra sin ese bloque.
             usadas = ESTADO.registrar_turno(cuadernillo, respuesta)
 
             self._responder(200, {
-                "respuesta": respuesta,
+                "respuesta": _quitar_bloque_estado(respuesta),
                 "usadas": usadas,
                 "restantes": max(0, MAX_PREGUNTAS - usadas),
                 "max": MAX_PREGUNTAS,
