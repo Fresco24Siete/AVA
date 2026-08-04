@@ -329,8 +329,14 @@ def _usar_logger_del_app(app):
 def load_jupyter_server_extension(nbapp):
     _usar_logger_del_app(nbapp)
     _add_routes(nbapp.web_app)
-    log.info("[tutor_bridge] listo: %d preguntas por cuadernillo (habilitado=%s)",
-             MAX_PREGUNTAS, HABILITADO)
+    log.info("[tutor_bridge] listo: %d preguntas por cuadernillo (habilitado=%s, cuadernillo=%s)",
+             MAX_PREGUNTAS, HABILITADO, IDENTIDAD["cuadernillo_id"])
+    if IDENTIDAD["cuadernillo_id"] == "sin_cuadernillo":
+        # Que se vea en el log de la VM: sin código, el cupo deja de ser por
+        # cuadernillo y pasa a ser uno solo para todo el curso.
+        log.warning("[tutor_bridge] AVISO: no llegó CUADERNILLO_CODIGO. Las %d preguntas "
+                    "se contarán de forma global, no por cuadernillo. Revisa "
+                    "entregar-cuadernillo y el manifest de /srv/publicados.", MAX_PREGUNTAS)
 
 
 def _load_jupyter_server_extension(server_app):
