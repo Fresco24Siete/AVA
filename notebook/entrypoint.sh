@@ -79,10 +79,22 @@ else
     # no el backend). El script lee el manifest del volumen de publicados,
     # valida la ventana de tiempo y deja el notebook en work/cuadernillo.ipynb.
     # Devuelve el código del cuadernillo, que exportamos para la telemetría.
-    CUADERNILLO_CODIGO="$(python3 /usr/local/bin/entregar-cuadernillo 2>/dev/null || echo '')"
+    CODIGO_ENTREGADO="$(python3 /usr/local/bin/entregar-cuadernillo 2>/dev/null || echo '')"
+    # Solo se pisa el valor si la entrega devolvió algo. Antes, un fallo de
+    # entregar-cuadernillo dejaba CUADERNILLO_CODIGO vacío aunque el Hub hubiera
+    # pasado uno; el tutor cuenta las 5 preguntas POR cuadernillo usando esta
+    # variable, así que con el valor vacío todos los cuadernillos comparten un
+    # único cupo de 5.
+    if [ -n "$CODIGO_ENTREGADO" ]; then
+        CUADERNILLO_CODIGO="$CODIGO_ENTREGADO"
+    fi
     export CUADERNILLO_CODIGO
     export CUADERNILLO_ID="$CUADERNILLO_CODIGO"
     echo "[entrypoint] Cuadernillo activo entregado: '${CUADERNILLO_CODIGO:-(ninguno)}'"
+    if [ -z "$CUADERNILLO_CODIGO" ]; then
+        echo "[entrypoint] AVISO: sin código de cuadernillo. El tutor contará las 5" >&2
+        echo "[entrypoint] preguntas de forma global, no por cuadernillo." >&2
+    fi
 fi
 
 exec "$@"

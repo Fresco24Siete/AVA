@@ -19,8 +19,8 @@ Servidor del alumno (tutor_bridge.py)   ← aquí se cuenta el límite de 5
     │  POST http://api_go:8080/api/exercise/tutorIA
     │  models.ApiMessage completo
     ▼
-Backend Go (TutorHub → ConnecGeminiApi → Gemini 2.5 Flash)
-    │  { "resultado": "..." }
+Backend Go (ChatHandler → pool de 2 clientes → Gemini 2.5 Flash)
+    │  la respuesta del tutor (texto plano)
     ▼
 vuelve al panel: { "respuesta": "...", "usadas": 2, "restantes": 3, "max": 5 }
 ```
@@ -101,8 +101,10 @@ En `.env` (ver `.env.example`):
 
 | Variable | Default | Qué hace |
 |---|---|---|
-| `GOOGLE_API_KEY` | — | **Obligatoria.** Sin ella el backend responde 500 |
+| `GOOGLE_API_KEY_1` | — | Clave de Gemini. Sin ninguna, el tutor responde 503 |
+| `GOOGLE_API_KEY_2` | — | Segunda clave: dos clientes en paralelo |
 | `TUTOR_ALIAS` | `Ava` | Nombre con el que el tutor se presenta |
+| `TUTOR_MODELO` | `gemini-3.5-flash` | Modelo de Gemini. Google retira modelos; si da 404 se cambia aquí |
 | `TUTOR_IA_HABILITADO` | `true` | Interruptor de curso |
 | `TUTOR_MAX_PREGUNTAS` | `5` | Preguntas por cuadernillo |
 
@@ -140,11 +142,18 @@ Dos, en el código que dejó Bryan:
 2. `connectionGeminiApi.go`: el alias fijo `"Jonh Doe"` pasa a leerse de
    `TUTOR_ALIAS` (default `Ava`). Era un placeholder y el tutor se presentaba con
    ese nombre al alumno.
+3. `connectionGeminiApi.go`: `fmt.Sprint(result.Text)` → `result.Text()`. `Text`
+   es un método; con `Sprint` se devolvía el valor de la función, no la respuesta.
+4. `clientInit.go`: `APIKey: os.Getenv(clave)` → `APIKey: clave`, y el
+   `log.Fatalf` del `init()` pasa a `log.Printf`. Ver `PENDIENTE_TUTOR_IA.md`.
+
+El puente acepta la respuesta del backend tanto en texto plano (`c.String`, que
+es lo que hace hoy `ChatHandler`) como en JSON `{"resultado": ...}`.
 
 ## 8. Para probarlo
 
 ```bash
-# 1. Poner GOOGLE_API_KEY en .env
+# 1. Poner GOOGLE_API_KEY_1 y GOOGLE_API_KEY_2 en .env
 # 2. Reconstruir imagen del notebook y backend
 docker compose build api_go
 docker build -t <imagen-del-notebook> ./notebook
