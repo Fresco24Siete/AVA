@@ -1,0 +1,22 @@
+%% D3 - Los tres pisos del edificio, con la MISMA cuenta en los tres.
+%% Los parentesis de print van tal cual: con la etiqueta entrecomillada Mermaid 11
+%% los dibuja bien. La entidad &#40; NO sirve aqui (se pinta literal, comprobado),
+%% asi que render.py --revisar avisa de esta linea y el aviso es un falso positivo.
+flowchart TB
+  TU(["Tú"])
+  A["Piso 3 · ALTO NIVEL — print(4 + 9)"]
+  B["Piso 2 · BAJO NIVEL o ENSAMBLADOR — CARGAR 4 · SUMAR 9 · MOSTRAR"]
+  C["Piso 1 · LENGUAJE DE MÁQUINA — 00000001 00000100 00000010 00001001"]
+  SIL(["El silicio"])
+
+  TU -- "escribes aquí" --> A
+  A -- "lo traduce el intérprete" --> B
+  B -- "lo ejecuta la CPU" --> C
+  C -- "es lo único que existe de verdad" --> SIL
+
+  classDef alto fill:#e9f7ee,stroke:#0ca30c,color:#10294d
+  classDef bajo fill:#e8f0fb,stroke:#2a78d6,color:#10294d
+  classDef maquina fill:#f3eefe,stroke:#4a3aa7,color:#2e2377
+  class A alto
+  class B bajo
+  class C maquina

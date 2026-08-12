@@ -1,0 +1,17 @@
+%% D6 - Ciclo de vida de un archivo: abrir, hacer algo, cerrar. Dos veces.
+flowchart LR
+  N(["No existe"])
+  A["abrir en modo w · lo crea vacío"]
+  B["escribir · el texto entra"]
+  C["cerrar · queda guardado en el disco"]
+  D["abrir en modo r · lo busca por su ruta"]
+  E["leer · el texto vuelve a la memoria"]
+  F(["Nombre · extensión · ruta · contenido"])
+
+  N --> A --> B --> C --> D --> E --> F
+  C -. "sigue ahí aunque apagues el kernel" .-> F
+
+  classDef escribir fill:#e8f0fb,stroke:#2a78d6,color:#10294d
+  classDef leer fill:#e9f7ee,stroke:#0ca30c,color:#10294d
+  class A,B,C escribir
+  class D,E leer

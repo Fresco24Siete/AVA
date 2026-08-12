@@ -1,0 +1,26 @@
+%% D7 - Los cuatro cajones donde cabe todo el software del mundo.
+%% Los ejemplos son de Bucaramanga y de la UIS a proposito: la taxonomia se
+%% memoriza sola cuando cada cajon tiene una cosa que el estudiante ya usa.
+flowchart TB
+  T["Aplicaciones informáticas · todo el software"]
+  SIS["Software de sistema · manda en la máquina"]
+  USU["Aplicaciones de usuario · las usa una persona"]
+  DEV["Software de desarrollo · sirve para hacer software"]
+  ESP["Aplicaciones especializadas y de control · gobiernan un equipo"]
+
+  T --> SIS
+  T --> USU
+  T --> DEV
+  T --> ESP
+
+  SIS --> S1["Windows 11 · Android · el Linux del servidor del AVA"]
+  USU --> U1["La app de Metrolínea · el Moodle de la UIS · Nequi"]
+  DEV --> D1["Python · VS Code · Jupyter — lo que estás usando ahora"]
+  ESP --> E1["Los semáforos de la Carrera 27 · un CAD de Civil · el clasificador de IA de la semana 15"]
+
+  classDef raiz fill:#f3eefe,stroke:#4a3aa7,color:#2e2377
+  classDef cajon fill:#e8f0fb,stroke:#2a78d6,color:#10294d
+  classDef ejemplo fill:#fdf6e3,stroke:#eda100,color:#10294d
+  class T raiz
+  class SIS,USU,DEV,ESP cajon
+  class S1,U1,D1,E1 ejemplo

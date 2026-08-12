@@ -1,0 +1,22 @@
+%% D2 - Las cuatro cosas que hay dentro de un sistema.
+%% El ciclo se cierra a proposito: los cuatro conceptos no son una lista, son
+%% una maquina que gira. El dato acaba guardado en el mismo hardware que empezo.
+flowchart TB
+  P["PROCESO · un verbo: ordenar, calcular, cobrar"]
+  D["DATO · un valor: la nota 4.3, la foto del carné"]
+  S["SOFTWARE · la receta: Moodle, Python, un juego"]
+  H["HARDWARE · lo físico: el portátil, el lector del carné"]
+
+  S -- "realiza" --> P
+  P -- "transforma" --> D
+  D -- "se guarda en" --> H
+  H -- "hace correr" --> S
+
+  classDef proceso fill:#f3eefe,stroke:#4a3aa7,color:#2e2377
+  classDef dato fill:#e9f7ee,stroke:#0ca30c,color:#10294d
+  classDef software fill:#e8f0fb,stroke:#2a78d6,color:#10294d
+  classDef hardware fill:#fdf6e3,stroke:#eda100,color:#10294d
+  class P proceso
+  class D dato
+  class S software
+  class H hardware

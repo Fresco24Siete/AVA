@@ -1,0 +1,13 @@
+%% D6b - Antiejemplo: una caja con cuatro instrucciones y un FIN al que no llega
+%% ninguna flecha (S02, seccion 4.3). Los dos errores van en rojo, que es el
+%% color con el que el cuadernillo marca lo que esta mal.
+flowchart TB
+    I(["INICIO"])
+    P["leer copias, calcular el total,<br/>imprimir el total y despedirse"]
+    F(["FIN"])
+    G(["FIN 2"])
+    I --> P --> F
+    style P fill:#ffe8e8,stroke:#d03b3b,color:#8a0000
+    style G fill:#ffe8e8,stroke:#d03b3b,color:#8a0000
+    style I fill:#008300,stroke:#005400,color:#fff
+    style F fill:#008300,stroke:#005400,color:#fff

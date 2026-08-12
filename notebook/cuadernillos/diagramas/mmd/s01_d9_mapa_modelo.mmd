@@ -1,0 +1,49 @@
+%% D9 - Un mapa conceptual modelo de la semana 1. NO es "el" mapa correcto:
+%% es uno posible. Se revela solo despues de que el ejercicio 7 esta aprobado.
+flowchart LR
+  COMP["computador"]
+  HW["hardware"]
+  SW["software"]
+  PROC["procesador"]
+  MEM["memoria"]
+  PROG["programa"]
+  PROCESO["proceso"]
+  DATO["dato"]
+  ARCH["archivo"]
+  LM["lenguaje de máquina"]
+  LAN["lenguaje de alto nivel"]
+  PY["Python"]
+  INT["intérprete"]
+  IDE["IDE"]
+  ED["editor"]
+  TERM["terminal"]
+  ELOG["error de lógica"]
+
+  COMP -- "se compone de" --> HW
+  COMP -- "se compone de" --> SW
+  HW -- "se compone de" --> PROC
+  HW -- "se compone de" --> MEM
+  PROC -- "ejecuta" --> LM
+  SW -- "es un" --> PROG
+  PROG -- "produce" --> PROCESO
+  PROCESO -- "produce" --> DATO
+  DATO -- "se guarda en" --> ARCH
+  ARCH -- "se guarda en" --> MEM
+  PY -- "es un" --> LAN
+  INT -- "traduce" --> LAN
+  INT -- "produce" --> LM
+  IDE -- "se compone de" --> ED
+  IDE -- "se compone de" --> TERM
+  IDE -- "usa" --> INT
+  PROG -- "puede tener" --> ELOG
+
+  classDef fisico fill:#e8f0fb,stroke:#2a78d6,color:#10294d
+  classDef logico fill:#f3eefe,stroke:#4a3aa7,color:#2e2377
+  classDef lenguaje fill:#e9f7ee,stroke:#0ca30c,color:#10294d
+  classDef entorno fill:#fdf6e3,stroke:#eda100,color:#10294d
+  classDef error fill:#fdf1f1,stroke:#d03b3b,color:#10294d
+  class COMP,HW,PROC,MEM fisico
+  class SW,PROG,PROCESO,DATO,ARCH logico
+  class LM,LAN,PY lenguaje
+  class INT,IDE,ED,TERM entorno
+  class ELOG error

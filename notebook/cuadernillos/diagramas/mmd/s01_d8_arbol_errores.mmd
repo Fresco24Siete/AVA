@@ -1,0 +1,22 @@
+%% D8 - Arbol de decision de los tres errores. Es la herramienta que el
+%% estudiante se lleva de la semana 1 y usa hasta la semana 16.
+flowchart TD
+  Q1{"¿Alcanzó a ejecutarse alguna línea?"}
+  Q2{"¿Llegó hasta el final del programa?"}
+  Q3{"¿El resultado es el que esperabas?"}
+  SIN["ERROR DE SINTAXIS · mira la línea señalada y el signo ^"]
+  EJE["ERROR DE EJECUCIÓN · lee la ÚLTIMA línea del traceback"]
+  LOG["ERROR DE LÓGICA · nadie te avisa. Se caza con assert"]
+  OK(["Sin error conocido · escribe un assert y asegúrate"])
+
+  Q1 -- "No, ni una" --> SIN
+  Q1 -- "Sí, algunas" --> Q2
+  Q2 -- "No, se detuvo con un mensaje rojo" --> EJE
+  Q2 -- "Sí, terminó sin quejarse" --> Q3
+  Q3 -- "No" --> LOG
+  Q3 -- "Sí" --> OK
+
+  classDef error fill:#fdf1f1,stroke:#d03b3b,color:#10294d
+  classDef bien fill:#e9f7ee,stroke:#0ca30c,color:#10294d
+  class SIN,EJE,LOG error
+  class OK bien

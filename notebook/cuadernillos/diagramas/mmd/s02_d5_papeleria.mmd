@@ -1,0 +1,17 @@
+%% D5 - El diagrama del programa de referencia (la papeleria de la Carrera 9),
+%% dibujado a mano con la convencion de la clase (S02, seccion 4.3). Se compara
+%% con el que el motor deduce solo del pseudocodigo: son el mismo.
+flowchart TB
+    I(["INICIO"])
+    E1[/"ESCRIBIR '¿Cuántas copias vas a sacar?'"/]
+    L1[/"LEER copias"/]
+    P1["total ← copias * PRECIO_COPIA + ANILLADO"]
+    E2[/"ESCRIBIR 'Total a pagar: $', total"/]
+    F(["FIN"])
+    I --> E1 --> L1 --> P1 --> E2 --> F
+    style I fill:#008300,stroke:#005400,color:#fff
+    style F fill:#008300,stroke:#005400,color:#fff
+    style E1 fill:#2a78d6,stroke:#104281,color:#fff
+    style L1 fill:#2a78d6,stroke:#104281,color:#fff
+    style E2 fill:#2a78d6,stroke:#104281,color:#fff
+    style P1 fill:#4a3aa7,stroke:#2a1f6b,color:#fff
