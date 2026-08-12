@@ -55,6 +55,42 @@ class LTIRoleAuthenticator(LTI11Authenticator):
             rol in roles for rol in ['instructor', 'teachingassistant', 'admin']
         )
 
+        # Si el rol cambió desde el último ingreso, hay que TIRAR el contenedor.
+        #
+        # `c.DockerSpawner.remove = False` conserva el contenedor entre sesiones
+        # (es lo único que preserva el trabajo del alumno), y el Hub, al ver un
+        # servidor ya corriendo, redirige a él sin volver a hacer spawn: nunca
+        # llega a ejecutarse auth_state_a_env, así que el contenedor se queda con
+        # el rol, los montajes y las variables del ingreso anterior.
+        #
+        # Con el rol de Moodle eso es un problema de seguridad, no de comodidad:
+        # el contenedor de instructor monta nbgrader_shared en lectura-escritura
+        # —las soluciones y los envíos de todo el curso—, así que un docente que
+        # luego entra como estudiante (o alguien a quien le bajan el rol) se los
+        # lleva puestos. Al revés falla igual: un estudiante ascendido a monitor
+        # no vería el formgrader.
+        #
+        # `usuario.admin` guarda el rol del ingreso anterior y vive en la base de
+        # datos del Hub, así que sobrevive a un reinicio. Comparar contra él es
+        # suficiente. Se pierde el trabajo sin guardar de esa sesión, pero solo
+        # cuando el rol cambia, que es justo cuando el contenedor no se puede
+        # reutilizar.
+        usuario = handler.find_user(auth_model['name'])
+        if usuario is not None and bool(usuario.admin) != es_instructor:
+            self.log.warning(
+                "El rol de %s cambió a %s; se descarta su contenedor anterior "
+                "para que no conserve los montajes del rol viejo.",
+                auth_model['name'], 'instructor' if es_instructor else 'estudiante',
+            )
+            spawner = usuario.spawner
+            if spawner is not None:
+                try:
+                    if usuario.running:
+                        await usuario.stop()
+                    await spawner.remove_object()
+                except Exception as err:      # no impedir el ingreso por esto
+                    self.log.error("No se pudo descartar el contenedor: %s", err)
+
         auth_model['admin'] = es_instructor
         auth_model['groups'] = [
             f"formgrade-{curso_id}" if es_instructor else f"nbgrader-{curso_id}"
