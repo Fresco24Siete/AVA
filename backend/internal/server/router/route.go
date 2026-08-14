@@ -1,7 +1,9 @@
 package router
 
 import (
+	"os"
 	"proxy-go/internal/handler"
+	"proxy-go/internal/middleware"
 	"proxy-go/internal/repository"
 	"proxy-go/internal/service"
 	"time"
@@ -36,12 +38,32 @@ func ConfigureRouter (db *sqlx.DB) *gin.Engine{
 	cuadernilloHandler := handler.NewCuadernilloRatingHandler(cuadernilloService)
 
 
+	// Telemetria: el Hub acuña un token por alumno al crear su contenedor y
+	// metrics_bridge lo manda como Bearer en cada evento. Sin esto, el backend
+	// aceptaba cualquier POST anonimo y con la identidad puesta en el cuerpo.
+	secretoMetricas := os.Getenv("METRICS_TOKEN_SECRET")
+	tokenMaestro := os.Getenv("METRICS_API_TOKEN")
+	metricsTokenHandler := handler.NewMetricsTokenHandler(secretoMetricas, tokenMaestro)
+
+	// Interno: solo lo llama el Hub por la red de Docker. NO exponer por Caddy.
+	interno := router.Group("/internal")
+	{
+		interno.POST("/lti/mint-metrics-token", metricsTokenHandler.MintHandler)
+	}
+
 	api := router.Group("/api")
 	{
-		api.POST("/exercises/attempts", exerciseHandler.CreateAttemptHandler)
-		api.POST("/cuadernillos/ratings", cuadernilloHandler.CreateCuadernilloHandler)
-		api.POST("/exercise/tutorIA", handler.ChatHandler)
+		// Ingesta de telemetria: identidad tomada del token, no del cuerpo.
+		ingesta := api.Group("")
+		ingesta.Use(middleware.RequireMetricsToken(secretoMetricas))
+		{
+			ingesta.POST("/exercises/attempts", exerciseHandler.CreateAttemptHandler)
+			ingesta.POST("/cuadernillos/ratings", cuadernilloHandler.CreateCuadernilloHandler)
+		}
 
+		// El tutor no lleva token: lo llama el mismo contenedor del alumno y no
+		// escribe nada en la base.
+		api.POST("/exercise/tutorIA", handler.ChatHandler)
 	}
 
 	return router
