@@ -65,6 +65,17 @@ ENV PYTHONPATH="/etc/jupyter"
 RUN mkdir -p /home/jovyan/.jupyter/custom
 COPY custom.js /home/jovyan/.jupyter/custom/custom.js
 
+# Ayuda del docente dentro de formgrader. Sus plantillas NO cargan custom.js, así
+# que el archivo va a la carpeta estática de nbgrader y un parche le añade el
+# <script> a la plantilla base. Se hace aquí, al construir, para que quede a la
+# vista y sea reproducible; la versión de nbgrader está fijada por esta imagen.
+COPY formgrader_ayuda.js /tmp/ava_ayuda.js
+COPY parchar_formgrader.py /tmp/parchar_formgrader.py
+RUN cp /tmp/ava_ayuda.js \
+       "$(python -c 'import nbgrader, os; print(os.path.join(os.path.dirname(nbgrader.__file__), "server_extensions/formgrader/static/js"))')/ava_ayuda.js" \
+    && python /tmp/parchar_formgrader.py \
+    && rm -f /tmp/ava_ayuda.js /tmp/parchar_formgrader.py
+
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 # Entrega del cuadernillo activo (alumno) y publicación (instructor).
 COPY entregar_cuadernillo.py /usr/local/bin/entregar-cuadernillo
