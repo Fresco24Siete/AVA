@@ -1,5 +1,6 @@
 import os
 import json
+import sys
 
 # httpx viene instalado en Dockerfile.hub. Antes había un camino alterno con
 # urllib.request para cuando faltaba, pero era código muerto y además hacía I/O
@@ -201,15 +202,40 @@ async def auth_state_a_env(spawner, auth_state):
     #   - estudiante: SOLO 'cuadernillos_publicados' en READ-ONLY. Nunca
     #     nbgrader_shared. Se monta en /srv/publicados (fuera de root_dir), así
     #     que el alumno ni lo ve en el explorador ni puede abrirlo (sin terminal).
+    # El trabajo de cada persona va a un volumen propio, montado en su carpeta de
+    # trabajo. Hasta ahora vivía SOLO dentro del contenedor: lo único que lo
+    # conservaba entre sesiones era que nadie lo borrara. Un `docker rm` o un
+    # `docker system prune` —que es una limpieza rutinaria— se llevaba por
+    # delante el semestre entero de todo el curso. Ya pasó una vez en pruebas.
+    #
+    # Con el volumen, el contenedor vuelve a ser desechable y el trabajo no.
+    # DockerSpawner escapa el nombre de usuario al construir el del volumen, así
+    # que un correo con @ y puntos no lo rompe.
+    volumen_trabajo = {'ava-trabajo-{username}': '/home/jovyan/work'}
+
     if es_instructor:
-        spawner.volumes = {
+        spawner.volumes = dict(volumen_trabajo, **{
             'nbgrader_shared': '/srv/nbgrader',
             'cuadernillos_publicados': '/srv/publicados',
-        }
+        })
     else:
-        spawner.volumes = {
+        spawner.volumes = dict(volumen_trabajo, **{
             'cuadernillos_publicados': {'bind': '/srv/publicados', 'mode': 'ro'},
-        }
+        })
+
+    # Tope de memoria por contenedor.
+    #
+    # Sin esto, un solo estudiante tumba la clase entera, y no es hipotético: la
+    # semana 4 del temario enseña ciclos `while`, así que alguien va a escribir
+    # un bucle infinito que acumule en una lista. Con el tope, se queda sin
+    # memoria él y los demás siguen trabajando.
+    #
+    # 768 MB deja holgura sobre los ~250 MB que consume una sesión normal y sobre
+    # los ~400 MB de las semanas 9 y 10, cuando entran NumPy y pandas. Al docente
+    # se le da más porque al calificar ejecuta todas las entregas.
+    spawner.mem_limit = os.environ.get(
+        'MEM_LIMIT_INSTRUCTOR' if es_instructor else 'MEM_LIMIT_ALUMNO',
+        '1536M' if es_instructor else '768M')
 
     # QUÉ cuadernillo está activo lo decide nbgrader/instructor vía el manifest
     # del volumen de publicados (publicar_cuadernillo.py -> entregar_cuadernillo.py),
@@ -301,3 +327,39 @@ c.JupyterHub.port = 8000
 
 c.JupyterHub.hub_ip = '0.0.0.0'
 c.JupyterHub.hub_connect_ip = 'jupyterhub'
+
+# --- Apagado de contenedores inactivos ---------------------------------------
+# Un contenedor de alumno se quedaba vivo indefinidamente desde que entraba, así
+# que la memoria de la máquina se dimensionaba para TODOS los que hubieran
+# entrado alguna vez, no para los que están trabajando. Con 25 estudiantes eso es
+# la diferencia entre necesitar 8 GB o no.
+#
+# El culler apaga el servidor de quien lleva un rato sin actividad. No borra
+# nada: el trabajo vive en su volumen, y al volver a entrar se levanta otra vez.
+#
+# Se le dan permisos acotados en vez de hacerlo admin del Hub (JupyterHub 5
+# permite roles con alcances concretos): solo puede listar usuarios, leer su
+# actividad y apagar servidores.
+_CULL_INACTIVO = int(os.environ.get('CULL_TIMEOUT', '3600'))    # 1 hora sin actividad
+_CULL_CADA = int(os.environ.get('CULL_EVERY', '300'))           # revisar cada 5 min
+
+c.JupyterHub.services = [
+    {
+        'name': 'idle-culler',
+        'command': [
+            sys.executable, '-m', 'jupyterhub_idle_culler',
+            f'--timeout={_CULL_INACTIVO}',
+            f'--cull-every={_CULL_CADA}',
+        ],
+    },
+]
+
+c.JupyterHub.load_roles = [
+    {
+        'name': 'list-and-cull',
+        'scopes': [
+            'list:users', 'read:users:activity', 'read:servers', 'delete:servers',
+        ],
+        'services': ['idle-culler'],
+    },
+]

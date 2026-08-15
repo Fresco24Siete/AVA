@@ -4,4 +4,5 @@ FROM jupyterhub/jupyterhub:latest
 RUN /srv/venv/bin/pip install --no-cache-dir \
     dockerspawner \
     jupyterhub-ltiauthenticator \
-    httpx
+    httpx \
+    jupyterhub-idle-culler
