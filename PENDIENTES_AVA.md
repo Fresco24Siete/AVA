@@ -24,8 +24,9 @@ Hay que generar credenciales nuevas, ponerlas en el `.env` de la VM y
 actualizarlas en la actividad LTI de Moodle. Los dos lados a la vez, o se corta
 el acceso.
 
-**Bloquea además la devolución de notas** (§2.1): el envío a Moodle va firmado
-con estas credenciales.
+La devolución de notas (§2.1) se firma con estas mismas credenciales, pero **no
+está bloqueada por esto**: funcionaría hoy, porque Moodle está configurado con
+los mismos valores. El problema es de seguridad, no de funcionamiento.
 
 ### 1.2 La VM no aguanta un curso completo
 
@@ -57,7 +58,18 @@ pero quien califica es el **docente**, en otro contenedor. Hay que guardarlo en
 un sitio compartido —Postgres es el natural— y, al calificar, recuperarlo y
 enviar la nota firmada con OAuth 1.0 al servicio de resultados.
 
-Depende de §1.1.
+Tres piezas: una tabla que asocie estudiante + curso + cuadernillo con su
+`sourcedid`; el Hub rellenándola en cada arranque (tiene el dato de primera mano
+y evita confiar en el contenedor del alumno); y un comando `enviar-notas` que el
+docente ejecuta tras calificar.
+
+**Decisión previa, y es de configuración del curso, no de código:** el
+`sourcedid` identifica una casilla del libro de calificaciones, y esa casilla
+pertenece a una actividad LTI concreta. Con **una sola** actividad para todo el
+AVA hay una sola columna, y la nota de cada semana pisaría la anterior. Para que
+las notas se acumulen hace falta **una actividad LTI por cuadernillo** en Moodle,
+todas apuntando al mismo Jupyter. Sin resolver esto, construir el envío es
+prematuro.
 
 ### 2.2 El esquema no permite calcular una nota
 
