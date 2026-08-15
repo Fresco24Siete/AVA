@@ -11,7 +11,32 @@ RUN apt-get update && apt-get install -y curl git \
 # Instalamos notebook y nbclassic. Quitamos jupyterlab de la lista explícitamente.
 # requests: para que el plugin de exportación hable con el backend Go por
 # HTTP (este contenedor NO se conecta directo a Postgres, por seguridad).
-RUN pip install --no-cache-dir "notebook<7" nbclassic nbgrader jupyterhub requests
+#
+# ipywidgets es lo que hace interactivos los cuadernillos (botones Verificar,
+# pistas, barra de progreso, menús de los problemas de ordenar). Va FIJADO y en
+# el MISMO pip que "notebook<7" por dos motivos comprobados:
+#
+#   - La versión importa. Con ipywidgets 7.x sobre notebook 6.5.7 los widgets no
+#     se dibujan: el navegador falla con "Could not create a model" y el alumno
+#     ve la celda vacía. Con 8.1.8 funcionan. Probado en un servidor nbclassic
+#     real, no deducido de la documentación.
+#   - En un pip aparte, un paquete que pida notebook>=6.0 sin cota superior
+#     puede ascender a notebook 7 y llevarse por delante nbclassic y nbgrader.
+#
+# matplotlib se instala para las semanas 9 y 10 del temario oficial (NumPy,
+# pandas, Matplotlib). Pesa: con NumPy son ~250 MB de imagen y ~80 MB de RAM por
+# kernel que la importe, y la VM tiene 2 GB. Por eso los cuadernillos de las
+# primeras semanas NO lo importan: sus gráficas y diagramas van pre-renderizados
+# como SVG dentro del propio notebook (ver notebook/cuadernillos/diagramas/).
+RUN pip install --no-cache-dir \
+        "notebook<7" nbclassic nbgrader jupyterhub requests \
+        "ipywidgets==8.1.8" \
+        "matplotlib==3.9.2"
+
+# widgetsnbextension 4.x sí trae la extensión clásica; su fichero .d/ ya la
+# auto-activa, pero dejarlo explícito cuesta poco y evita depender de eso.
+RUN (jupyter nbextension install --sys-prefix --py widgetsnbextension || true) \
+    && (jupyter nbextension enable  --sys-prefix --py widgetsnbextension || true)
 
 # Desactivamos la extensión de JupyterLab por si se instaló como dependencia oculta
 RUN jupyter server extension disable jupyterlab || true

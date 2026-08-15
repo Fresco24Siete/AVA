@@ -49,9 +49,27 @@ if [ "$ALUMNO_ROL" = "instructor" ]; then
     jupyter serverextension disable --sys-prefix nbgrader.server_extensions.assignment_list || true
     jupyter server extension disable --sys-prefix nbgrader.server_extensions.assignment_list || true
 
-    # Sembrar el cuadernillo plantilla en source/ la primera vez (cp -n no pisa
-    # lo que el profesor ya haya editado desde formgrader). La plantilla vive en
-    # /opt/plantillas (ya NO en work/, para que el alumno no la reciba estática).
+    # Sembrar los cuadernillos plantilla en source/ la primera vez (cp -n no pisa
+    # lo que el profesor ya haya editado desde formgrader). Las plantillas viven
+    # en /opt/plantillas (ya NO en work/, para que el alumno no las reciba
+    # estáticas).
+    #
+    # Cada SUBCARPETA de /opt/plantillas es una tarea de nbgrader y su nombre es
+    # el cuadernillo_id: 'semana_01/' -> source/semana_01/. Ese mismo id es el
+    # que 'publicar-cuadernillo' escribe en el manifest y el que el tutor usa
+    # para contar las 5 preguntas por cuadernillo.
+    for plantilla in /opt/plantillas/*/; do
+        [ -d "$plantilla" ] || continue
+        tarea="$(basename "$plantilla")"
+        if mkdir -p "/srv/nbgrader/${CURSO_ID}/source/${tarea}" 2>/dev/null; then
+            cp -n "$plantilla"*.ipynb \
+                  "/srv/nbgrader/${CURSO_ID}/source/${tarea}/" 2>/dev/null || true
+            echo "[entrypoint] Cuadernillo disponible en formgrader: ${tarea}"
+        fi
+    done
+
+    # Compatibilidad con la plantilla suelta de la demo, que no vivía en una
+    # subcarpeta. Se mantiene para no romper cursos ya sembrados.
     if [ -f "/opt/plantillas/cuadernillo_ejercicios.ipynb" ]; then
         cp -n "/opt/plantillas/cuadernillo_ejercicios.ipynb" \
               "/srv/nbgrader/${CURSO_ID}/source/semana_1/cuadernillo_ejercicios.ipynb" 2>/dev/null || true

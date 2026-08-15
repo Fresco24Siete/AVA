@@ -1,0 +1,22 @@
+%% D5 - Editor, terminal, interprete e IDE.
+%% El IDE se dibuja como una caja que CONTIENE a los otros tres: es la relacion
+%% "IDE se compone de editor" que el ejercicio 7 exige.
+flowchart LR
+  subgraph IDE["IDE · el taller completo"]
+    direction TB
+    E["Editor · el cuaderno donde escribes"]
+    T["Terminal · la ventanilla de atención del sistema"]
+    I["Intérprete · el traductor simultáneo, el único que EJECUTA"]
+    DEP["Depurador · para mirar el programa por dentro"]
+  end
+
+  TU(["Tú"]) --> E
+  E -- "guarda" --> A["Tu código · un archivo .py o .ipynb"]
+  A -- "se lo das al" --> I
+  T -- "lanza al" --> I
+  I -- "produce" --> R(["El resultado"])
+
+  classDef pieza fill:#e8f0fb,stroke:#2a78d6,color:#10294d
+  classDef archivo fill:#e9f7ee,stroke:#0ca30c,color:#10294d
+  class E,T,I,DEP pieza
+  class A archivo

@@ -1,0 +1,16 @@
+%% D6a - Antiejemplo: un rombo del que sale una sola flecha (S02, seccion 4.3).
+%% El > de la condicion va como entidad &gt;: Mermaid descarta el signo crudo y
+%% el rombo se dibujaria "¿saldo pasaje?", justo en la semana en que se enseña
+%% la diferencia entre = y >.
+flowchart TB
+    I(["INICIO"])
+    D{"¿saldo &gt; pasaje?"}
+    P["pagar el pasaje"]
+    F(["FIN"])
+    I --> D -->|Sí| P --> F
+    X["¿Y si la respuesta es NO?<br/>Ese camino no existe: el algoritmo se queda mudo."]
+    D -.-> X
+    style X fill:#ffe8e8,stroke:#d03b3b,color:#d03b3b
+    style D fill:#eda100,stroke:#8a6d00,color:#3a2a00
+    style I fill:#008300,stroke:#005400,color:#fff
+    style F fill:#008300,stroke:#005400,color:#fff

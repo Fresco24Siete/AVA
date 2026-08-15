@@ -1,0 +1,16 @@
+%% D4 - Que pasa entre Shift+Enter y el saludo en pantalla.
+%% Los tres primeros pasos son software; el cuarto es hardware. Esa division es
+%% justo lo que abre el temario de la semana.
+sequenceDiagram
+  autonumber
+  participant N as Navegador
+  participant S as Servidor de Jupyter
+  participant K as Kernel de Python
+  participant C as CPU
+  N->>S: manda el texto de tu celda por la red
+  S->>K: se lo entrega al intérprete
+  K->>K: traduce tu línea a instrucciones mínimas
+  K->>C: la CPU ejecuta esas instrucciones en binario
+  C-->>K: devuelve el resultado
+  K-->>S: entrega el texto de salida
+  S-->>N: lo dibuja debajo de tu celda

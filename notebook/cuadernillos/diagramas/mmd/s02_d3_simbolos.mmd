@@ -1,0 +1,16 @@
+%% D3 - Los cinco simbolos del diagrama de flujo (S02, seccion 4.3).
+%% Cada nodo lleva la forma que nombra: ovalo, paralelogramo, rectangulo, rombo.
+flowchart TB
+    T(["Óvalo — INICIO / FIN"])
+    E[/"Paralelogramo — LEER / ESCRIBIR"/]
+    P["Rectángulo — PROCESO (un cálculo)"]
+    D{"Rombo — DECISIÓN (¿sí o no?)"}
+    F["Flecha — el ORDEN en que se ejecuta"]
+    T --> E --> P --> D
+    D -->|Sí| F
+    D -->|No| F
+    style T fill:#008300,stroke:#005400,color:#fff
+    style E fill:#2a78d6,stroke:#104281,color:#fff
+    style P fill:#4a3aa7,stroke:#2a1f6b,color:#fff
+    style D fill:#eda100,stroke:#8a6d00,color:#3a2a00
+    style F fill:#fcfcfb,stroke:#52514e,color:#0b0b0b

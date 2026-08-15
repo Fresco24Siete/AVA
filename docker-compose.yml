@@ -51,6 +51,9 @@ services:
       # El Hub reenvía estas al contenedor del alumno (ver auth_state_a_env).
       - TUTOR_IA_HABILITADO=${TUTOR_IA_HABILITADO:-true}
       - TUTOR_MAX_PREGUNTAS=${TUTOR_MAX_PREGUNTAS:-5}
+      # Token maestro con el que el Hub pide a la API un token por alumno
+      # (ver _mintear_token_estudiante). Sin el, la telemetria se descarta.
+      - METRICS_API_TOKEN=${METRICS_API_TOKEN:-}
 
   api_go:
     build:
@@ -70,6 +73,11 @@ services:
       - GOOGLE_API_KEY_2=${GOOGLE_API_KEY_2:-}
       - TUTOR_ALIAS=${TUTOR_ALIAS:-Ava}
       - TUTOR_MODELO=${TUTOR_MODELO:-gemini-3.5-flash}
+      # Telemetria: METRICS_API_TOKEN autoriza a quien puede pedir tokens (solo
+      # el Hub); METRICS_TOKEN_SECRET los firma. Si el secreto va vacio, la
+      # ingesta se acepta sin verificar identidad y se avisa por el log.
+      - METRICS_API_TOKEN=${METRICS_API_TOKEN:-}
+      - METRICS_TOKEN_SECRET=${METRICS_TOKEN_SECRET:-}
     depends_on:
       postgres-database:
         condition: service_healthy

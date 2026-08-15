@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"proxy-go/internal/middleware"
 	"proxy-go/internal/models"
 	"proxy-go/internal/service"
 	"time"
@@ -50,12 +51,25 @@ func (handler *ExerciseHandler) CreateAttemptHandler(c *gin.Context) {
 		return
 	}
 
+	// La identidad sale del token, no del cuerpo. El alumno puede leer su propio
+	// token dentro de su contenedor y hacer POST a mano; si nos fiáramos del
+	// cuerpo, podría escribir telemetría a nombre de un compañero.
+	// Si no hay token verificado (secreto sin configurar) se respeta el cuerpo,
+	// que es el comportamiento que había antes.
+	studentID, courseID := middleware.IdentidadVerificada(c)
+	if studentID == "" {
+		studentID = input.StudentID
+	}
+	if courseID == "" {
+		courseID = input.CourseID
+	}
+
 	exercise := &models.ExerciseAttempt{
 		ID:               uuid.New(),
-		CourseID:         input.CourseID,
+		CourseID:         courseID,
 		CuadernilloID:    input.CuadernilloID,
 		ExerciseID:       input.ExerciseID,
-		StudentID:        input.StudentID,
+		StudentID:        studentID,
 		AttemptAt:        input.AttemptAt,
 		ValidationResult: input.ValidationResult,
 		ReceivedAt:       time.Now(),

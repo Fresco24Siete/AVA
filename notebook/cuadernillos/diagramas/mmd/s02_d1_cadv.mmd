@@ -1,0 +1,14 @@
+%% D1 - El ciclo Comprender / Analizar / Disenar / Verificar (S02, seccion 3.1).
+%% Sin <b>: con htmlLabels desactivado se dibujaria con los signos a la vista.
+%% Lo que destaca cada etapa es el color del nodo, que es lo que sí se ve.
+flowchart LR
+    A["1. COMPRENDER<br/>¿Qué me están pidiendo?<br/>Lo explico con mis palabras"]
+    B["2. ANALIZAR<br/>¿Qué datos entran?<br/>¿Qué sale? ¿Qué restricciones hay?"]
+    C["3. DISEÑAR<br/>Pseudocódigo y diagrama<br/>ANTES de programar"]
+    D["4. VERIFICAR<br/>Prueba de escritorio<br/>con casos de prueba"]
+    A --> B --> C --> D
+    D -.->|"si algo no cuadra,<br/>se devuelve"| A
+    style A fill:#2a78d6,stroke:#104281,color:#fff
+    style B fill:#4a3aa7,stroke:#2a1f6b,color:#fff
+    style C fill:#008300,stroke:#005400,color:#fff
+    style D fill:#eda100,stroke:#8a6d00,color:#3a2a00

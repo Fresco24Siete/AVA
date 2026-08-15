@@ -188,11 +188,19 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
     // outputs.length > 0. Eso hacía que una celda con solo asserts (que al pasar
     // no imprime NADA) se reportara como exitosa pero nunca contara como
     // aprobada, y el evento de cuadernillo completado jamás se disparaba.
-    function evaluar_celda(cell) {
+    // `recien_ejecutada` lo pasa el manejador de 'finished_execute.CodeCell'.
+    // Hace falta porque en ese instante nbclassic TODAVÍA no ha reemplazado el
+    // In [*] por el número de ejecución: se comprobó en el navegador que ahí
+    // input_prompt_number vale '*'. Sin esta salvedad, una celda de prueba que
+    // pasa se evalúa como no ejecutada, el alumno ve un panel rojo de error y la
+    // analítica registra "failed" en un ejercicio correcto. El propio evento ya
+    // es la prueba de que la celda se ejecutó.
+    function evaluar_celda(cell, recien_ejecutada) {
         var outputs = (cell.output_area && cell.output_area.outputs) || [];
         var errores = outputs.filter(function (o) { return o.output_type === 'error'; });
         var n = cell.input_prompt_number;
-        var ejecutada = (n !== undefined && n !== null && n !== '*');
+        var ejecutada = recien_ejecutada === true ||
+                        (n !== undefined && n !== null && n !== '*');
         return {
             ejecutada: ejecutada,
             errores: errores,
@@ -390,7 +398,7 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
         // --- Celda de PRUEBA (validación): se arma y envía el intento --------
         var grade_id = cell.metadata.nbgrader.grade_id;
         var nbgrader_meta = cell.metadata.nbgrader;
-        var exito = evaluar_celda(cell).exito;
+        var exito = evaluar_celda(cell, true).exito;
 
         var ahora = Date.now();
         var inicio = estado.primer_intento[cod] || ahora;
@@ -465,6 +473,53 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
         Jupyter.notebook.events.on('execute.CodeCell', on_execute);
         Jupyter.notebook.events.on('finished_execute.CodeCell', on_finished_execute);
         console.log('[nbgrader-metrics] listo: telemetría por intento (errors[] acumulados + rating de cuadernillo)');
+    }
+
+    // --- Andamiaje de los cuadernillos --------------------------------------
+    // Las celdas etiquetadas 'ava-oculta' llevan la respuesta correcta como
+    // argumento (los quices, los problemas de ordenar) o son un SVG de 25 KB.
+    // El motor del cuadernillo ya las esconde al ejecutarse, pero eso llega
+    // tarde para quien va leyendo hacia abajo sin ejecutar: alcanzaría a leer la
+    // respuesta. Aquí se esconden desde que se abre el notebook.
+    //
+    // No se usa metadata.jupyter.source_hidden porque nbclassic la ignora (es de
+    // JupyterLab), ni jupyter_contrib_nbextensions, que reescribe la
+    // configuración de nbconvert de la que depende nbgrader.
+    function esconder_andamiaje() {
+        if (!Jupyter || !Jupyter.notebook) return;
+        var celdas = Jupyter.notebook.get_cells();
+        for (var i = 0; i < celdas.length; i++) {
+            var celda = celdas[i];
+            var tags = (celda.metadata && celda.metadata.tags) || [];
+            if (tags.indexOf('ava-oculta') === -1 && tags.indexOf('ava-motor') === -1) continue;
+            var raiz = celda.element && celda.element[0];
+            if (!raiz || raiz.querySelector('.ava-oculta-aviso')) continue;
+            var entrada = raiz.querySelector('.input');
+            if (!entrada) continue;
+
+            entrada.style.display = 'none';
+            var aviso = document.createElement('div');
+            aviso.className = 'ava-oculta-aviso';
+            aviso.style.cssText = 'font:12.5px system-ui,-apple-system,sans-serif;' +
+                'color:#52514e;margin:2px 0 6px;';
+            aviso.innerHTML = 'Celda del cuadernillo. <a href="#" ' +
+                'style="color:#2a78d6;text-decoration:none;border-bottom:1px dotted #2a78d6">' +
+                'ver el codigo</a>';
+            aviso.querySelector('a').onclick = function (ev) {
+                ev.preventDefault();
+                var cont = this.parentNode.parentNode.querySelector('.input');
+                if (cont) cont.style.display = '';
+                this.parentNode.remove();
+            };
+            raiz.insertBefore(aviso, raiz.firstChild);
+        }
+    }
+
+    if (Jupyter && Jupyter.notebook && Jupyter.notebook.events) {
+        // notebook_loaded no siempre ha llegado cuando corre custom.js, así que
+        // se cubren los dos caminos y la función es idempotente.
+        Jupyter.notebook.events.on('notebook_loaded.Notebook', esconder_andamiaje);
+        setTimeout(esconder_andamiaje, 1200);
     }
 
     // --- Tutor IA -----------------------------------------------------------

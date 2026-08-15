@@ -1,0 +1,17 @@
+%% D7 - Las tres representaciones del mismo algoritmo (S02, seccion 3.3):
+%% pseudocodigo para pensar, diagrama para ver, Python para ejecutar.
+flowchart LR
+    subgraph uno["1. Pseudocódigo — para PENSAR"]
+        A["Leer copias<br/>total ← copias * 100<br/>Escribir total"]
+    end
+    subgraph dos["2. Diagrama — para VER"]
+        B["óvalo → paralelogramo →<br/>rectángulo → paralelogramo → óvalo"]
+    end
+    subgraph tres["3. Python — para EJECUTAR"]
+        C["copias = int(input())<br/>total = copias * 100<br/>print(total)"]
+    end
+    uno --> dos --> tres
+    tres -.->|"si falla, vuelves a pensar"| uno
+    style A fill:#4a3aa7,stroke:#2a1f6b,color:#fff
+    style B fill:#eda100,stroke:#8a6d00,color:#3a2a00
+    style C fill:#008300,stroke:#005400,color:#fff

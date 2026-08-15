@@ -1,0 +1,20 @@
+%% D4 - El diagrama del problema del gancho: "¿a que hora salgo de la casa?"
+%% (S02). Es el algoritmo que el estudiante traduce a Python en E7.
+flowchart TB
+    I(["INICIO"])
+    L1[/"LEER hora_clase_min"/]
+    L2[/"LEER minutos_bus"/]
+    L3[/"LEER minutos_caminata"/]
+    P1["trayecto ← minutos_bus + minutos_caminata + PORTERIA"]
+    P2["salida_min ← hora_clase_min - trayecto - COLCHON"]
+    E1[/"ESCRIBIR 'Debes salir a las', salida_min"/]
+    F(["FIN"])
+    I --> L1 --> L2 --> L3 --> P1 --> P2 --> E1 --> F
+    style I fill:#008300,stroke:#005400,color:#fff
+    style F fill:#008300,stroke:#005400,color:#fff
+    style L1 fill:#2a78d6,stroke:#104281,color:#fff
+    style L2 fill:#2a78d6,stroke:#104281,color:#fff
+    style L3 fill:#2a78d6,stroke:#104281,color:#fff
+    style E1 fill:#2a78d6,stroke:#104281,color:#fff
+    style P1 fill:#4a3aa7,stroke:#2a1f6b,color:#fff
+    style P2 fill:#4a3aa7,stroke:#2a1f6b,color:#fff
