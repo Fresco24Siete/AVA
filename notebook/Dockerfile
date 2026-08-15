@@ -80,9 +80,13 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 # Entrega del cuadernillo activo (alumno) y publicación (instructor).
 COPY entregar_cuadernillo.py /usr/local/bin/entregar-cuadernillo
 COPY publicar_cuadernillo.py /usr/local/bin/publicar-cuadernillo
+# Refresco explícito de source/ cuando se actualiza el contenido de un
+# cuadernillo: el arranque siembra con `cp -n` y no pisa lo que ya está.
+COPY sembrar_cuadernillo.py /usr/local/bin/sembrar-cuadernillo
 RUN chmod +x /usr/local/bin/entrypoint.sh \
              /usr/local/bin/entregar-cuadernillo \
-             /usr/local/bin/publicar-cuadernillo
+             /usr/local/bin/publicar-cuadernillo \
+             /usr/local/bin/sembrar-cuadernillo
 
 # Plantillas de cuadernillos: van a /opt/plantillas, NO al work/ del usuario.
 # El instructor las usa para sembrar source/ en nbgrader; el alumno NO debe

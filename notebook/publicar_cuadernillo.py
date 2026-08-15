@@ -16,6 +16,7 @@ Copia el/los .ipynb liberados de release/<assignment>/ (o del exchange) al
 volumen compartido de publicados y escribe el manifest que leerá el alumno.
 """
 import glob
+import hashlib
 import json
 import os
 import shutil
@@ -86,7 +87,14 @@ def main(argv):
             "cierra": manifest.get("cierra"),
         }]
 
-    entrada = {"id": assignment, "notebook": principal, "abre": abre, "cierra": cierra}
+    # Huella del contenido publicado. Sirve para que el entregador sepa si lo
+    # que tiene el alumno corresponde a ESTA version o a una anterior, sin que
+    # nadie tenga que llevar un numero de version a mano.
+    with open(f"{destino}/{principal}", "rb") as f:
+        version = hashlib.sha256(f.read()).hexdigest()[:12]
+
+    entrada = {"id": assignment, "notebook": principal, "abre": abre,
+               "cierra": cierra, "version": version}
     publicados = [c for c in publicados if c.get("id") != assignment] + [entrada]
     publicados.sort(key=lambda c: str(c.get("id")))
 
@@ -103,6 +111,7 @@ def main(argv):
     print(f"[OK] Publicado '{assignment}' (curso {CURSO}).")
     print(f"     Notebook activo: {principal}")
     print(f"     Ventana: abre={abre or 'siempre'}  cierra={cierra or 'sin límite'}")
+    print(f"     Version del contenido: {version}")
     print(f"     Publicados en total: {', '.join(c['id'] for c in publicados)}")
     print(f"     El alumno verá el índice con todos y '{assignment}' marcado como el de esta semana.")
     return 0

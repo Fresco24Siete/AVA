@@ -63,6 +63,28 @@ INICIO = os.environ.get("CUADERNILLO_INICIO",
                         os.path.join(os.path.dirname(DESTINO), "inicio.ipynb"))
 
 
+# Qué versión de cada cuadernillo tiene ya el alumno. Vive en su carpeta de
+# trabajo -- es decir, en su volumen -- para sobrevivir a que se recree el
+# contenedor.
+REGISTRO = os.path.join(os.path.dirname(DESTINO), ".ava_versiones.json")
+
+
+def _leer_registro():
+    try:
+        with open(REGISTRO, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def _guardar_registro(datos):
+    try:
+        with open(REGISTRO, "w", encoding="utf-8") as f:
+            json.dump(datos, f, ensure_ascii=False, indent=1)
+    except OSError:
+        pass          # no vale la pena tumbar el arranque por esto
+
+
 def _titulo_bonito(codigo):
     """'semana_01' -> 'Semana 1'. Si no encaja, se devuelve el codigo tal cual."""
     partes = codigo.split("_")
@@ -87,8 +109,13 @@ def _escribir_indice(entregados, activo):
         lineas += ["| | Cuadernillo | Abrir |", "|---|---|---|"]
         for c in entregados:
             marca = "**Esta semana**" if c["id"] == activo else ""
-            lineas.append(f"| {marca} | {_titulo_bonito(c['id'])} | "
-                          f"[abrir]({c['archivo']}) |")
+            enlace = f"[abrir]({c['archivo']})"
+            if c.get("anterior"):
+                # Hubo una correccion. Se enlaza la version nueva y, aparte, la
+                # que el alumno ya tenia: su trabajo esta ahi y no se toca.
+                enlace += (f"<br/>corregido &middot; "
+                           f"[tu version anterior]({c['anterior']})")
+            lineas.append(f"| {marca} | {_titulo_bonito(c['id'])} | {enlace} |")
         lineas += [
             "",
             "---",
@@ -162,21 +189,49 @@ def main():
         except Exception:
             pass
 
+    registro = _leer_registro()
     entregados = []
     for entrada in publicados:
         codigo = str(entrada.get("id", ""))
         if not codigo or not _disponible(entrada, ahora):
             continue
+
+        version = str(entrada.get("version", ""))
+        origen = f"{PUB_DIR}/{codigo}/{entrada.get('notebook', '')}"
         archivo = f"{codigo}.ipynb"
         destino = os.path.join(carpeta, archivo)
-        # cp -n: nunca se pisa lo que el alumno ya respondio.
+        anterior = None
+
         if not os.path.exists(destino):
-            origen = f"{PUB_DIR}/{codigo}/{entrada.get('notebook', '')}"
+            # Primera vez: se entrega con su nombre normal.
             try:
                 shutil.copyfile(origen, destino)
             except Exception:
                 continue
-        entregados.append({"id": codigo, "archivo": archivo})
+            registro[archivo] = version
+
+        elif version and registro.get(archivo, version) != version:
+            # El docente corrigio el cuadernillo despues de que este alumno ya lo
+            # tenia. NO se sobrescribe: su trabajo esta dentro. La version nueva
+            # se entrega al lado y el indice enlaza las dos.
+            anterior = archivo
+            n = 2
+            while os.path.exists(os.path.join(carpeta, f"{codigo}_v{n}.ipynb")):
+                if registro.get(f"{codigo}_v{n}.ipynb") == version:
+                    break          # esa correccion ya se le habia entregado
+                n += 1
+            archivo = f"{codigo}_v{n}.ipynb"
+            destino = os.path.join(carpeta, archivo)
+            if not os.path.exists(destino):
+                try:
+                    shutil.copyfile(origen, destino)
+                except Exception:
+                    continue
+                registro[archivo] = version
+
+        entregados.append({"id": codigo, "archivo": archivo, "anterior": anterior})
+
+    _guardar_registro(registro)
 
     _escribir_indice(entregados, activo)
 
