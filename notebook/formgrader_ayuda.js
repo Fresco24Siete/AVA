@@ -125,9 +125,12 @@
 
     function insertar() {
         if (document.getElementById('ava-ayuda-docente')) return true;
-        // Formgrader monta su contenido dentro de .container; si no está, es que
-        // no estamos en formgrader o cambió el HTML: no se toca nada.
-        var destino = document.querySelector('.container') || document.querySelector('#main');
+        // Formgrader 0.8.5 monta su contenido en .container-fluid. Se prueban
+        // varios selectores porque esto depende del HTML interno de nbgrader, que
+        // puede cambiar entre versiones; si ninguno aparece, no se toca nada.
+        var destino = document.querySelector('.container-fluid')
+                   || document.querySelector('.container')
+                   || document.getElementById('main');
         if (!destino) return false;
         destino.insertBefore(crearPanel(), destino.firstChild);
         return true;
