@@ -63,20 +63,48 @@ def main(argv):
     # El notebook que abre el alumno: el primero (normalmente hay uno).
     principal = sorted(notebooks)[0]
 
+    # El manifest acumula TODOS los cuadernillos publicados, no solo el último:
+    # el alumno entra a un índice y puede volver a los de semanas anteriores.
+    # Se conservan 'cuadernillo_id' y 'notebook' en la raíz porque marcan cuál es
+    # el activo —el de esta semana— y porque el entregador antiguo los leía así.
+    os.makedirs(PUB_DIR, exist_ok=True)
+    ruta_manifest = f"{PUB_DIR}/manifest.json"
+    try:
+        with open(ruta_manifest, encoding="utf-8") as f:
+            manifest = json.load(f)
+    except (OSError, ValueError):
+        manifest = {}
+
+    publicados = manifest.get("cuadernillos") or []
+    # Si el manifest venía del formato viejo (un solo cuadernillo), se rescata
+    # para no perder de la lista lo que ya estaba publicado.
+    if not publicados and manifest.get("cuadernillo_id"):
+        publicados = [{
+            "id": manifest["cuadernillo_id"],
+            "notebook": manifest.get("notebook", "cuadernillo.ipynb"),
+            "abre": manifest.get("abre"),
+            "cierra": manifest.get("cierra"),
+        }]
+
+    entrada = {"id": assignment, "notebook": principal, "abre": abre, "cierra": cierra}
+    publicados = [c for c in publicados if c.get("id") != assignment] + [entrada]
+    publicados.sort(key=lambda c: str(c.get("id")))
+
     manifest = {
-        "cuadernillo_id": assignment,
+        "cuadernillo_id": assignment,   # el activo: el que se marca en el índice
         "notebook": principal,
         "abre": abre,
         "cierra": cierra,
+        "cuadernillos": publicados,
     }
-    os.makedirs(PUB_DIR, exist_ok=True)
-    with open(f"{PUB_DIR}/manifest.json", "w", encoding="utf-8") as f:
+    with open(ruta_manifest, "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
 
     print(f"[OK] Publicado '{assignment}' (curso {CURSO}).")
     print(f"     Notebook activo: {principal}")
     print(f"     Ventana: abre={abre or 'siempre'}  cierra={cierra or 'sin límite'}")
-    print(f"     Alumnos nuevos recibirán este cuadernillo al entrar.")
+    print(f"     Publicados en total: {', '.join(c['id'] for c in publicados)}")
+    print(f"     El alumno verá el índice con todos y '{assignment}' marcado como el de esta semana.")
     return 0
 
 

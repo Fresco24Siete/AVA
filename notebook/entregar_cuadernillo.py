@@ -57,54 +57,132 @@ def _parse(ts):
         return None
 
 
-def main():
-    # No pisar el trabajo del alumno si ya tiene el cuadernillo (re-spawn).
-    ya_existe = os.path.exists(DESTINO)
+# El alumno abre `inicio.ipynb`: un indice con los cuadernillos publicados hasta
+# hoy, marcando el de esta semana. Cada cuadernillo vive en `<id>.ipynb`.
+INICIO = os.environ.get("CUADERNILLO_INICIO",
+                        os.path.join(os.path.dirname(DESTINO), "inicio.ipynb"))
 
+
+def _titulo_bonito(codigo):
+    """'semana_01' -> 'Semana 1'. Si no encaja, se devuelve el codigo tal cual."""
+    partes = codigo.split("_")
+    if len(partes) == 2 and partes[1].isdigit():
+        return f"{partes[0].capitalize()} {int(partes[1])}"
+    return codigo
+
+
+def _escribir_indice(entregados, activo):
+    """Escribe el indice. Se regenera siempre: no contiene trabajo del alumno."""
+    lineas = [
+        "# Tus cuadernillos",
+        "",
+        "Aqui estan todos los cuadernillos publicados del curso. El de **esta "
+        "semana** es el que tiene la marca; los anteriores siguen disponibles "
+        "para repasar, y lo que ya respondiste en ellos se conserva.",
+        "",
+    ]
+    if not entregados:
+        lineas.append("_Todavia no hay ningun cuadernillo publicado._")
+    else:
+        lineas += ["| | Cuadernillo | Abrir |", "|---|---|---|"]
+        for c in entregados:
+            marca = "**Esta semana**" if c["id"] == activo else ""
+            lineas.append(f"| {marca} | {_titulo_bonito(c['id'])} | "
+                          f"[abrir]({c['archivo']}) |")
+        lineas += [
+            "",
+            "---",
+            "",
+            "Para abrir uno, haz clic en su enlace. Si un cuadernillo se te "
+            "cierra por fecha deja de aparecer aqui, pero lo que ya hiciste no "
+            "se borra.",
+        ]
+    _escribir_en(INICIO, _nb_markdown_crudo("\n".join(lineas)))
+
+
+def _nb_markdown_crudo(texto):
+    return {
+        "cells": [{"cell_type": "markdown", "metadata": {}, "source": [texto]}],
+        "metadata": {"kernelspec": {"display_name": "Python 3", "language": "python",
+                                    "name": "python3"}},
+        "nbformat": 4, "nbformat_minor": 5,
+    }
+
+
+def _escribir_en(ruta, nb):
+    with open(ruta, "w", encoding="utf-8") as f:
+        json.dump(nb, f, ensure_ascii=False)
+
+
+def _disponible(entrada, ahora):
+    """True si el cuadernillo esta dentro de su ventana de tiempo."""
+    abre = _parse(entrada.get("abre"))
+    cierra = _parse(entrada.get("cierra"))
+    if abre and ahora < abre:
+        return False
+    if cierra and ahora > cierra:
+        return False
+    return True
+
+
+def main():
     try:
         with open(MANIFEST, encoding="utf-8") as f:
             m = json.load(f)
     except FileNotFoundError:
-        if not ya_existe:
-            _escribir(_nb_markdown(
-                "Aún no hay cuadernillo",
-                "El profesor todavía no ha publicado un cuadernillo para este curso."))
+        _escribir_indice([], "")
+        _escribir(_nb_markdown(
+            "Aun no hay cuadernillo",
+            "El profesor todavia no ha publicado un cuadernillo para este curso."))
         return ""
     except Exception as exc:  # manifest corrupto
-        if not ya_existe:
-            _escribir(_nb_markdown("No se pudo cargar el cuadernillo", str(exc)))
+        _escribir_indice([], "")
+        _escribir(_nb_markdown("No se pudo cargar el cuadernillo", str(exc)))
         return ""
 
-    codigo = str(m.get("cuadernillo_id", ""))
-    notebook = m.get("notebook", "")
+    activo = str(m.get("cuadernillo_id", ""))
     ahora = datetime.now(timezone.utc)
-    abre = _parse(m.get("abre"))
-    cierra = _parse(m.get("cierra"))
 
-    if ya_existe:
-        # El alumno ya tiene su copia; no la tocamos. Solo devolvemos el código
-        # para etiquetar la telemetría.
-        return codigo
+    # Formato nuevo (lista) con respaldo al viejo (uno solo).
+    publicados = m.get("cuadernillos") or []
+    if not publicados and activo:
+        publicados = [{"id": activo, "notebook": m.get("notebook", ""),
+                       "abre": m.get("abre"), "cierra": m.get("cierra")}]
 
-    if abre and ahora < abre:
-        _escribir(_nb_markdown(
-            "Cuadernillo aún no disponible",
-            f"Este cuadernillo abre el **{abre.isoformat()}**. Vuelve más tarde."))
-        return codigo
-    if cierra and ahora > cierra:
-        _escribir(_nb_markdown(
-            "Cuadernillo cerrado",
-            f"El plazo cerró el **{cierra.isoformat()}**. Ya no está disponible."))
-        return codigo
+    carpeta = os.path.dirname(DESTINO)
 
-    origen = f"{PUB_DIR}/{codigo}/{notebook}"
-    try:
-        shutil.copyfile(origen, DESTINO)
-    except Exception as exc:
-        _escribir(_nb_markdown(
-            "No se pudo entregar el cuadernillo",
-            f"No se encontró el archivo publicado (`{origen}`): {exc}"))
-    return codigo
+    # Migracion del modelo viejo: el trabajo del alumno estaba en
+    # 'cuadernillo.ipynb' a secas. Se renombra al nombre nuevo para que no lo
+    # pierda al pasar al indice.
+    destino_activo = os.path.join(carpeta, f"{activo}.ipynb") if activo else None
+    if (destino_activo and os.path.exists(DESTINO)
+            and not os.path.exists(destino_activo)):
+        try:
+            shutil.move(DESTINO, destino_activo)
+        except Exception:
+            pass
+
+    entregados = []
+    for entrada in publicados:
+        codigo = str(entrada.get("id", ""))
+        if not codigo or not _disponible(entrada, ahora):
+            continue
+        archivo = f"{codigo}.ipynb"
+        destino = os.path.join(carpeta, archivo)
+        # cp -n: nunca se pisa lo que el alumno ya respondio.
+        if not os.path.exists(destino):
+            origen = f"{PUB_DIR}/{codigo}/{entrada.get('notebook', '')}"
+            try:
+                shutil.copyfile(origen, destino)
+            except Exception:
+                continue
+        entregados.append({"id": codigo, "archivo": archivo})
+
+    _escribir_indice(entregados, activo)
+
+    # El codigo que se devuelve etiqueta la telemetria y el cupo del tutor: es
+    # el del cuadernillo de esta semana.
+    return activo
 
 
 if __name__ == "__main__":
