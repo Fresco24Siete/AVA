@@ -158,6 +158,32 @@ async def auth_state_a_env(spawner, auth_state):
     spawner.environment['ALUMNO_ROL']     = 'instructor' if es_instructor else 'estudiante'
     spawner.environment['CURSO_ID']       = curso_id
     spawner.environment['CURSO_NOMBRE']   = str(auth_state.get('context_title', ''))
+
+    # --- Devolución de notas a Moodle ---------------------------------------
+    # Para escribir una nota en el libro de calificaciones de Moodle hacen falta
+    # dos datos que SOLO viajan en el lanzamiento LTI y que hasta ahora se
+    # descartaban: a dónde se manda la nota y a qué casilla corresponde.
+    #
+    # Moodle solo los envía si la actividad LTI tiene calificación configurada.
+    # Si faltan, no es un fallo del AVA: es que la actividad está sin nota, y
+    # entonces la devolución automática es imposible. Por eso se registra.
+    sourcedid = str(auth_state.get('lis_result_sourcedid', '') or '')
+    outcome_url = str(auth_state.get('lis_outcome_service_url', '') or '')
+    spawner.environment['LTI_RESULT_SOURCEDID'] = sourcedid
+    spawner.environment['LTI_OUTCOME_SERVICE_URL'] = outcome_url
+
+    if es_instructor:
+        pass          # al docente no se le devuelve nota
+    elif sourcedid and outcome_url:
+        spawner.log.info(
+            'Devolución de notas disponible para %s: Moodle mandó sourcedid y '
+            'servicio de resultados.', spawner.user.name)
+    else:
+        spawner.log.warning(
+            'Devolución de notas NO disponible para %s: el lanzamiento no trae '
+            'lis_result_sourcedid (%s) ni lis_outcome_service_url (%s). '
+            'Revisa que la actividad LTI de Moodle tenga calificación activada.',
+            spawner.user.name, bool(sourcedid), bool(outcome_url))
     spawner.environment['ENVIAR_AL_BACKEND'] = os.environ.get('ENVIAR_AL_BACKEND', 'false')
 
     # --- Tutor IA -----------------------------------------------------------
