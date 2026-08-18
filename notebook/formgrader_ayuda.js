@@ -34,15 +34,20 @@
             titulo: 'Previsualizar',
             texto: 'Abre la versión generada, exactamente como la va a ver el ' +
                    'alumno. Úsalo para comprobar que no quedó ninguna solución ' +
-                   'a la vista.'
+                   'a la vista. Solo aparece después de Generar: antes no hay ' +
+                   'nada que previsualizar.'
         },
         {
             boton: 'Release',
             titulo: '2. Liberar',
-            texto: 'Deja el cuadernillo disponible para que los alumnos lo ' +
-                   'reciban. En este AVA el paso que de verdad se lo entrega es ' +
-                   'el comando publicar-cuadernillo, que además define desde ' +
-                   'cuándo y hasta cuándo está abierto.'
+            texto: 'Deja el cuadernillo en el buzón de nbgrader. <b>En este AVA ' +
+                   'no es lo que se lo entrega al alumno</b>: eso lo hace el ' +
+                   'comando publicar-cuadernillo, que además define desde ' +
+                   'cuándo y hasta cuándo está abierto.',
+            aviso: 'Al volver a pulsarlo dice «unrelease» y lo retira del buzón, ' +
+                   'pero NO se lo quita a los alumnos: quien ya lo tenga sigue ' +
+                   'trabajando en él. Para retirarlo de verdad hay que publicar ' +
+                   'otro cuadernillo o cerrarle la fecha.'
         },
         {
             boton: 'Collect',
@@ -60,6 +65,9 @@
     ];
 
     var RESUMEN =
+        '<b>No hay ningún botón para borrar una tarea</b>: lo más parecido es ' +
+        'retirarla del buzón con Release, que no la elimina. Para quitarla de ' +
+        'la lista hay que borrar su carpeta en el servidor. ' +
         'El recorrido completo es: <b>editas el cuadernillo → Generar → ' +
         'Previsualizar → Liberar → publicar-cuadernillo → (los alumnos ' +
         'trabajan) → Recoger → Calificar</b>. ' +
