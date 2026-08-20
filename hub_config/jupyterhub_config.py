@@ -18,7 +18,19 @@ c.DockerSpawner.image = 'mi_imagen_jupyterlab:latest'
 network_name = os.environ.get('DOCKER_NETWORK_NAME', 'bridge')
 c.DockerSpawner.use_internal_ip = True
 c.DockerSpawner.network_name = network_name
-c.DockerSpawner.remove = False
+# El contenedor se descarta al apagarse. Antes se conservaba, porque era lo
+# único que guardaba el trabajo del alumno; desde que cada uno tiene su volumen
+# (ava-trabajo-<alumno>, más abajo) el trabajo ya no vive ahí, y conservarlo solo
+# traía problemas: el contenedor se quedaba con la imagen y las variables de
+# entorno del día que nació, así que reconstruir la imagen o cambiar la
+# configuración del Hub no le llegaba a quien ya había entrado alguna vez. Había
+# que borrarlo a mano en el servidor para que un arreglo surtiera efecto.
+#
+# Ahora cada ingreso levanta un contenedor nuevo sobre el mismo volumen: el
+# alumno encuentra su trabajo igual que lo dejó y estrena la imagen actual. A
+# cambio, lo que instale por su cuenta dentro del contenedor no sobrevive al
+# apagado; lo que guarde en su carpeta, sí.
+c.DockerSpawner.remove = True
 
 # --- Volúmenes -------------------------------------------------------------
 # Por defecto NINGÚN contenedor monta el volumen compartido de nbgrader.
@@ -58,11 +70,11 @@ class LTIRoleAuthenticator(LTI11Authenticator):
 
         # Si el rol cambió desde el último ingreso, hay que TIRAR el contenedor.
         #
-        # `c.DockerSpawner.remove = False` conserva el contenedor entre sesiones
-        # (es lo único que preserva el trabajo del alumno), y el Hub, al ver un
-        # servidor ya corriendo, redirige a él sin volver a hacer spawn: nunca
-        # llega a ejecutarse auth_state_a_env, así que el contenedor se queda con
-        # el rol, los montajes y las variables del ingreso anterior.
+        # El Hub, al ver un servidor ya corriendo, redirige a él sin volver a
+        # hacer spawn: nunca llega a ejecutarse auth_state_a_env, así que el
+        # contenedor sigue con el rol, los montajes y las variables del ingreso
+        # anterior. Que el contenedor se descarte al apagarse no basta, porque
+        # aquí está encendido.
         #
         # Con el rol de Moodle eso es un problema de seguridad, no de comodidad:
         # el contenedor de instructor monta nbgrader_shared en lectura-escritura
