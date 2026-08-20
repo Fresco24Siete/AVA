@@ -56,6 +56,9 @@ COPY metrics_bridge.py /etc/jupyter/metrics_bridge.py
 # Tutor IA: la extensión de servidor y el JS del panel, que ella misma sirve
 # en {base_url}tutor-ia/static/tutor_ia.js (por eso van al mismo directorio).
 COPY tutor_bridge.py /etc/jupyter/tutor_bridge.py
+# Borrado de actividades: la extension y la logica que comparte con el comando.
+COPY admin_bridge.py /etc/jupyter/admin_bridge.py
+COPY borrar_cuadernillo.py /etc/jupyter/borrar_cuadernillo.py
 COPY tutor_ia.js /etc/jupyter/tutor_ia.js
 COPY jupyter_server_config.py /etc/jupyter/jupyter_server_config.py
 ENV PYTHONPATH="/etc/jupyter"
@@ -86,11 +89,13 @@ COPY sembrar_cuadernillo.py /usr/local/bin/sembrar-cuadernillo
 # Carga al backend qué competencia evalúa cada ejercicio. El mapeo lo emite
 # build.py y viaja con las plantillas.
 COPY cargar_competencias.py /usr/local/bin/cargar-competencias
+COPY borrar_cuadernillo.py /usr/local/bin/borrar-cuadernillo
 RUN chmod +x /usr/local/bin/entrypoint.sh \
              /usr/local/bin/entregar-cuadernillo \
              /usr/local/bin/publicar-cuadernillo \
              /usr/local/bin/sembrar-cuadernillo \
-             /usr/local/bin/cargar-competencias
+             /usr/local/bin/cargar-competencias \
+             /usr/local/bin/borrar-cuadernillo
 
 # Plantillas de cuadernillos: van a /opt/plantillas, NO al work/ del usuario.
 # El instructor las usa para sembrar source/ en nbgrader; el alumno NO debe

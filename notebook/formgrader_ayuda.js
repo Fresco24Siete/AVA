@@ -65,9 +65,9 @@
     ];
 
     var RESUMEN =
-        '<b>No hay ningún botón para borrar una tarea</b>: lo más parecido es ' +
-        'retirarla del buzón con Release, que no la elimina. Para quitarla de ' +
-        'la lista hay que borrar su carpeta en el servidor. ' +
+        '<b>nbgrader no trae forma de borrar una actividad</b>: lo más parecido ' +
+        'es retirarla del buzón con Release, que no elimina nada. Para eso está ' +
+        'el bloque de abajo, añadido por este AVA. ' +
         'El recorrido completo es: <b>editas el cuadernillo → Generar → ' +
         'Previsualizar → Liberar → publicar-cuadernillo → (los alumnos ' +
         'trabajan) → Recoger → Calificar</b>. ' +
@@ -107,6 +107,8 @@
             '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #dfe3e8">' +
             RESUMEN + '</div></div>';
 
+        cuerpo_borrado(caja.querySelector('#ava-ayuda-cuerpo'));
+
         var cuerpo = caja.querySelector('#ava-ayuda-cuerpo');
         var toggle = caja.querySelector('#ava-ayuda-toggle');
         // Se recuerda si el docente lo cerró: útil el primer día, molesto el mes
@@ -129,6 +131,97 @@
             } catch (e) { /* da igual */ }
         };
         return caja;
+    }
+
+    // --- Eliminar una actividad ---------------------------------------------
+    // Formgrader no tiene botón para esto y hasta ahora había que borrar
+    // carpetas a mano en el servidor. Se ofrece aquí, con el nombre de la
+    // actividad escrito a mano como confirmación: es una operación que borra
+    // trabajo, y un clic de más no debería bastar.
+    function cuerpo_borrado(destino) {
+        if (!destino) return;
+        var raiz = (window.location.pathname.split('/formgrader')[0]) || '';
+
+        var caja = document.createElement('div');
+        caja.style.cssText =
+            'margin-top:14px;padding-top:14px;border-top:1px solid #dfe3e8';
+        caja.innerHTML =
+            '<div style="font-weight:600;color:#10294d;margin-bottom:6px">' +
+            'Eliminar una actividad</div>' +
+            '<div style="font-size:14px;color:#4a5768;margin-bottom:8px">' +
+            'Borra la actividad y lo publicado de ella. <b>Siempre guarda una ' +
+            'copia con fecha antes de borrar.</b> Si tiene entregas de ' +
+            'estudiantes, se niega salvo que insistas.</div>' +
+            '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+            '<select id="ava-borrar-cual" style="padding:5px 8px;font:14px ' +
+            'system-ui,sans-serif;min-width:190px"></select>' +
+            '<input id="ava-borrar-conf" placeholder="escribe el nombre para confirmar" ' +
+            'style="padding:5px 8px;font:14px system-ui,sans-serif;min-width:230px">' +
+            '<button id="ava-borrar-btn" style="padding:6px 12px;font:14px ' +
+            'system-ui,sans-serif;background:#c8392b;color:#fff;border:none;' +
+            'border-radius:3px;cursor:pointer">Eliminar</button></div>' +
+            '<div id="ava-borrar-msg" style="font-size:14px;margin-top:8px"></div>';
+        destino.appendChild(caja);
+
+        var sel = caja.querySelector('#ava-borrar-cual');
+        var conf = caja.querySelector('#ava-borrar-conf');
+        var btn = caja.querySelector('#ava-borrar-btn');
+        var msg = caja.querySelector('#ava-borrar-msg');
+
+        function decir(texto, color) {
+            msg.style.color = color || '#4a5768';
+            msg.innerHTML = texto;
+        }
+
+        fetch(raiz + '/ava-admin/actividades')
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) {
+                if (!d) { caja.style.display = 'none'; return; }
+                d.actividades.forEach(function (a) {
+                    var o = document.createElement('option');
+                    o.value = a.id;
+                    o.textContent = a.id + (a.envios
+                        ? '  (' + a.envios + ' con entregas)' : '');
+                    sel.appendChild(o);
+                });
+                if (!d.actividades.length) caja.style.display = 'none';
+            })
+            .catch(function () { caja.style.display = 'none'; });
+
+        btn.onclick = function () {
+            var tarea = sel.value;
+            if (!tarea) return;
+            if (conf.value.trim() !== tarea) {
+                decir('Escribe <b>' + tarea + '</b> en la casilla para confirmar.', '#b57200');
+                return;
+            }
+            btn.disabled = true;
+            decir('Borrando…');
+            fetch(raiz + '/ava-admin/borrar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tarea: tarea, forzar: false })
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                btn.disabled = false;
+                var lista = (d.mensajes || []).map(function (m) {
+                    return '<div>' + m + '</div>';
+                }).join('');
+                if (d.ok) {
+                    decir('<b style="color:#0f8a4a">Eliminada.</b>' + lista +
+                          '<div style="margin-top:4px">Recarga la página para ' +
+                          'actualizar la lista.</div>', '#4a5768');
+                } else {
+                    decir('<b style="color:#c8392b">No se eliminó.</b>' + lista,
+                          '#4a5768');
+                }
+            })
+            .catch(function (e) {
+                btn.disabled = false;
+                decir('No se pudo contactar al servidor: ' + e, '#c8392b');
+            });
+        };
     }
 
     function insertar() {
