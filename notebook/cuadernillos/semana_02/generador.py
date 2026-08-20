@@ -821,7 +821,7 @@ el orden está mal, te lo va a decir el propio intérprete.""")
 
     # --- Ejercicio 1 ------------------------------------------------------
     c.ejercicio(
-        numero=1, titulo="Ordena el algoritmo", estrellas=1, puntos=5,
+        numero=1, competencias=['I3'], titulo="Ordena el algoritmo", estrellas=1, puntos=5,
         enunciado="""Las siete líneas del algoritmo de la papelería quedaron revueltas:
 
 ```
@@ -888,7 +888,7 @@ print("E1 correcto: el algoritmo quedó en orden y se ejecuta.")''',
 
     # --- Ejercicio 2 ------------------------------------------------------
     c.ejercicio(
-        numero=2, titulo="Cada símbolo con su significado", estrellas=1, puntos=5,
+        numero=2, competencias=['I3', 'I5'], titulo="Cada símbolo con su significado", estrellas=1, puntos=5,
         enunciado="""Completa el diccionario `simbolos_e2` emparejando cada forma con lo que
 representa. Los valores posibles son exactamente estos cinco textos:
 
@@ -942,7 +942,7 @@ print("E2 correcto: ya reconoces los cinco símbolos.")''',
 
     # --- Ejercicio 3 ------------------------------------------------------
     c.ejercicio(
-        numero=3, titulo="La ficha de análisis", estrellas=2, puntos=10,
+        numero=3, competencias=['I3', 'I5'], titulo="La ficha de análisis", estrellas=2, puntos=10,
         enunciado="""**Problema:** *En el parqueadero de la UIS se cobra una **tarifa por hora** y,
 además, un **recargo fijo** por el uso de la barrera. Dado el número de
 **horas** que estuvo el carro, calcular cuánto debe pagar.*
@@ -1038,7 +1038,7 @@ print("E3 correcto: la ficha está completa y tu proceso da el resultado esperad
 
     # --- Ejercicio 4 ------------------------------------------------------
     c.ejercicio(
-        numero=4, titulo="Completa el pseudocódigo", estrellas=2, puntos=10,
+        numero=4, competencias=['I3'], titulo="Completa el pseudocódigo", estrellas=2, puntos=10,
         enunciado="""Este algoritmo calcula **cuánto te sobra en la tarjeta de Metrolínea** después
 de una semana. Le falta una línea: la que hace la cuenta.
 
@@ -1105,7 +1105,7 @@ print("E4 correcto: tu pseudocódigo se ejecuta y da lo esperado en los dos caso
 
     # --- Ejercicio 5 ------------------------------------------------------
     c.ejercicio(
-        numero=5, titulo="Prueba de escritorio", estrellas=2, puntos=10,
+        numero=5, competencias=['I3'], titulo="Prueba de escritorio", estrellas=2, puntos=10,
         enunciado="""Este algoritmo descuenta dos pasajes de una tarjeta de Metrolínea:
 
 ```
@@ -1193,7 +1193,7 @@ print("E5 correcto: tu prueba de escritorio coincide paso a paso con la ejecuci�
 
     # --- Ejercicio 6 ------------------------------------------------------
     c.ejercicio(
-        numero=6, titulo="Tipos y conversiones", estrellas=3, puntos=10,
+        numero=6, competencias=['I3'], titulo="Tipos y conversiones", estrellas=3, puntos=10,
         enunciado="""Un formulario web te entrega los datos de un estudiante. **Todo llega como
 texto**, porque así funcionan los formularios (y `input()`):
 
@@ -1270,7 +1270,7 @@ print("E6 correcto: cada dato quedó en su tipo y la ficha se armó bien.")''',
              "Python en el ejercicio 7.")
 
     c.ejercicio(
-        numero=7, titulo="Traduce el algoritmo a Python", estrellas=3, puntos=15,
+        numero=7, competencias=['I3'], titulo="Traduce el algoritmo a Python", estrellas=3, puntos=15,
         enunciado="""Este es el algoritmo del gancho, el de «¿a qué hora salgo de la casa?»:
 
 ```
@@ -1366,7 +1366,7 @@ print("E7 correcto: tu traducción a Python coincide con el pseudocódigo en los
 
     # --- Ejercicio 8 ------------------------------------------------------
     c.ejercicio(
-        numero=8, titulo="El mismo algoritmo, en los dos idiomas",
+        numero=8, competencias=['I3', 'I4'], titulo="El mismo algoritmo, en los dos idiomas",
         estrellas=4, puntos=15,
         enunciado="""**Problema:** *Calcular cuánto vas a gastar en pasajes durante todo el
 semestre.* Entran tres datos: cuántos **viajes haces por semana**, cuántas

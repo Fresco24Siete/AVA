@@ -45,10 +45,16 @@ func ConfigureRouter (db *sqlx.DB) *gin.Engine{
 	tokenMaestro := os.Getenv("METRICS_API_TOKEN")
 	metricsTokenHandler := handler.NewMetricsTokenHandler(secretoMetricas, tokenMaestro)
 
+	// Mapeo ejercicio -> competencias, que emite build.py al construir.
+	competenciasRepository := repository.NewCompetenciasRepository(db)
+	competenciasService := service.NewCompetenciasService(competenciasRepository)
+	competenciasHandler := handler.NewCompetenciasHandler(competenciasService, tokenMaestro)
+
 	// Interno: solo lo llama el Hub por la red de Docker. NO exponer por Caddy.
 	interno := router.Group("/internal")
 	{
 		interno.POST("/lti/mint-metrics-token", metricsTokenHandler.MintHandler)
+		interno.POST("/competencias", competenciasHandler.CargarHandler)
 	}
 
 	api := router.Group("/api")

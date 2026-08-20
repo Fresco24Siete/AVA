@@ -109,6 +109,10 @@ class Cuadernillo:
         self.celdas = []
         self._ejercicios = []         # (numero, puntos) para el resumen final
         self._pistas = {}             # clave -> pistas; se inyectan en el arranque
+        # exercise_id -> [competencias]. No va dentro del notebook ni viaja con
+        # cada intento: se emite aparte y se carga al backend, que lo resuelve
+        # por JOIN. Así, corregir una etiqueta corrige todo el histórico.
+        self.competencias = {}
         self._i_arranque = None       # dónde va la celda del motor
 
     # -- Celdas simples ------------------------------------------------------
@@ -203,7 +207,8 @@ class Cuadernillo:
 
     # -- Ejercicios calificables --------------------------------------------
     def ejercicio(self, numero, titulo, enunciado, partida, solucion, pruebas,
-                  puntos=5, pistas=(), estrellas=1, pruebas_ocultas=""):
+                  puntos=5, pistas=(), estrellas=1, pruebas_ocultas="",
+                  competencias=()):
         """Un ejercicio autocalificado: enunciado + celda de solución + celda de prueba.
 
         `partida` es el código que verá el estudiante (lo que queda tras
@@ -254,6 +259,8 @@ class Cuadernillo:
             "execution_count": None, "outputs": [], "source": _lineas(cuerpo_test),
         })
         self._ejercicios.append((numero, puntos))
+        if competencias:
+            self.competencias[f"ejercicio_{numero}"] = list(competencias)
         return self
 
     # -- Salida --------------------------------------------------------------

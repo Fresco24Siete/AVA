@@ -741,7 +741,7 @@ Tres reglas de la casa:
 
     # --- Ejercicio 1 ------------------------------------------------------
     c.ejercicio(
-        numero=1, titulo="Hardware, software, dato o proceso", estrellas=1, puntos=3,
+        numero=1, competencias=['I4'], titulo="Hardware, software, dato o proceso", estrellas=1, puntos=3,
         enunciado="""Esta es la versión individual de la actividad que hicieron en clase. Abajo hay
 ocho cosas de la vida real de la UIS. Clasifica cada una escribiendo **una** de
 estas cuatro palabras, entre comillas:
@@ -792,7 +792,7 @@ print("Ejercicio 1 superado: distingues hardware, software, datos y procesos.")'
 
     # --- Ejercicio 2 ------------------------------------------------------
     c.ejercicio(
-        numero=2, titulo="La escalera de los lenguajes", estrellas=1, puntos=3,
+        numero=2, competencias=['I4'], titulo="La escalera de los lenguajes", estrellas=1, puntos=3,
         enunciado="""Los cuatro fragmentos de abajo hacen **lo mismo**: sumar dos números. Lo que
 cambia es a qué altura están escritos.
 
@@ -845,7 +845,7 @@ dos son de alto nivel; uno está un escalón más abajo que el otro.
 
     # --- Ejercicio 3 ------------------------------------------------------
     c.ejercicio(
-        numero=3, titulo="Escribe en lenguaje de máquina", estrellas=2, puntos=4,
+        numero=3, competencias=['I3', 'I4'], titulo="Escribe en lenguaje de máquina", estrellas=2, puntos=4,
         enunciado="""Tu turno de darle órdenes a la MiniMáquina en su propio idioma. Recuerda su
 repertorio completo:
 
@@ -904,7 +904,7 @@ print("Ejercicio 3 superado: escribiste y ejecutaste un programa en lenguaje de 
 
     # --- Ejercicio 4 ------------------------------------------------------
     c.ejercicio(
-        numero=4, titulo="Diagnostica los tres", estrellas=2, puntos=3,
+        numero=4, competencias=['I3'], titulo="Diagnostica los tres", estrellas=2, puntos=3,
         enunciado="""Tres programas, tres problemas distintos. **No los ejecutes**: diagnostícalos
 leyendo, que es lo que vas a tener que hacer toda tu vida profesional.
 
@@ -962,7 +962,7 @@ print("Ejercicio 4 superado: sabes distinguir los tres errores sin ejecutarlos."
 
     # --- Ejercicio 5 ------------------------------------------------------
     c.ejercicio(
-        numero=5, titulo="Caza el error que nadie te va a señalar", estrellas=3, puntos=4,
+        numero=5, competencias=['I3', 'I5'], titulo="Caza el error que nadie te va a señalar", estrellas=3, puntos=4,
         enunciado="""Abajo hay una función que debería calcular el promedio de tres notas. Corre sin
 quejarse. Y está mal.
 
@@ -1024,7 +1024,7 @@ pruebas en la vida real.
 
     # --- Ejercicio 6 ------------------------------------------------------
     c.ejercicio(
-        numero=6, titulo="Crea un archivo con código", estrellas=3, puntos=4,
+        numero=6, competencias=['I4'], titulo="Crea un archivo con código", estrellas=3, puntos=4,
         enunciado="""Hasta ahora todo lo que has hecho vive en la memoria y desaparece cuando se
 apaga el kernel. Vamos a dejar algo **escrito en el disco**.
 
@@ -1110,7 +1110,7 @@ que se arma el mapa. Puedes volver a ella cuando quieras.
     c.code("ver_vocabulario()")
 
     c.ejercicio(
-        numero=7, titulo="Arma tu mapa de la computación", estrellas=4, puntos=4,
+        numero=7, competencias=['I5'], titulo="Arma tu mapa de la computación", estrellas=4, puntos=4,
         enunciado="""Último ejercicio, y el que más vale la pena. Vas a dibujar el mapa de todo lo
 que viste hoy — pero en vez de arrastrar cajitas con el mouse, lo vas a
 **escribir**, que es como se representan las ideas cuando una máquina tiene que

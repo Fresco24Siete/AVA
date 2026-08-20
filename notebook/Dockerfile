@@ -83,16 +83,22 @@ COPY publicar_cuadernillo.py /usr/local/bin/publicar-cuadernillo
 # Refresco explícito de source/ cuando se actualiza el contenido de un
 # cuadernillo: el arranque siembra con `cp -n` y no pisa lo que ya está.
 COPY sembrar_cuadernillo.py /usr/local/bin/sembrar-cuadernillo
+# Carga al backend qué competencia evalúa cada ejercicio. El mapeo lo emite
+# build.py y viaja con las plantillas.
+COPY cargar_competencias.py /usr/local/bin/cargar-competencias
 RUN chmod +x /usr/local/bin/entrypoint.sh \
              /usr/local/bin/entregar-cuadernillo \
              /usr/local/bin/publicar-cuadernillo \
-             /usr/local/bin/sembrar-cuadernillo
+             /usr/local/bin/sembrar-cuadernillo \
+             /usr/local/bin/cargar-competencias
 
 # Plantillas de cuadernillos: van a /opt/plantillas, NO al work/ del usuario.
 # El instructor las usa para sembrar source/ en nbgrader; el alumno NO debe
 # tenerlas en su workspace (recibe solo el cuadernillo activo entregado
 # dinámicamente en work/cuadernillo.ipynb).
 COPY --chown=jovyan:jovyan notebook_semana/ /opt/plantillas/
+# El mapeo ejercicio -> competencias, junto a las plantillas que lo generaron.
+COPY --chown=jovyan:jovyan cuadernillos/competencias.json /opt/plantillas/competencias.json
 
 # Crear /srv/nbgrader y /srv/publicados en la imagen con dueño jovyan: al montar
 # volúmenes nombrados vacíos sobre estas rutas, Docker los inicializa copiando
