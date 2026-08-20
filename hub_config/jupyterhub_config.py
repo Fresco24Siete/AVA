@@ -299,15 +299,17 @@ async def auth_state_a_env(spawner, auth_state):
     if es_instructor:
         spawner.default_url = '/formgrader'
     else:
-        # El alumno SIEMPRE abre work/inicio.ipynb: el índice con los
-        # cuadernillos publicados hasta hoy, marcando el de esta semana. Lo
-        # regenera el entrypoint en cada arranque (no lleva trabajo del alumno),
-        # así que el Hub no necesita saber qué hay publicado.
+        # El alumno aterriza en su panel de progreso: los cuadernillos
+        # publicados, en qué va, su nota cuando ya se calificó, y cómo le está
+        # yendo por competencia. Lo sirve panel_bridge desde su propio
+        # contenedor, así que hereda su sesión y no necesita login aparte.
         #
-        # La raíz del server es /home/jovyan/work (root_dir), por eso la URL NO
-        # lleva 'work/' delante: con '/notebooks/work/...' daba 404 y moría el
-        # spawn.
-        spawner.default_url = '/notebooks/inicio.ipynb'
+        # El panel se dibuja aunque el backend no responda -- es la puerta de
+        # entrada, y un fallo de la analítica no puede dejar al alumno sin
+        # acceso a sus cuadernillos. Si alguna vez hay que revertir, el índice
+        # 'inicio.ipynb' se sigue generando: basta cambiar esta línea por
+        # '/notebooks/inicio.ipynb'.
+        spawner.default_url = '/panel'
 
 c.Spawner.auth_state_hook = auth_state_a_env
 

@@ -1,0 +1,186 @@
+"""Panel de progreso del estudiante, servido por su propio contenedor.
+
+Sustituye al índice de cuadernillos: además de la lista, muestra en qué va, su
+nota cuando el docente ya calificó, y cómo le está yendo por competencia.
+
+Tres decisiones que gobiernan este archivo:
+
+**El token nunca llega al navegador.** El panel se arma aquí, en el servidor del
+alumno, que ya tiene `STUDENT_METRICS_TOKEN`. Si el HTML consultara el backend
+por su cuenta, habría que entregarle ese token a la página y cualquiera podría
+leerlo desde la consola.
+
+**Si el backend no responde, el panel se dibuja igual.** Es la puerta de entrada:
+un fallo de la analítica no puede dejar al alumno sin acceso a sus cuadernillos.
+Lo que falta se marca como no disponible y la lista sigue ahí.
+
+**La nota solo se muestra si es la oficial.** Una cifra deducida de la telemetría
+no coincide con la de nbgrader —que ejecuta también las pruebas ocultas— y
+enseñarla antes de tiempo genera el reclamo de «el panel decía otra cosa».
+"""
+import html
+import json
+import logging
+import os
+import urllib.error
+import urllib.request
+
+from tornado import web
+
+log = logging.getLogger(__name__)
+
+BASE = os.environ.get("METRICS_API_BASE",
+                      os.environ.get("STUDENT_METRICS_API_BASE", "http://api_go:8080"))
+TOKEN = os.environ.get("STUDENT_METRICS_TOKEN", "")
+CARPETA = os.environ.get("PANEL_CARPETA", "/home/jovyan/work")
+NOMBRE = os.environ.get("ALUMNO_NOMBRE", "")
+ACTIVO = os.environ.get("CUADERNILLO_CODIGO", "")
+
+AZUL, TINTA, GRIS, BORDE = "#2a78d6", "#10294d", "#52514e", "#dfe3e8"
+VERDE, AMBAR = "#0f8a4a", "#b57200"
+
+
+def _titulo(codigo):
+    partes = codigo.split("_")
+    if len(partes) == 2 and partes[1].isdigit():
+        return f"{partes[0].capitalize()} {int(partes[1])}"
+    return codigo
+
+
+def _progreso():
+    """Consulta el backend. Devuelve (datos, error_legible)."""
+    if not TOKEN:
+        return None, "Todavía no hay datos de progreso para esta sesión."
+    peticion = urllib.request.Request(
+        BASE.rstrip("/") + "/api/mi-progreso",
+        headers={"Authorization": f"Bearer {TOKEN}"})
+    try:
+        with urllib.request.urlopen(peticion, timeout=4) as resp:
+            return json.loads(resp.read().decode("utf-8")), None
+    except urllib.error.HTTPError as err:
+        log.warning("[panel] el backend respondió %s", err.code)
+        return None, "No se pudo consultar tu progreso en este momento."
+    except Exception as err:
+        log.warning("[panel] no se pudo consultar el progreso: %s", err)
+        return None, "No se pudo consultar tu progreso en este momento."
+
+
+def _cuadernillos_en_disco():
+    """Los .ipynb que el alumno tiene entregados, por si el backend no responde."""
+    try:
+        archivos = sorted(f for f in os.listdir(CARPETA)
+                          if f.endswith(".ipynb") and f != "inicio.ipynb")
+    except OSError:
+        return []
+    return [{"archivo": f, "id": f[:-6]} for f in archivos]
+
+
+def _barra(hechos, total):
+    pct = int(100 * hechos / total) if total else 0
+    return (f'<div class="barra"><div class="relleno" style="width:{pct}%"></div></div>'
+            f'<div class="pie">{hechos} de {total} ejercicios</div>')
+
+
+def _html(datos, aviso):
+    por_id = {c["cuadernillo_id"]: c for c in (datos or {}).get("cuadernillos", [])}
+    filas = []
+    for nb in _cuadernillos_en_disco():
+        d = por_id.get(nb["id"], {})
+        marca = ('<span class="marca">Esta semana</span>'
+                 if nb["id"] == ACTIVO else "")
+        # Solo la nota oficial. Una provisional no coincide con la de nbgrader.
+        if d.get("origen_nota") == "nbgrader" and d.get("puntos_maximos"):
+            nota = (f'<b>{d["puntos_obtenidos"]:g}</b> / {d["puntos_maximos"]:g}')
+        else:
+            nota = '<span class="tenue">aún sin calificar</span>'
+        intentados = d.get("ejercicios_intentados", 0)
+        progreso = (_barra(d.get("ejercicios_resueltos", 0), intentados)
+                    if intentados else '<span class="tenue">sin empezar</span>')
+        abandonos = d.get("abandonos", 0)
+        pendiente = (f'<div class="aviso-fila">Dejaste {abandonos} ejercicio(s) '
+                     f'a medias</div>' if abandonos else "")
+        filas.append(
+            f'<tr><td><a href="{html.escape(nb["archivo"])}">'
+            f'{html.escape(_titulo(nb["id"]))}</a> {marca}{pendiente}</td>'
+            f'<td>{progreso}</td><td class="nota">{nota}</td></tr>')
+
+    if not filas:
+        filas = ['<tr><td colspan="3" class="tenue">Todavía no tienes '
+                 'cuadernillos entregados.</td></tr>']
+
+    comps = ""
+    for c in (datos or {}).get("competencias", []):
+        total = c["ejercicios_intentados"] or 1
+        pct = int(100 * c["ejercicios_resueltos"] / total)
+        color = VERDE if pct >= 70 else (AMBAR if pct >= 40 else "#c8392b")
+        comps += (
+            f'<div class="comp"><div class="comp-t">{html.escape(c["descripcion"])}</div>'
+            f'<div class="barra"><div class="relleno" style="width:{pct}%;'
+            f'background:{color}"></div></div>'
+            f'<div class="pie">{c["ejercicios_resueltos"]} de '
+            f'{c["ejercicios_intentados"]} · {c["errores"]} error(es)</div></div>')
+    bloque_comp = (f'<h2>Cómo vas por competencia</h2><div class="comps">{comps}</div>'
+                   if comps else "")
+
+    banda = (f'<div class="banda">{html.escape(aviso)}</div>' if aviso else "")
+    saludo = f", {html.escape(NOMBRE.split(' ')[0])}" if NOMBRE else ""
+
+    return f"""<!doctype html><html lang="es"><head><meta charset="utf-8">
+<title>Tu progreso</title><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+ body{{margin:0;background:#f7f8fa;color:#141a22;
+   font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}}
+ .caja{{max-width:860px;margin:0 auto;padding:36px 22px 70px}}
+ h1{{font-size:27px;margin:0 0 4px;color:{TINTA}}}
+ .sub{{color:{GRIS};margin:0 0 26px}}
+ h2{{font-size:19px;margin:36px 0 12px;color:{TINTA}}}
+ table{{width:100%;border-collapse:collapse;background:#fff;
+   border:1px solid {BORDE};border-radius:6px;overflow:hidden}}
+ td{{padding:13px 15px;border-bottom:1px solid {BORDE};vertical-align:top}}
+ tr:last-child td{{border-bottom:none}}
+ a{{color:{AZUL};text-decoration:none;font-weight:600}}
+ a:hover{{text-decoration:underline}}
+ .marca{{background:{AZUL};color:#fff;font-size:11px;padding:2px 7px;
+   border-radius:3px;margin-left:6px;white-space:nowrap}}
+ .nota{{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}}
+ .tenue{{color:#8b94a1}}
+ .barra{{height:7px;background:#e9ecef;border-radius:4px;overflow:hidden;max-width:230px}}
+ .relleno{{height:100%;background:{AZUL};border-radius:4px}}
+ .pie{{font-size:12.5px;color:{GRIS};margin-top:4px}}
+ .aviso-fila{{font-size:13px;color:{AMBAR};margin-top:3px}}
+ .comps{{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}}
+ .comp{{background:#fff;border:1px solid {BORDE};border-radius:6px;padding:13px 15px}}
+ .comp-t{{font-size:13.5px;color:{TINTA};margin-bottom:8px;line-height:1.4}}
+ .banda{{background:#fdf9ef;border-left:3px solid {AMBAR};padding:11px 15px;
+   border-radius:4px;margin-bottom:20px;font-size:14.5px}}
+</style></head><body><div class="caja">
+<h1>Tu progreso{saludo}</h1>
+<p class="sub">Tus cuadernillos, en qué vas y tus notas. Lo que respondiste se
+conserva siempre.</p>
+{banda}
+<table><tr><td><b>Cuadernillo</b></td><td><b>Progreso</b></td>
+<td class="nota"><b>Nota</b></td></tr>{''.join(filas)}</table>
+{bloque_comp}
+</div></body></html>"""
+
+
+class PanelHandler(web.RequestHandler):
+    def get(self):
+        datos, aviso = _progreso()
+        self.set_header("Content-Type", "text/html; charset=utf-8")
+        self.finish(_html(datos, aviso))
+
+
+def load_jupyter_server_extension(nbapp):
+    if getattr(nbapp, "log", None) is not None:
+        globals()["log"] = nbapp.log
+    if os.environ.get("ALUMNO_ROL", "estudiante") == "instructor":
+        log.info("[panel_bridge] rol instructor: el panel de progreso es del alumno.")
+        return
+    raiz = nbapp.web_app.settings.get("base_url", "/").rstrip("/")
+    nbapp.web_app.add_handlers(".*$", [(raiz + "/panel", PanelHandler)])
+    log.info("[panel_bridge] listo: panel de progreso en %s/panel", raiz)
+
+
+def _load_jupyter_server_extension(server_app):
+    load_jupyter_server_extension(server_app)

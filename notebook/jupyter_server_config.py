@@ -10,6 +10,8 @@ c.NotebookApp.nbserver_extensions = {
     "tutor_bridge": True,
     # Solo hace algo si el rol es instructor; él mismo se abstiene si no.
     "admin_bridge": True,
+    # Y este solo para el alumno: el panel de progreso es suyo.
+    "panel_bridge": True,
 }
 
 # jupyter_server >=1.x (usado por nbclassic)
@@ -17,6 +19,7 @@ c.ServerApp.jpserver_extensions = {
     "metrics_bridge": True,
     "tutor_bridge": True,
     "admin_bridge": True,
+    "panel_bridge": True,
 }
 
 if not es_instructor:

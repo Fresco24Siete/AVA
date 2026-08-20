@@ -55,6 +55,11 @@ func ConfigureRouter (db *sqlx.DB) *gin.Engine{
 	notasService := service.NewNotasService(notasRepository)
 	notasHandler := handler.NewNotasHandler(notasService, tokenMaestro)
 
+	// Progreso del alumno: lectura acotada a quien pregunta, por su token.
+	progresoRepository := repository.NewProgresoRepository(db)
+	progresoService := service.NewProgresoService(progresoRepository)
+	progresoHandler := handler.NewProgresoHandler(progresoService)
+
 	// Interno: solo lo llama el Hub por la red de Docker. NO exponer por Caddy.
 	interno := router.Group("/internal")
 	{
@@ -71,6 +76,7 @@ func ConfigureRouter (db *sqlx.DB) *gin.Engine{
 		{
 			ingesta.POST("/exercises/attempts", exerciseHandler.CreateAttemptHandler)
 			ingesta.POST("/cuadernillos/ratings", cuadernilloHandler.CreateCuadernilloHandler)
+			ingesta.GET("/mi-progreso", progresoHandler.MiProgresoHandler)
 		}
 
 		// El tutor no lleva token: lo llama el mismo contenedor del alumno y no

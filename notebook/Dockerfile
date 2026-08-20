@@ -58,6 +58,8 @@ COPY metrics_bridge.py /etc/jupyter/metrics_bridge.py
 COPY tutor_bridge.py /etc/jupyter/tutor_bridge.py
 # Borrado de actividades: la extension y la logica que comparte con el comando.
 COPY admin_bridge.py /etc/jupyter/admin_bridge.py
+# Panel de progreso del alumno: sustituye al indice de cuadernillos.
+COPY panel_bridge.py /etc/jupyter/panel_bridge.py
 COPY borrar_cuadernillo.py /etc/jupyter/borrar_cuadernillo.py
 COPY tutor_ia.js /etc/jupyter/tutor_ia.js
 COPY jupyter_server_config.py /etc/jupyter/jupyter_server_config.py
