@@ -15,6 +15,7 @@ Qué borra:
   - release/<tarea>     la versión generada para el alumno
   - exchange/.../<tarea> el buzón
   - lo publicado y su entrada en el manifest, si estaba publicada
+  - su ficha en gradebook.db, para que el nombre quede libre de verdad
 
 Qué NO borra nunca sin --forzar:
   - submitted/, autograded/, feedback/  ->  el trabajo entregado por los alumnos
@@ -112,6 +113,34 @@ def _quitar_del_manifest(tarea):
     return cambio
 
 
+def _quitar_del_gradebook(tarea, destino):
+    """Borra la actividad de gradebook.db.
+
+    Borrar solo las carpetas deja la fila viva en la base de nbgrader con sus
+    notas y entregas colgando. No se nota —formgrader lista por carpeta— hasta
+    que alguien crea otra actividad con el mismo nombre y hereda las notas de la
+    anterior. Antes de tocar nada se guarda una copia de la base junto al resto
+    del respaldo.
+    """
+    bd = os.path.join(RAIZ, "gradebook.db")
+    if not os.path.isfile(bd):
+        return None
+    try:
+        shutil.copy2(bd, os.path.join(destino, "gradebook.db"))
+    except Exception as err:
+        return f"no pude respaldar gradebook.db ({err}): no se tocó la base"
+    try:
+        from nbgrader.api import Gradebook, MissingEntry
+        with Gradebook("sqlite:///" + bd) as gb:
+            try:
+                gb.remove_assignment(tarea)
+            except MissingEntry:
+                return None
+    except Exception as err:
+        return f"no se pudo limpiar gradebook.db: {err}"
+    return "borrado: la ficha en gradebook.db (con sus notas)"
+
+
 def borrar(tarea, forzar=False):
     """Devuelve (ok, mensajes). Usado por el CLI y por el panel del docente."""
     msgs = []
@@ -145,6 +174,10 @@ def borrar(tarea, forzar=False):
             msgs.append(f"borrado: {etiqueta}")
         except Exception as err:
             msgs.append(f"no se pudo borrar {etiqueta}: {err}")
+
+    aviso_bd = _quitar_del_gradebook(tarea, destino)
+    if aviso_bd:
+        msgs.append(aviso_bd)
 
     if _quitar_del_manifest(tarea):
         msgs.append("quitada del manifest: deja de aparecerle al alumno")
