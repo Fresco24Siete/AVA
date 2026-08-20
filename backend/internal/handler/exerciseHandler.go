@@ -23,6 +23,9 @@ type ExerciseAttemptRequest struct {
 	StudentID        string         `json:"student_id"`
 	AttemptAt        time.Time      `json:"attempt_at"`
 	ValidationResult string         `json:"validation_result"`
+	PuntosMaximos    *int16         `json:"puntos_maximos"`
+	CodigoCelda      *string        `json:"codigo_celda"`
+	Orden            *int16         `json:"orden"`
 	Errors           []AttemptErrorRequest `json:"errors"`
 }
 
@@ -46,8 +49,16 @@ func (handler *ExerciseHandler) CreateAttemptHandler(c *gin.Context) {
 		return
 	}
 
-	if input.ValidationResult != "passed" && input.ValidationResult != "failed" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "validation_result debe ser 'passed' o 'failed'"})
+	// 'sin_validar' es un desenlace real, no un valor raro: lo manda custom.js al
+	// cerrar la pestana cuando el alumno dejo errores en un ejercicio SIN llegar
+	// a ejecutar la celda de prueba. Rechazarlo, como se hacia antes, perdia la
+	// senal de abandono: un alumno que peleo media hora y otro que ni abrio el
+	// ejercicio quedaban identicos en los datos.
+	switch input.ValidationResult {
+	case "passed", "failed", "sin_validar":
+	default:
+		c.JSON(http.StatusBadRequest,
+			gin.H{"error": "validation_result debe ser 'passed', 'failed' o 'sin_validar'"})
 		return
 	}
 
@@ -73,6 +84,9 @@ func (handler *ExerciseHandler) CreateAttemptHandler(c *gin.Context) {
 		AttemptAt:        input.AttemptAt,
 		ValidationResult: input.ValidationResult,
 		ReceivedAt:       time.Now(),
+		PuntosMaximos:    input.PuntosMaximos,
+		CodigoCelda:      input.CodigoCelda,
+		Orden:            input.Orden,
 	}
 
 	errorsToInsert := make([]models.AttemptError, 0, len(input.Errors))
