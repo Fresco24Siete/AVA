@@ -22,8 +22,14 @@ CREATE TABLE exercise_attempts (
     exercise_id        VARCHAR(255) NOT NULL,
     student_id         VARCHAR(255) NOT NULL,   -- user_id de LTI
     attempt_at         TIMESTAMPTZ  NOT NULL,
-    validation_result  VARCHAR(10)  NOT NULL
-        CHECK (validation_result IN ('passed', 'failed')),
+    -- 'sin_validar' es un tercer desenlace real, no un valor raro: lo manda
+    -- custom.js al cerrar la pestana cuando el alumno dejo errores en un
+    -- ejercicio SIN llegar a ejecutar la celda de prueba. Hasta ahora el CHECK
+    -- y el backend lo rechazaban con 400, asi que ese evento se perdia -- y es
+    -- precisamente la senal de abandono: se atasco y se rindio. Sin el, un
+    -- alumno que lucho media hora y otro que ni abrio el ejercicio se ven igual.
+    validation_result  VARCHAR(12)  NOT NULL
+        CHECK (validation_result IN ('passed', 'failed', 'sin_validar')),
     received_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
 
     -- NUEVAS: el navegador ya las envía y el backend las descartaba. Sin
@@ -133,9 +139,10 @@ SELECT a.course_id,
        a.student_id,
        ec.competencia_id,
        c.descripcion,
-       COUNT(*)                                                AS intentos_totales,
-       COUNT(*) FILTER (WHERE a.validation_result = 'failed')  AS intentos_fallidos,
-       COUNT(e.id)                                             AS errores
+       COUNT(*)                                                     AS intentos_totales,
+       COUNT(*) FILTER (WHERE a.validation_result = 'failed')       AS intentos_fallidos,
+       COUNT(*) FILTER (WHERE a.validation_result = 'sin_validar')  AS abandonos,
+       COUNT(e.id)                                                  AS errores
 FROM exercise_attempts a
 JOIN ejercicio_competencias ec
        ON ec.cuadernillo_id = a.cuadernillo_id
