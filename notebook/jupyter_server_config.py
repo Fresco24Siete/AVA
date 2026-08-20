@@ -37,3 +37,20 @@ if not es_instructor:
     #    nbgrader_shared (ver jupyterhub_config.py), el explorador de archivos
     #    solo puede ver los archivos del propio alumno.
     c.ServerApp.root_dir = '/home/jovyan/work'
+
+# --- Cookies dentro del marco de Moodle --------------------------------------
+# El servidor del alumno emite dos cookies propias: la de sesión de JupyterHub y
+# la de xsrf que acompaña a cada POST (entre ellos los de la telemetría). Con el
+# SameSite por defecto, el navegador no las devuelve cuando el cuadernillo va
+# incrustado en la página de Moodle, así que el alumno entraría y no podría
+# ejecutar nada. Van con las mismas opciones que las del Hub, que las manda en
+# JUPYTERHUB_COOKIE_OPTIONS.
+#
+# La de xsrf conserva su ruta —/user/<alumno>/— para que no se pisen entre sí
+# ni con la del propio Hub, que vive en /hub/.
+_MARCO = {'SameSite': 'None', 'Secure': True}
+c.ServerApp.cookie_options = dict(_MARCO)
+c.ServerApp.tornado_settings = {
+    'xsrf_cookie_kwargs': dict(_MARCO,
+                               path=os.environ.get('JUPYTERHUB_SERVICE_PREFIX', '/')),
+}
