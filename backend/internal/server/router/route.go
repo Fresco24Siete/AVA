@@ -50,11 +50,17 @@ func ConfigureRouter (db *sqlx.DB) *gin.Engine{
 	competenciasService := service.NewCompetenciasService(competenciasRepository)
 	competenciasHandler := handler.NewCompetenciasHandler(competenciasService, tokenMaestro)
 
+	// Notas de cuadernillo: las sube el contenedor del docente tras calificar.
+	notasRepository := repository.NewNotasRepository(db)
+	notasService := service.NewNotasService(notasRepository)
+	notasHandler := handler.NewNotasHandler(notasService, tokenMaestro)
+
 	// Interno: solo lo llama el Hub por la red de Docker. NO exponer por Caddy.
 	interno := router.Group("/internal")
 	{
 		interno.POST("/lti/mint-metrics-token", metricsTokenHandler.MintHandler)
 		interno.POST("/competencias", competenciasHandler.CargarHandler)
+		interno.POST("/notas", notasHandler.RegistrarHandler)
 	}
 
 	api := router.Group("/api")

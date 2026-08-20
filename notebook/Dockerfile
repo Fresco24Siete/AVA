@@ -90,12 +90,15 @@ COPY sembrar_cuadernillo.py /usr/local/bin/sembrar-cuadernillo
 # build.py y viaja con las plantillas.
 COPY cargar_competencias.py /usr/local/bin/cargar-competencias
 COPY borrar_cuadernillo.py /usr/local/bin/borrar-cuadernillo
+# Sube al backend las notas del libro de nbgrader, tras "Autograde".
+COPY registrar_notas.py /usr/local/bin/registrar-notas
 RUN chmod +x /usr/local/bin/entrypoint.sh \
              /usr/local/bin/entregar-cuadernillo \
              /usr/local/bin/publicar-cuadernillo \
              /usr/local/bin/sembrar-cuadernillo \
              /usr/local/bin/cargar-competencias \
-             /usr/local/bin/borrar-cuadernillo
+             /usr/local/bin/borrar-cuadernillo \
+             /usr/local/bin/registrar-notas
 
 # Plantillas de cuadernillos: van a /opt/plantillas, NO al work/ del usuario.
 # El instructor las usa para sembrar source/ en nbgrader; el alumno NO debe
