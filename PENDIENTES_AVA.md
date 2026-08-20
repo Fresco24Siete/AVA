@@ -20,6 +20,12 @@ configurado contra esos mismos valores.
 Son públicos: están en el repositorio. Cualquiera que los lea puede fabricar un
 lanzamiento LTI válido y entrar como cualquier estudiante o como docente.
 
+Comprobado el 2026-08-20, no es una suposición: se firmó un lanzamiento con esas
+credenciales contra la VM y el Hub creó la cuenta inventada y le levantó su
+contenedor, sin pasar por Moodle en ningún momento. Con `roles=Instructor` en el
+mismo formulario, ese contenedor viene con `nbgrader_shared` montado: las
+soluciones y los envíos de todo el curso.
+
 Hay que generar credenciales nuevas, ponerlas en el `.env` de la VM y
 actualizarlas en la actividad LTI de Moodle. Los dos lados a la vez, o se corta
 el acceso.
