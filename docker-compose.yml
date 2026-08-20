@@ -14,6 +14,7 @@ networks:
 volumes:
   caddy_data:
   postgres-data:
+  hub_estado:
 
 services:
   caddy:
@@ -40,6 +41,9 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./hub_config/jupyterhub_config.py:/srv/jupyterhub/jupyterhub_config.py
+      # Base y secreto de cookies del Hub: sin esto, cada redespliegue los borra
+      # y el Hub pierde de vista los contenedores que ya estaban corriendo.
+      - hub_estado:/srv/jupyterhub/data
     networks:
       - moodle_jupyter_net
     env_file:

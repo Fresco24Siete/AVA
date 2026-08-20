@@ -330,6 +330,43 @@ c.JupyterHub.port = 8000
 c.JupyterHub.hub_ip = '0.0.0.0'
 c.JupyterHub.hub_connect_ip = 'jupyterhub'
 
+# --- Cookies dentro del marco de Moodle --------------------------------------
+# Moodle puede abrir la actividad externa incrustada en su propia página. Para el
+# navegador eso es un sitio ajeno dentro de otro, y una cookie con el SameSite
+# por defecto (Lax) se guarda pero no se devuelve. El resultado es un bucle que
+# no dice lo que pasa: el POST de LTI autentica bien, el siguiente GET llega sin
+# sesión, el Hub manda a /hub/login, /hub/login manda al login del autenticador
+# —que en LTI solo acepta POST— y el alumno ve «405 : Method Not Allowed».
+#
+# SameSite=None hace que la cookie viaje también incrustada; exige Secure, que se
+# cumple porque de cara al navegador todo va por HTTPS. A cambio se pierde la
+# protección de origen que da SameSite, por eso el Hub 5 mantiene su cookie xsrf
+# —que hereda estas mismas opciones— como segunda barrera.
+#
+# Ojo: Safari, y Chrome cuando el usuario bloquea cookies de terceros, no
+# entregan NINGUNA cookie ajena dentro de un marco, con SameSite=None o sin él.
+# Para que no dependa del navegador, la actividad en Moodle debe abrirse en
+# «Ventana nueva» (Contenedor de lanzamiento). Esto es la red de seguridad.
+c.JupyterHub.tornado_settings = {
+    'cookie_options': {'SameSite': 'None', 'Secure': True},
+}
+
+# --- Estado del Hub entre despliegues ----------------------------------------
+# Por defecto el Hub guarda su base y su secreto de cookies dentro del propio
+# contenedor, así que cada `up --force-recreate` los borraba. Se notaba poco con
+# un usuario —volver a entrar desde Moodle rehace el usuario y su grupo— pero el
+# Hub también perdía el registro de qué servidores estaban vivos: los
+# contenedores de los alumnos seguían corriendo sin que el Hub lo supiera, y al
+# volver a entrar levantaba otro sobre el mismo volumen. Con 25 estudiantes eso
+# es memoria consumida por contenedores que ya nadie mira.
+#
+# Con esto la base y el secreto viven en un volumen: un redespliegue ya no cierra
+# la sesión de nadie ni deja contenedores huérfanos.
+_ESTADO = '/srv/jupyterhub/data'
+os.makedirs(_ESTADO, exist_ok=True)
+c.JupyterHub.db_url = f'sqlite:///{_ESTADO}/jupyterhub.sqlite'
+c.JupyterHub.cookie_secret_file = f'{_ESTADO}/jupyterhub_cookie_secret'
+
 # --- Apagado de contenedores inactivos ---------------------------------------
 # Un contenedor de alumno se quedaba vivo indefinidamente desde que entraba, así
 # que la memoria de la máquina se dimensionaba para TODOS los que hubieran
