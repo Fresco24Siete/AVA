@@ -4,8 +4,34 @@ Qué hay que construir para que el profesor vea **en qué competencia** se atasc
 cada estudiante, y para que el estudiante tenga un panel con su progreso y sus
 notas en vez de un listado de cuadernillos.
 
-Escrito el 15 de agosto de 2026. El diseño de la base ya está en
-[`database/schema_v2.sql`](database/schema_v2.sql).
+Escrito el 15 de agosto de 2026. **Las cuatro fases están implementadas y
+probadas contra un Postgres real** (20 de agosto); el diseño de la base está en
+[`database/schema_v2.sql`](database/schema_v2.sql) y la migración en
+[`database/migracion_v2.sql`](database/migracion_v2.sql).
+
+## Estado
+
+| Fase | Estado | Qué se probó |
+|---|---|---|
+| 1. Que los datos quepan | hecho | 3 columnas guardadas, `sin_validar` aceptado, identidad del token |
+| 2. Competencias | hecho | 20 relaciones, 3 cargas no duplican, la vista agrupa |
+| 3. Notas | hecho | sin token 401, fuera de rango 400, recalificar 60→72 sin duplicar |
+| 4. Panel | hecho | aislamiento entre alumnos, degrada sin backend |
+| Extra: borrar actividades | hecho | se niega con entregas, respalda, pide confirmación |
+
+**Bugs encontrados al construir**, todos corregidos:
+
+1. La migración no aplicaba: `ALTER COLUMN` bloqueado por la vista `exercise_stats`.
+2. El puerto del backend estaba fijo en el código; ahora es `PORT`.
+3. El panel ocultaba la nota de un alumno calificado sin telemetría, porque la
+   consulta partía de los intentos en vez de la unión con las notas.
+4. El panel del docente decía «no hay botón para borrar» justo encima del botón
+   de borrar recién añadido.
+
+**Hallazgo de contenido, no de código:** `I7` figura como evidencia principal de
+la Semana 1, pero **ningún ejercicio calificable la evalúa** — las fuentes
+confiables están en la sección de cierre, que no se califica. O la planeación
+promete de más, o falta un ejercicio que pida contrastar una fuente.
 
 ---
 
