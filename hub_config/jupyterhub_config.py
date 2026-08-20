@@ -351,11 +351,12 @@ c.JupyterHub.tornado_settings = {
     'cookie_options': {'SameSite': 'None', 'Secure': True},
 }
 
-# Y lo mismo para el servidor del alumno, que pone las suyas: sin esto el
-# alumno pasa el login del Hub y se queda igual de bloqueado un paso más
-# adelante. El Hub las reenvía por JUPYTERHUB_COOKIE_OPTIONS, pero solo si se
-# le dicen aquí: no hereda las de arriba.
-c.Spawner.cookie_options = {'SameSite': 'None', 'Secure': True}
+# El servidor del alumno pone además las suyas —la de su sesión y la de xsrf que
+# acompaña a cada POST, telemetría incluida— y le pasa lo mismo. No hay que
+# repetirlo: el Hub le entrega estas opciones al spawner y este las reenvía al
+# contenedor en JUPYTERHUB_COOKIE_OPTIONS. Sí hay que tenerlo presente al
+# desplegar: un contenedor que ya existía conserva el entorno con el que nació,
+# así que hasta que no se rehaga sigue emitiendo las cookies viejas.
 
 # --- Estado del Hub entre despliegues ----------------------------------------
 # Por defecto el Hub guarda su base y su secreto de cookies dentro del propio
