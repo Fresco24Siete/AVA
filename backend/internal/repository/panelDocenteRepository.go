@@ -151,6 +151,13 @@ type Malentendido struct {
 // Se agrupa por mensaje y no solo por tipo: diez AssertionError distintos son
 // diez cosas distintas, y el mensaje de una prueba de nbgrader es la frase que
 // el docente escribió para explicar qué se esperaba.
+//
+// Se descarta el intento entero cuando llevaba un stub, no solo la fila del
+// NotImplementedError. En los datos reales cada intento trae los dos errores a
+// la vez: el AssertionError es la consecuencia de que la celda de solución
+// siguiera vacía, no un concepto que alguien entendió mal. Filtrando solo por
+// error_type, el panel le diría al docente que hay siete cosas que explicar
+// mientras la sección de al lado dice, con razón, que nadie está atascado.
 func (r *PanelDocenteRepository) Malentendidos(curso string) ([]Malentendido, error) {
 	// Nunca nil: un slice vacío se serializa como null y obliga a quien lo
 	// consume a distinguir «no hay» de «falló».
@@ -163,7 +170,9 @@ func (r *PanelDocenteRepository) Malentendidos(curso string) ([]Malentendido, er
 		  FROM attempt_errors e
 		  JOIN exercise_attempts a ON a.id = e.attempt_id
 		 WHERE a.course_id = $1
-		   AND e.error_type <> 'NotImplementedError'
+		   AND NOT EXISTS (SELECT 1 FROM attempt_errors s
+		                    WHERE s.attempt_id = a.id
+		                      AND s.error_type = 'NotImplementedError')
 		 GROUP BY a.cuadernillo_id, a.exercise_id, e.error_type,
 		          left(e.error_message, 180)
 		 ORDER BY COUNT(DISTINCT a.student_id) DESC, COUNT(*) DESC

@@ -12,14 +12,14 @@ func NewProgresoRepository(db *sqlx.DB) *ProgresoRepository {
 
 // ResumenCuadernillo es lo que el alumno ve de cada cuadernillo.
 type ResumenCuadernillo struct {
-	CuadernilloID   string   `db:"cuadernillo_id" json:"cuadernillo_id"`
-	EjerciciosOK    int      `db:"ejercicios_ok" json:"ejercicios_resueltos"`
-	EjerciciosVistos int     `db:"ejercicios_vistos" json:"ejercicios_intentados"`
-	Intentos        int      `db:"intentos" json:"intentos"`
-	Abandonos       int      `db:"abandonos" json:"abandonos"`
-	PuntosObtenidos *float64 `db:"puntos_obtenidos" json:"puntos_obtenidos,omitempty"`
-	PuntosMaximos   *float64 `db:"puntos_maximos" json:"puntos_maximos,omitempty"`
-	Origen          *string  `db:"origen" json:"origen_nota,omitempty"`
+	CuadernilloID    string   `db:"cuadernillo_id" json:"cuadernillo_id"`
+	EjerciciosOK     int      `db:"ejercicios_ok" json:"ejercicios_resueltos"`
+	EjerciciosVistos int      `db:"ejercicios_vistos" json:"ejercicios_intentados"`
+	Intentos         int      `db:"intentos" json:"intentos"`
+	Abandonos        int      `db:"abandonos" json:"abandonos"`
+	PuntosObtenidos  *float64 `db:"puntos_obtenidos" json:"puntos_obtenidos,omitempty"`
+	PuntosMaximos    *float64 `db:"puntos_maximos" json:"puntos_maximos,omitempty"`
+	Origen           *string  `db:"origen" json:"origen_nota,omitempty"`
 }
 
 // ResumenCompetencia agrupa el desempeño por indicador de aprendizaje.
@@ -93,7 +93,18 @@ func (r *ProgresoRepository) PorCompetencia(estudiante, curso string) ([]Resumen
 		       COUNT(DISTINCT (a.cuadernillo_id, a.exercise_id)) FILTER (
 		           WHERE a.validation_result = 'passed')  AS resueltos,
 		       COUNT(DISTINCT (a.cuadernillo_id, a.exercise_id)) AS intentados,
-		       COUNT(e.id)                                AS errores
+		       -- Solo los errores de intentos en los que el alumno de verdad
+		       -- escribio algo. nbgrader deja un 'raise NotImplementedError' en
+		       -- cada celda de solucion, y recorrer el cuadernillo con
+		       -- Shift+Enter —que es lo que el material pide— lo dispara junto
+		       -- con el AssertionError de la prueba. Contarlos le decia al
+		       -- alumno 'te equivocaste 12 veces' por haber abierto el
+		       -- cuadernillo.
+		       COUNT(e.id) FILTER (
+		           WHERE NOT EXISTS (SELECT 1 FROM attempt_errors s
+		                              WHERE s.attempt_id = a.id
+		                                AND s.error_type = 'NotImplementedError')
+		       )                                          AS errores
 		FROM exercise_attempts a
 		JOIN ejercicio_competencias ec
 		       ON ec.cuadernillo_id = a.cuadernillo_id
