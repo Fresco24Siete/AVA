@@ -23,9 +23,15 @@ import json
 import logging
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from tornado import web
+
+try:
+    from jupyter_server.base.handlers import JupyterHandler as _BaseHandler
+except ImportError:                                   # notebook 6 clásico
+    from notebook.base.handlers import IPythonHandler as _BaseHandler
 
 log = logging.getLogger(__name__)
 
@@ -34,7 +40,25 @@ BASE = os.environ.get("METRICS_API_BASE",
 TOKEN = os.environ.get("STUDENT_METRICS_TOKEN", "")
 CARPETA = os.environ.get("PANEL_CARPETA", "/home/jovyan/work")
 NOMBRE = os.environ.get("ALUMNO_NOMBRE", "")
-ACTIVO = os.environ.get("CUADERNILLO_CODIGO", "")
+CURSO = os.environ.get("CURSO_ID", "curso_default")
+MANIFEST = (os.environ.get("PUBLICADOS_BASE", "/srv/publicados")
+            + f"/{CURSO}/manifest.json")
+
+
+def _activo():
+    """Cuál es el cuadernillo de esta semana, AHORA.
+
+    Antes se leía de CUADERNILLO_CODIGO, que el entrypoint fija una sola vez al
+    arrancar el contenedor. Publicar con sesiones abiertas no le llegaba a nadie
+    hasta el siguiente arranque: el alumno seguía viendo la semana anterior
+    marcada, y con el culler en una hora eso es toda una clase. El manifest está
+    montado y leerlo cuesta nada.
+    """
+    try:
+        with open(MANIFEST, encoding="utf-8") as f:
+            return str(json.load(f).get("cuadernillo_id", ""))
+    except Exception:
+        return os.environ.get("CUADERNILLO_CODIGO", "")
 
 AZUL, TINTA, GRIS, BORDE = "#2a78d6", "#10294d", "#52514e", "#dfe3e8"
 VERDE, AMBAR = "#0f8a4a", "#b57200"
@@ -81,13 +105,27 @@ def _barra(hechos, total):
             f'<div class="pie">{hechos} de {total} ejercicios</div>')
 
 
-def _html(datos, aviso):
+def _enlace(archivo, base_url):
+    """URL para abrir un cuadernillo.
+
+    El panel enlazaba el nombre del archivo a secas. Como el panel se sirve en
+    /user/<alumno>/panel, el navegador lo resolvía a /user/<alumno>/semana_01.ipynb,
+    que no es una ruta de Jupyter: 404. Y el panel es la página de entrada del
+    alumno, sin otra navegación, así que ninguno podía abrir ningún cuadernillo.
+    La ruta buena es la del notebook clásico, /user/<alumno>/notebooks/<archivo>.
+    """
+    return "/".join([base_url.rstrip("/"), "notebooks",
+                     urllib.parse.quote(archivo)])
+
+
+def _html(datos, aviso, base_url="/"):
     por_id = {c["cuadernillo_id"]: c for c in (datos or {}).get("cuadernillos", [])}
+    activo = _activo()
     filas = []
     for nb in _cuadernillos_en_disco():
         d = por_id.get(nb["id"], {})
         marca = ('<span class="marca">Esta semana</span>'
-                 if nb["id"] == ACTIVO else "")
+                 if nb["id"] == activo else "")
         # Solo la nota oficial. Una provisional no coincide con la de nbgrader.
         if d.get("origen_nota") == "nbgrader" and d.get("puntos_maximos"):
             nota = (f'<b>{d["puntos_obtenidos"]:g}</b> / {d["puntos_maximos"]:g}')
@@ -100,7 +138,7 @@ def _html(datos, aviso):
         pendiente = (f'<div class="aviso-fila">Dejaste {abandonos} ejercicio(s) '
                      f'a medias</div>' if abandonos else "")
         filas.append(
-            f'<tr><td><a href="{html.escape(nb["archivo"])}">'
+            f'<tr><td><a href="{html.escape(_enlace(nb["archivo"], base_url))}">'
             f'{html.escape(_titulo(nb["id"]))}</a> {marca}{pendiente}</td>'
             f'<td>{progreso}</td><td class="nota">{nota}</td></tr>')
 
@@ -164,11 +202,26 @@ conserva siempre.</p>
 </div></body></html>"""
 
 
-class PanelHandler(web.RequestHandler):
+class PanelHandler(_BaseHandler):
+    # Heredaba de tornado.web.RequestHandler, que no sabe nada de sesiones: un
+    # GET a /user/<correo>/panel devolvia 200 sin credenciales, con el nombre del
+    # alumno, sus cuadernillos, su progreso y su nota. Y el usuario es el correo
+    # institucional, asi que adivinar la URL de un companero era trivial.
+    @web.authenticated
     def get(self):
+        # Entregar antes de pintar: si el docente publico despues de que este
+        # contenedor arrancara, el cuadernillo nuevo aparece aqui sin tener que
+        # reiniciar la sesion. No pisa nada, solo copia lo que falta.
+        try:
+            import entregar_cuadernillo
+            entregar_cuadernillo.main()
+        except Exception as err:
+            self.log.warning("[panel] no se pudo revisar si hay cuadernillos "
+                             "nuevos: %s", err)
         datos, aviso = _progreso()
         self.set_header("Content-Type", "text/html; charset=utf-8")
-        self.finish(_html(datos, aviso))
+        self.finish(_html(datos, aviso,
+                          self.settings.get("base_url", "/")))
 
 
 def load_jupyter_server_extension(nbapp):

@@ -30,14 +30,19 @@ MANIFEST = f"{PUB_DIR}/manifest.json"
 
 
 def _nb_markdown(titulo, cuerpo):
-    """Devuelve un .ipynb mínimo válido con un solo cell markdown."""
+    """Devuelve un .ipynb mínimo válido con un solo cell markdown.
+
+    Va marcado con `ava_aviso`: es un cartel, no un cuadernillo, y hay que poder
+    distinguirlo más tarde de algo que el alumno haya escrito (ver la migración
+    en main()).
+    """
     return {
         "cells": [{
             "cell_type": "markdown",
             "metadata": {},
             "source": [f"# {titulo}\n", "\n", cuerpo],
         }],
-        "metadata": {},
+        "metadata": {"ava_aviso": True},
         "nbformat": 4,
         "nbformat_minor": 5,
     }
@@ -141,6 +146,17 @@ def _escribir_en(ruta, nb):
         json.dump(nb, f, ensure_ascii=False)
 
 
+def _es_aviso(ruta):
+    """True si el .ipynb de esa ruta es un cartel puesto por este script."""
+    try:
+        with open(ruta, encoding="utf-8") as f:
+            return bool(json.load(f).get("metadata", {}).get("ava_aviso"))
+    except Exception:
+        # Ilegible o no es JSON: se trata como trabajo del alumno, que es el
+        # lado seguro en el que equivocarse.
+        return False
+
+
 def _disponible(entrada, ahora):
     """True si el cuadernillo esta dentro de su ventana de tiempo."""
     abre = _parse(entrada.get("abre"))
@@ -181,9 +197,18 @@ def main():
     # Migracion del modelo viejo: el trabajo del alumno estaba en
     # 'cuadernillo.ipynb' a secas. Se renombra al nombre nuevo para que no lo
     # pierda al pasar al indice.
+    #
+    # Solo si de verdad hay trabajo dentro. Antes se movia cualquier cosa que
+    # estuviera en esa ruta, y ahi es donde se escribe el cartel de "aun no hay
+    # cuadernillo" cuando el alumno entra antes de la primera publicacion. El
+    # cartel acababa llamandose semana_02.ipynb, y como el nombre ya existia el
+    # cuadernillo de verdad no se copiaba nunca: el alumno se quedaba con el
+    # cartel para siempre, y sin acceso al servidor no habia forma de arreglarlo.
+    # Le pasaria a toda la cohorte que entre el primer dia antes de publicar.
     destino_activo = os.path.join(carpeta, f"{activo}.ipynb") if activo else None
     if (destino_activo and os.path.exists(DESTINO)
-            and not os.path.exists(destino_activo)):
+            and not os.path.exists(destino_activo)
+            and not _es_aviso(DESTINO)):
         try:
             shutil.move(DESTINO, destino_activo)
         except Exception:
