@@ -52,7 +52,9 @@ type ResumenCuadernilloCurso struct {
 }
 
 func (r *PanelDocenteRepository) PorCuadernillo(curso string) ([]ResumenCuadernilloCurso, error) {
-	var salida []ResumenCuadernilloCurso
+	// Nunca nil: un slice vacío se serializa como null y obliga a quien lo
+	// consume a distinguir «no hay» de «falló».
+	salida := []ResumenCuadernilloCurso{}
 	err := r.db.Select(&salida, intentosReales+`
 		SELECT cuadernillo_id,
 		       COUNT(DISTINCT student_id)                    AS alumnos,
@@ -78,7 +80,9 @@ type DificultadEjercicio struct {
 // «Atascado» es quien escribió una respuesta, falló, y nunca llegó a pasar. No
 // entra quien solo ejecutó la celda vacía, ni quien acabó resolviéndolo.
 func (r *PanelDocenteRepository) PorEjercicio(curso string) ([]DificultadEjercicio, error) {
-	var salida []DificultadEjercicio
+	// Nunca nil: un slice vacío se serializa como null y obliga a quien lo
+	// consume a distinguir «no hay» de «falló».
+	salida := []DificultadEjercicio{}
 	err := r.db.Select(&salida, intentosReales+`,
 	    porAlumno AS (
 	        SELECT cuadernillo_id, exercise_id, student_id,
@@ -112,7 +116,9 @@ type CompetenciaCurso struct {
 // que aún no se ha diseñado ningún ejercicio tiene que aparecer en cero, no
 // desaparecer. Que I7 no tenga evidencia es justo lo que el docente necesita ver.
 func (r *PanelDocenteRepository) PorCompetencia(curso string) ([]CompetenciaCurso, error) {
-	var salida []CompetenciaCurso
+	// Nunca nil: un slice vacío se serializa como null y obliga a quien lo
+	// consume a distinguir «no hay» de «falló».
+	salida := []CompetenciaCurso{}
 	err := r.db.Select(&salida, `
 		SELECT c.id AS competencia_id, c.descripcion,
 		       COUNT(DISTINCT (ec.cuadernillo_id, ec.exercise_id))   AS ejercicios,
@@ -146,7 +152,9 @@ type Malentendido struct {
 // diez cosas distintas, y el mensaje de una prueba de nbgrader es la frase que
 // el docente escribió para explicar qué se esperaba.
 func (r *PanelDocenteRepository) Malentendidos(curso string) ([]Malentendido, error) {
-	var salida []Malentendido
+	// Nunca nil: un slice vacío se serializa como null y obliga a quien lo
+	// consume a distinguir «no hay» de «falló».
+	salida := []Malentendido{}
 	err := r.db.Select(&salida, `
 		SELECT a.cuadernillo_id, a.exercise_id, e.error_type,
 		       left(e.error_message, 180)      AS mensaje,
@@ -175,7 +183,9 @@ type AlumnoEnRiesgo struct {
 // entrado no aparece aquí, porque de ese no hay nada que medir— sino de gente
 // que está peleando sola.
 func (r *PanelDocenteRepository) EnRiesgo(curso string) ([]AlumnoEnRiesgo, error) {
-	var salida []AlumnoEnRiesgo
+	// Nunca nil: un slice vacío se serializa como null y obliga a quien lo
+	// consume a distinguir «no hay» de «falló».
+	salida := []AlumnoEnRiesgo{}
 	err := r.db.Select(&salida, intentosReales+`,
 	    porAlumno AS (
 	        SELECT student_id, cuadernillo_id, exercise_id,

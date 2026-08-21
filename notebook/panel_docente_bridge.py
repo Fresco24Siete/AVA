@@ -32,6 +32,7 @@ import sqlite3
 import time
 
 from tornado import web
+from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 try:
     from jupyter_server.base.handlers import JupyterHandler as _BaseHandler
@@ -44,6 +45,11 @@ CURSO = os.environ.get("CURSO_ID", "curso_default")
 RAIZ = os.environ.get("NBGRADER_BASE", "/srv/nbgrader") + f"/{CURSO}"
 MANIFEST = (os.environ.get("PUBLICADOS_BASE", "/srv/publicados")
             + f"/{CURSO}/manifest.json")
+
+API = (os.environ.get("METRICS_API_BASE")
+       or os.environ.get("STUDENT_METRICS_API_BASE")
+       or "http://api_go:8080").rstrip("/")
+TOKEN_MAESTRO = os.environ.get("METRICS_API_TOKEN", "")
 
 AZUL, TINTA, GRIS, BORDE = "#2a78d6", "#10294d", "#52514e", "#dfe3e8"
 VERDE, AMBAR, ROJO = "#0f8a4a", "#b57200", "#c8392b"
@@ -161,6 +167,33 @@ def _libro():
     finally:
         con.close()
     return tareas, notas
+
+
+async def _analitica():
+    """Lo agregado del curso. Devuelve (datos, aviso).
+
+    Se pide con el cliente asincrono y cuatro segundos de tope. El sincrono
+    bloquearia el IOLoop del servidor del docente, que es el mismo proceso que
+    corre Autograde: una consulta lenta congelaria la calificacion.
+
+    Si no responde, el panel se dibuja igual sin estas secciones. Lo de disco
+    —entregas y estado del ciclo— es lo que el docente necesita para trabajar
+    hoy, y no puede depender de que la analitica este viva.
+    """
+    if not TOKEN_MAESTRO:
+        return None, ("Esta parte no está configurada en el servidor: falta la "
+                      "credencial con la que el panel consulta la analítica.")
+    try:
+        resp = await AsyncHTTPClient().fetch(HTTPRequest(
+            f"{API}/internal/curso/{CURSO}/panel",
+            headers={"Authorization": f"Bearer {TOKEN_MAESTRO}"},
+            request_timeout=4, connect_timeout=2))
+        return json.loads(resp.body.decode("utf-8")), None
+    except Exception as err:
+        log.warning("[panel-docente] no se pudo consultar la analítica: %s", err)
+        return None, ("No se pudo consultar la analítica del curso. Lo de "
+                      "arriba —entregas y estado de cada cuadernillo— sale del "
+                      "disco y está al día.")
 
 
 def _ciclo():
@@ -339,12 +372,131 @@ def _paso(hecho):
             else '<span class="tenue">no</span>')
 
 
-def _html_panel(base_url):
+
+def _seccion_atascos(datos):
+    ejercicios = [e for e in (datos or {}).get("ejercicios", [])
+                  if e.get("alumnos_atascados")]
+    if not ejercicios:
+        return ('<div class="caja vacia">Nadie está atascado en ningún '
+                'ejercicio ahora mismo. <span class="tenue">Atascado es quien '
+                'escribió una respuesta, no le pasó la prueba, y no ha vuelto a '
+                'conseguirlo — no quien solo ejecutó la celda vacía.</span></div>')
+    filas = ""
+    for e in ejercicios[:10]:
+        filas += (
+            f'<tr><td>{_nombre(e["cuadernillo_id"])}</td>'
+            f'<td class="mono">{html.escape(e["exercise_id"])}</td>'
+            f'<td class="num">{e["alumnos_que_lo_intentaron"]}</td>'
+            f'<td class="num">{e["alumnos_que_lo_resolvieron"]}</td>'
+            f'<td class="num"><b class="mal">{e["alumnos_atascados"]}</b></td>'
+            f'<td class="num">{e["alumnos_a_medias"] or "—"}</td></tr>')
+    return ('<div class="caja"><table>'
+            '<tr><th>Cuadernillo</th><th>Ejercicio</th>'
+            '<th class="num">Lo intentaron</th><th class="num">Lo resolvieron</th>'
+            '<th class="num">Atascados</th><th class="num">A medias</th></tr>'
+            f'{filas}</table></div>')
+
+
+def _seccion_malentendidos(datos):
+    lista = [m for m in (datos or {}).get("malentendidos", [])
+             if m.get("alumnos", 0) >= 1]
+    if not lista:
+        return ('<div class="caja vacia">Todavía no hay ningún error que se '
+                'repita entre varias personas.</div>')
+    filas = ""
+    for m in lista[:8]:
+        filas += (
+            f'<tr><td class="num"><b>{m["alumnos"]}</b></td>'
+            f'<td>{_nombre(m["cuadernillo_id"])}</td>'
+            f'<td class="mono">{html.escape(m["exercise_id"])}</td>'
+            f'<td><b>{html.escape(m["error_type"])}</b>'
+            f'<div class="tenue mensaje">{html.escape(m["mensaje"])}</div></td></tr>')
+    return ('<div class="caja"><table>'
+            '<tr><th class="num">Personas</th><th>Cuadernillo</th>'
+            '<th>Ejercicio</th><th>Qué les sale</th></tr>'
+            f'{filas}</table></div>')
+
+
+def _seccion_competencias(datos):
+    comps = (datos or {}).get("competencias", [])
+    if not comps:
+        return ('<div class="caja vacia">Sin datos de competencias.</div>')
+    tarjetas = ""
+    for c in comps:
+        disenados = c.get("ejercicios_disenados", 0)
+        alumnos = c.get("alumnos_con_actividad", 0)
+        resolvieron = c.get("alumnos_que_resolvieron_alguno", 0)
+        if not disenados:
+            estado = ('<span class="tenue">Ningún ejercicio la evalúa todavía'
+                      '</span>')
+            barra = ""
+        elif not alumnos:
+            estado = f'<span class="tenue">Nadie la ha trabajado aún</span>'
+            barra = ""
+        else:
+            pct = int(100 * resolvieron / alumnos)
+            color = VERDE if pct >= 70 else (AMBAR if pct >= 40 else ROJO)
+            estado = (f'<b>{resolvieron}</b> de {alumnos} '
+                      f'{"estudiante" if alumnos == 1 else "estudiantes"} '
+                      f'resolvió alguno')
+            barra = (f'<div class="barra"><div class="relleno" '
+                     f'style="width:{pct}%;background:{color}"></div></div>')
+        tarjetas += (
+            f'<div class="comp"><div class="comp-id">{html.escape(c["competencia_id"])}'
+            f' · {disenados} ejercicio{"" if disenados == 1 else "s"}</div>'
+            f'<div class="comp-e">{estado}</div>{barra}'
+            f'<div class="comp-d">{html.escape(c["descripcion"])}</div></div>')
+    return f'<div class="comps">{tarjetas}</div>'
+
+
+def _seccion_riesgo(datos):
+    lista = (datos or {}).get("en_riesgo", [])
+    if not lista:
+        return ('<div class="caja vacia">Nadie aparece peleando en vano. '
+                '<span class="tenue">Aquí salen quienes escribieron respuestas '
+                'que no les pasan; quien no ha entrado no aparece, porque de esa '
+                'persona no hay nada que medir.</span></div>')
+    filas = ""
+    for a in lista[:8]:
+        horas = a.get("horas_desde_ultima_actividad") or 0
+        cuando = (f'hace {int(horas)} h' if horas < 48
+                  else f'hace {int(horas / 24)} días')
+        filas += (f'<tr><td class="mono">{html.escape(a["student_id"])}</td>'
+                  f'<td class="num">{a["ejercicios_resueltos"]}</td>'
+                  f'<td class="num"><b class="mal">{a["ejercicios_atascados"]}</b></td>'
+                  f'<td class="num">{a["ejercicios_a_medias"] or "—"}</td>'
+                  f'<td class="tenue">{cuando}</td></tr>')
+    return ('<div class="caja"><table>'
+            '<tr><th>Estudiante</th><th class="num">Resueltos</th>'
+            '<th class="num">Atascados</th><th class="num">A medias</th>'
+            '<th>Última vez</th></tr>'
+            f'{filas}</table></div>')
+
+
+def _seccion_salud(datos):
+    s = (datos or {}).get("salud") or {}
+    if not s:
+        return ""
+    sin = s.get("ejercicios_sin_competencia", 0)
+    aviso = ""
+    if sin:
+        aviso = (f' · <span class="pend">{sin} ejercicio(s) sin competencia '
+                 f'asignada</span>')
+    return (f'<p class="sub2">{s.get("intentos_registrados", 0)} intentos '
+            f'registrados de {s.get("alumnos_con_telemetria", 0)} '
+            f'estudiante(s) · {s.get("relaciones_competencia", 0)} ejercicios '
+            f'etiquetados con su competencia{aviso}</p>')
+
+
+def _html_panel(base_url, datos=None, aviso=None):
     activo, ciclo = _ciclo()
     entregas = _entregas()
     _, notas = _libro()
     ultima = max((e["cuando"] for e in entregas), default=0)
     raiz = base_url.rstrip("/")
+
+    banda_analitica = (f'<div class="banda">{html.escape(aviso)}</div>'
+                       if aviso else "")
 
     cabecera = (
         f'<h1>Tu curso</h1>'
@@ -387,6 +539,15 @@ def _html_panel(base_url):
    border-radius:3px;margin-left:6px;white-space:nowrap}}
  .banda{{background:#fdf9ef;border-left:3px solid {AMBAR};padding:12px 16px;
    border-radius:4px;margin-bottom:14px;font-size:14.5px}}
+ .mensaje{{font-size:13px;margin-top:3px;max-width:52ch}}
+ .comps{{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(270px,1fr))}}
+ .comp{{background:#fff;border:1px solid {BORDE};border-radius:8px;padding:14px 16px}}
+ .comp-id{{font-size:12px;color:{GRIS};text-transform:uppercase;
+   letter-spacing:.04em;margin-bottom:6px}}
+ .comp-e{{font-size:15px;color:{TINTA};margin-bottom:8px}}
+ .comp-d{{font-size:13px;color:{GRIS};margin-top:9px;line-height:1.45}}
+ .barra{{height:7px;background:#e9ecef;border-radius:4px;overflow:hidden}}
+ .relleno{{height:100%;border-radius:4px}}
 </style></head><body><div class="marco">
 {cabecera}
 
@@ -399,14 +560,38 @@ def _html_panel(base_url):
 y entrega) → Calificar → subir notas. La última columna dice cuál es el
 siguiente paso de cada uno.</p>
 {_seccion_ciclo(ciclo)}
+
+{banda_analitica}
+
+<h2>Dónde se atasca el grupo</h2>
+<p class="sub2">Ejercicios donde alguien escribió una respuesta y no le pasa la
+prueba. Ejecutar la celda vacía no cuenta: eso lo hace todo el mundo al recorrer
+el cuadernillo.</p>
+{_seccion_atascos(datos)}
+
+<h2>Lo que se están equivocando igual</h2>
+<p class="sub2">El mismo error en varias personas. Suele ser un tema para
+retomar en clase, no un problema de cada uno.</p>
+{_seccion_malentendidos(datos)}
+
+<h2>Quién está peleando solo</h2>
+<p class="sub2">Estudiantes con ejercicios donde lo intentaron de verdad y no les
+sale.</p>
+{_seccion_riesgo(datos)}
+
+<h2>Cómo va el grupo por competencia</h2>
+{_seccion_salud(datos)}
+{_seccion_competencias(datos)}
 </div></body></html>"""
 
 
 class PanelDocenteHandler(_BaseHandler):
     @web.authenticated
-    def get(self):
+    async def get(self):
+        datos, aviso = await _analitica()
         self.set_header("Content-Type", "text/html; charset=utf-8")
-        self.finish(_html_panel(self.settings.get("base_url", "/")))
+        self.finish(_html_panel(self.settings.get("base_url", "/"),
+                                datos, aviso))
 
 
 def load_jupyter_server_extension(nbapp):
