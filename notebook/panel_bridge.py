@@ -208,25 +208,27 @@ def _enlace(archivo, base_url):
                      urllib.parse.quote(archivo)])
 
 
-def _boton_entregar(codigo, base_url, xsrf, entregado):
+def _boton_entregar(codigo, entregado):
     """El botón que manda el cuadernillo al docente.
 
-    Va como formulario y no como fetch a propósito: el token que autoriza la
-    entrega vive aquí, en el servidor del alumno, y no baja al navegador. Es la
-    misma razón por la que el progreso se consulta desde aquí.
+    Manda la petición con JavaScript y no como formulario. La primera versión
+    era un formulario con el token xsrf en un campo oculto, y el servidor lo
+    rechazaba con 403: el contenedor del alumno no usa el xsrf de tornado sino
+    el de JupyterHub, que espera el valor de la cookie en la cabecera
+    X-XSRFToken. Es el mismo camino que ya usa custom.js para la telemetría.
+
+    Lo que no cambia es lo importante: la petición va al propio servidor del
+    alumno, y el token que autoriza la entrega ante el backend se queda aquí sin
+    bajar al navegador.
     """
-    accion = html.escape("/".join([base_url.rstrip("/"), "panel", "entregar"]))
     ya = (f'<div class="tenue" style="font-size:13px;margin-top:4px">'
           f'Entregado el {html.escape(entregado)}</div>' if entregado else "")
     etiqueta = "Entregar de nuevo" if entregado else "Entregar"
-    return (f'<form method="POST" action="{accion}" style="margin:0">'
-            f'<input type="hidden" name="_xsrf" value="{html.escape(xsrf)}">'
-            f'<input type="hidden" name="id" value="{html.escape(codigo)}">'
-            f'<button class="entregar" type="submit">{etiqueta}</button>'
-            f'</form>{ya}')
+    return (f'<button class="entregar" data-cuadernillo="{html.escape(codigo)}">'
+            f'{etiqueta}</button>{ya}')
 
 
-def _html(datos, aviso, base_url="/", xsrf="", mensaje=""):
+def _html(datos, aviso, base_url="/", mensaje=""):
     por_id = {c["cuadernillo_id"]: c for c in (datos or {}).get("cuadernillos", [])}
     activo = _activo()
     entregadas = _entregas()
@@ -251,7 +253,7 @@ def _html(datos, aviso, base_url="/", xsrf="", mensaje=""):
             f'{html.escape(_titulo(nb["id"]))}</a> {marca}{pendiente}</td>'
             f'<td>{progreso}</td><td class="nota">{nota}</td>'
             f'<td class="nota">'
-            f'{_boton_entregar(nb["id"], base_url, xsrf, entregadas.get(nb["id"], ""))}'
+            f'{_boton_entregar(nb["id"], entregadas.get(nb["id"], ""))}'
             f'</td></tr>')
 
     if not filas:
@@ -272,6 +274,8 @@ def _html(datos, aviso, base_url="/", xsrf="", mensaje=""):
     bloque_comp = (f'<h2>Cómo vas por competencia</h2><div class="comps">{comps}</div>'
                    if comps else "")
 
+    ruta_panel = "/".join([base_url.rstrip("/"), "panel"])
+    ruta_entregar = ruta_panel + "/entregar"
     banda = (f'<div class="banda">{html.escape(aviso)}</div>' if aviso else "")
     # Resultado de la última entrega. Va arriba del todo: es lo que el alumno
     # está buscando con la mirada justo después de pulsar el botón.
@@ -325,7 +329,40 @@ conserva siempre.</p>
 <td class="nota"><b>Nota</b></td><td class="nota"><b>Entrega</b></td></tr>
 {''.join(filas)}</table>
 {bloque_comp}
-</div></body></html>"""
+</div>
+<script>
+(function () {{
+  // JupyterHub valida el xsrf por cabecera, no por campo de formulario.
+  function xsrf() {{
+    var m = document.cookie.match(/\\b_xsrf=([^;]+)/);
+    return m ? decodeURIComponent(m[1]) : '';
+  }}
+  document.querySelectorAll('button.entregar').forEach(function (b) {{
+    b.addEventListener('click', function () {{
+      var id = b.getAttribute('data-cuadernillo');
+      b.disabled = true;
+      var antes = b.textContent;
+      b.textContent = 'Entregando…';
+      fetch('{ruta_entregar}', {{
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {{'Content-Type': 'application/json', 'X-XSRFToken': xsrf()}},
+        body: JSON.stringify({{id: id}})
+      }}).then(function (r) {{ return r.json().catch(function () {{ return {{}}; }}); }})
+        .then(function (d) {{
+          location.href = '{ruta_panel}?m=' + encodeURIComponent(d.mensaje ||
+            (d.ok ? 'ok:Entregado.' : 'No se pudo entregar.'));
+        }})
+        .catch(function () {{
+          b.disabled = false; b.textContent = antes;
+          location.href = '{ruta_panel}?m=' +
+            encodeURIComponent('No se pudo entregar ahora mismo.');
+        }});
+    }});
+  }});
+}})();
+</script>
+</body></html>"""
 
 
 class PanelHandler(_BaseHandler):
@@ -348,37 +385,41 @@ class PanelHandler(_BaseHandler):
         self.set_header("Content-Type", "text/html; charset=utf-8")
         self.finish(_html(datos, aviso,
                           self.settings.get("base_url", "/"),
-                          self.xsrf_token.decode("utf-8"),
                           self.get_query_argument("m", "")))
 
 
 class EntregarHandler(_BaseHandler):
     """POST /panel/entregar — manda al docente el cuadernillo del alumno.
 
-    Formulario normal, no fetch: así el token de la entrega no baja al
-    navegador. La protección xsrf es la de Jupyter, con el token que el panel
-    incrusta en el formulario.
+    Responde JSON; quien pinta el resultado es el propio panel al recargarse. El
+    token que autoriza la entrega ante el backend no sale de aquí.
     """
     @web.authenticated
     def post(self):
-        codigo = (self.get_body_argument("id", "") or "").strip()
-        disponibles = {c["id"]: c["archivo"] for c in _cuadernillos_en_disco()}
-        if codigo not in disponibles:
-            self.redirect(self._panel("No encontré ese cuadernillo."))
-            return
-        ok, error = _entregar(codigo, disponibles[codigo])
-        if ok:
-            cuando = datetime.now().strftime("%d/%m a las %H:%M")
-            _anotar_entrega(codigo, cuando)
-            self.redirect(self._panel(
-                f"ok:Entregado. Tu profesor ya tiene {_titulo(codigo)}. "
-                f"Puedes seguir trabajando y volver a entregar si lo cambias."))
-        else:
-            self.redirect(self._panel(error))
+        try:
+            codigo = str((json.loads(self.request.body or b"{}") or {}).get("id", ""))
+        except Exception:
+            codigo = ""
+        codigo = codigo.strip()
 
-    def _panel(self, mensaje):
-        base = self.settings.get("base_url", "/").rstrip("/")
-        return f"{base}/panel?m=" + urllib.parse.quote(mensaje)
+        disponibles = {c["id"]: c["archivo"] for c in _cuadernillos_en_disco()}
+        self.set_header("Content-Type", "application/json; charset=utf-8")
+        if codigo not in disponibles:
+            self.finish(json.dumps(
+                {"ok": False, "mensaje": "No encontré ese cuadernillo."}))
+            return
+
+        ok, error = _entregar(codigo, disponibles[codigo])
+        if not ok:
+            self.finish(json.dumps({"ok": False, "mensaje": error}))
+            return
+
+        cuando = datetime.now().strftime("%d/%m a las %H:%M")
+        _anotar_entrega(codigo, cuando)
+        self.finish(json.dumps({"ok": True, "mensaje":
+                                f"ok:Entregado. Tu profesor ya tiene "
+                                f"{_titulo(codigo)}. Puedes seguir trabajando y "
+                                f"volver a entregar si lo cambias."}))
 
 
 def load_jupyter_server_extension(nbapp):
