@@ -131,11 +131,17 @@ def _libro():
         return {}, {}
     tareas, notas = {}, {}
     try:
+        # nbgrader guarda las celdas con herencia de tabla unica: base_cell
+        # tiene el notebook, y grade_cells —en plural— solo el puntaje, atada
+        # por el mismo id. Consultar grade_cell.notebook_id no da cero: da un
+        # error de tabla inexistente que se traga el except de abajo y deja la
+        # columna de puntos vacia sin decir por que.
         for nombre, maximos in con.execute("""
                 SELECT a.name, COALESCE(SUM(gc.max_score), 0)
                   FROM assignment a
-                  LEFT JOIN notebook n  ON n.assignment_id = a.id
-                  LEFT JOIN grade_cell gc ON gc.notebook_id = n.id
+                  LEFT JOIN notebook n    ON n.assignment_id = a.id
+                  LEFT JOIN base_cell b   ON b.notebook_id = n.id
+                  LEFT JOIN grade_cells gc ON gc.id = b.id
                  GROUP BY a.name"""):
             tareas[nombre] = float(maximos or 0)
         for alumno, tarea, obtenidos in con.execute("""
@@ -216,6 +222,21 @@ def _titulo(codigo):
     return codigo
 
 
+def _nombre(codigo):
+    """Título legible + el identificador real debajo.
+
+    'semana_01' y 'semana_1' se leen los dos como «Semana 1», y en el curso
+    conviven: el segundo es la demo vieja. En el panel del alumno eso da igual
+    porque solo ve lo publicado, pero el docente trabaja con carpetas y necesita
+    saber cuál es cuál antes de borrar o generar.
+    """
+    bonito = _titulo(codigo)
+    if bonito == codigo:
+        return f'<b>{html.escape(codigo)}</b>'
+    return (f'<b>{html.escape(bonito)}</b>'
+            f'<div class="mono tenue">{html.escape(codigo)}</div>')
+
+
 def _hace(marca):
     if not marca:
         return "—"
@@ -257,7 +278,7 @@ def _seccion_entregas(entregas, notas):
         else:
             estado = '<span class="pend">Sin calificar</span>'
         filas += (
-            f'<tr><td><b>{html.escape(_titulo(e["tarea"]))}</b></td>'
+            f'<tr><td>{_nombre(e["tarea"])}</td>'
             f'<td class="mono">{html.escape(e["alumno"])}</td>'
             f'<td>{_hace(e["cuando"])}</td>'
             f'<td class="num">{_tamano(e["bytes"])}</td>'
@@ -297,7 +318,7 @@ def _seccion_ciclo(filas):
             ventana = f'abre {html.escape(str(f["abre"])[:16])}'
         puntos = f'{f["puntos"]:g}' if f["puntos"] else '<span class="tenue">—</span>'
         cuerpo += (
-            f'<tr><td><b>{html.escape(_titulo(f["tarea"]))}</b> {marca}</td>'
+            f'<tr><td>{_nombre(f["tarea"])} {marca}</td>'
             f'<td>{_paso(f["generada"])}</td>'
             f'<td>{_paso(f["publicada"])}</td>'
             f'<td class="tenue">{ventana}</td>'
