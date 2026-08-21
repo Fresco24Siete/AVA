@@ -116,8 +116,19 @@ Regla: **nada que cuente para la nota depende del motor.**
 2. Define `construir(motor_comprimido=True)` y devuelve el `Cuadernillo`.
 3. Los diagramas nuevos, a `diagramas/mmd/` y `render.py`.
 4. `build.py semana_03` y revisa que la validación pase.
-5. Añade la carpeta a `notebook_semana/` (la crea `build.py`) y reconstruye la
-   imagen: `docker build -t mi_imagen_jupyterlab:latest ./notebook`.
+5. Añade la carpeta a `notebook_semana/` (la crea `build.py`) y reconstruye las
+   **dos** imágenes, en este orden:
+
+   ```
+   docker build -t mi_imagen_jupyterlab:latest ./notebook
+   docker build -t mi_imagen_jupyterlab_docente:latest -f ./notebook/Dockerfile.docente ./notebook
+   ```
+
+   Son dos porque las plantillas llevan las soluciones dentro y solo pueden
+   viajar en la del docente: el kernel del alumno corre como el mismo usuario
+   que las posee, así que si estuvieran en su imagen podría leerlas con un
+   `open()` desde una celda. La del docente se construye encima de la del
+   alumno, de ahí el orden.
 
 ### Al escribir contenido
 

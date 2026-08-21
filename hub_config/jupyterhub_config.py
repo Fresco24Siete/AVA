@@ -13,7 +13,9 @@ from ltiauthenticator.lti11.auth import LTI11Authenticator
 c = get_config()
 
 c.JupyterHub.spawner_class = 'dockerspawner.DockerSpawner'
-c.DockerSpawner.image = 'mi_imagen_jupyterlab:latest'
+IMAGEN_ALUMNO = os.environ.get('IMAGEN_ALUMNO', 'mi_imagen_jupyterlab:latest')
+IMAGEN_DOCENTE = os.environ.get('IMAGEN_DOCENTE', 'mi_imagen_jupyterlab_docente:latest')
+c.DockerSpawner.image = IMAGEN_ALUMNO
 
 network_name = os.environ.get('DOCKER_NETWORK_NAME', 'bridge')
 c.DockerSpawner.use_internal_ip = True
@@ -224,6 +226,13 @@ async def auth_state_a_env(spawner, auth_state):
     # DockerSpawner escapa el nombre de usuario al construir el del volumen, así
     # que un correo con @ y puntos no lo rompe.
     volumen_trabajo = {'ava-trabajo-{username}': '/home/jovyan/work'}
+
+    # La imagen tambien depende del rol. Las plantillas de los cuadernillos son
+    # la version de origen —con soluciones y pruebas ocultas— y mientras vivieron
+    # en la imagen comun, un alumno podia leerlas desde una celda: su kernel
+    # corre como el mismo usuario que las posee. Ahora solo viajan en la imagen
+    # del docente (notebook/Dockerfile.docente).
+    spawner.image = (IMAGEN_DOCENTE if es_instructor else IMAGEN_ALUMNO)
 
     if es_instructor:
         spawner.volumes = dict(volumen_trabajo, **{

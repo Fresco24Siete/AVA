@@ -102,13 +102,18 @@ RUN chmod +x /usr/local/bin/entrypoint.sh \
              /usr/local/bin/borrar-cuadernillo \
              /usr/local/bin/registrar-notas
 
-# Plantillas de cuadernillos: van a /opt/plantillas, NO al work/ del usuario.
-# El instructor las usa para sembrar source/ en nbgrader; el alumno NO debe
-# tenerlas en su workspace (recibe solo el cuadernillo activo entregado
-# dinámicamente en work/cuadernillo.ipynb).
-COPY --chown=jovyan:jovyan notebook_semana/ /opt/plantillas/
-# El mapeo ejercicio -> competencias, junto a las plantillas que lo generaron.
-COPY --chown=jovyan:jovyan cuadernillos/competencias.json /opt/plantillas/competencias.json
+# Las plantillas de cuadernillos NO van en esta imagen: ver Dockerfile.docente.
+#
+# Estaban aquí, en /opt/plantillas, con el argumento de que el alumno no las
+# tiene en su carpeta de trabajo. Pero su kernel corre como jovyan, el mismo
+# usuario que las posee, así que un open('/opt/plantillas/semana_01/cuadernillo.ipynb')
+# desde una celda le devolvía el cuadernillo de origen entero: las soluciones y
+# las pruebas ocultas de todas las semanas publicadas. Que no aparezcan en el
+# explorador de archivos no las esconde del código que él mismo ejecuta.
+#
+# Tampoco basta con borrarlas con RUN rm: la capa anterior sigue en la imagen y
+# se puede extraer. Tienen que no entrar nunca. Por eso el docente arranca desde
+# otra imagen, construida encima de esta, que sí las trae.
 
 # Crear /srv/nbgrader y /srv/publicados en la imagen con dueño jovyan: al montar
 # volúmenes nombrados vacíos sobre estas rutas, Docker los inicializa copiando

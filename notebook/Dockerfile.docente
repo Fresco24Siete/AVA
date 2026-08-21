@@ -1,0 +1,25 @@
+# Imagen del DOCENTE. Es la del alumno más lo que solo él puede ver.
+#
+# Existe por una razón concreta: las plantillas de los cuadernillos son la
+# versión de origen, con las soluciones y las pruebas ocultas dentro. Mientras
+# vivieron en la imagen común, cualquier alumno podía leerlas desde una celda de
+# código —su kernel corre como el mismo usuario que las posee— por mucho que no
+# aparecieran en su explorador de archivos.
+#
+# Separarlas en otra imagen es lo único que las saca de su alcance de verdad:
+# borrarlas con RUN rm dejaría la capa anterior dentro de la imagen, extraíble.
+#
+# El Hub elige una u otra según el rol que venga de LTI (ver auth_state_a_env en
+# hub_config/jupyterhub_config.py).
+ARG IMAGEN_BASE=mi_imagen_jupyterlab:latest
+FROM ${IMAGEN_BASE}
+
+USER root
+
+# Plantillas de cuadernillos: van a /opt/plantillas, NO al work/ del usuario.
+# El instructor las usa para sembrar source/ en nbgrader.
+COPY --chown=jovyan:jovyan notebook_semana/ /opt/plantillas/
+# El mapeo ejercicio -> competencias, junto a las plantillas que lo generaron.
+COPY --chown=jovyan:jovyan cuadernillos/competencias.json /opt/plantillas/competencias.json
+
+USER jovyan
