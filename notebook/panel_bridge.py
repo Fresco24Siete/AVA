@@ -133,6 +133,35 @@ def _anotar_entrega(codigo, cuando):
         log.warning("[panel] no se pudo anotar la entrega: %s", err)
 
 
+def _nombre_en_nbgrader(codigo):
+    """Con qué nombre tiene que archivarse la entrega de este cuadernillo.
+
+    nbgrader no identifica el notebook por la tarea sino por su nombre de
+    archivo: al calificar compara los de submitted/ con los que generó desde
+    source/, y si no coinciden aborta con «No notebooks found, did you forget to
+    run generate_assignment?», que no dice nada de lo que pasa de verdad.
+
+    En la carpeta del alumno el archivo se llama semana_02.ipynb, porque ahí el
+    nombre tiene que decirle a él de qué semana es. El de nbgrader es el del
+    manifest, que sale de source/: cuadernillo.ipynb.
+    """
+    try:
+        with open(MANIFEST, encoding="utf-8") as f:
+            m = json.load(f)
+        for entrada in m.get("cuadernillos") or []:
+            if str(entrada.get("id", "")) == codigo:
+                nombre = str(entrada.get("notebook", "")).strip()
+                if nombre.endswith(".ipynb"):
+                    return nombre
+        if str(m.get("cuadernillo_id", "")) == codigo:
+            nombre = str(m.get("notebook", "")).strip()
+            if nombre.endswith(".ipynb"):
+                return nombre
+    except Exception as err:
+        log.warning("[panel] no pude leer el nombre de nbgrader: %s", err)
+    return f"{codigo}.ipynb"
+
+
 def _entregar(codigo, archivo):
     """Manda el cuadernillo del alumno al backend. Devuelve (ok, mensaje)."""
     if not TOKEN:
@@ -146,7 +175,8 @@ def _entregar(codigo, archivo):
         log.warning("[panel] no se pudo leer %s: %s", ruta, err)
         return False, "No pude leer tu cuadernillo. ¿Lo guardaste?"
 
-    cuerpo = json.dumps({"cuadernillo_id": codigo, "archivo": archivo,
+    cuerpo = json.dumps({"cuadernillo_id": codigo,
+                         "archivo": _nombre_en_nbgrader(codigo),
                          "notebook": notebook}).encode("utf-8")
     peticion = urllib.request.Request(
         BASE.rstrip("/") + "/api/entregas", data=cuerpo, method="POST",
