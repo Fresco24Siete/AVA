@@ -53,8 +53,20 @@ func (r *ProgresoRepository) PorCuadernillo(estudiante, curso string) ([]Resumen
 		           WHERE a.validation_result = 'passed')          AS ejercicios_ok,
 		       COUNT(DISTINCT a.exercise_id)                      AS ejercicios_vistos,
 		       COUNT(a.id)                                        AS intentos,
-		       COUNT(a.id) FILTER (
-		           WHERE a.validation_result = 'sin_validar')     AS abandonos,
+		       -- Ejercicios que quedaron a medias DE VERDAD: se contaban los
+		       -- eventos 'sin_validar', asi que recargar la pagina tres veces
+		       -- sumaba tres, y el aviso no se apagaba aunque el alumno lo
+		       -- resolviera despues. Ahora es el numero de ejercicios distintos
+		       -- que quedaron sin validar y que nunca llegaron a pasar.
+		       COUNT(DISTINCT a.exercise_id) FILTER (
+		           WHERE a.validation_result = 'sin_validar'
+		             AND NOT EXISTS (
+		                 SELECT 1 FROM exercise_attempts p
+		                  WHERE p.student_id     = a.student_id
+		                    AND p.course_id      = a.course_id
+		                    AND p.cuadernillo_id = a.cuadernillo_id
+		                    AND p.exercise_id    = a.exercise_id
+		                    AND p.validation_result = 'passed'))    AS abandonos,
 		       n.puntos_obtenidos, n.puntos_maximos, n.origen
 		FROM suyos s
 		LEFT JOIN exercise_attempts a
@@ -71,10 +83,16 @@ func (r *ProgresoRepository) PorCuadernillo(estudiante, curso string) ([]Resumen
 func (r *ProgresoRepository) PorCompetencia(estudiante, curso string) ([]ResumenCompetencia, error) {
 	var salida []ResumenCompetencia
 	err := r.db.Select(&salida, `
+		-- El ejercicio se identifica por (cuadernillo, ejercicio), no solo por
+		-- el segundo. Los cuadernillos numeran sus ejercicios desde uno, asi que
+		-- 'ejercicio_1' existe en todas las semanas: contando solo por
+		-- exercise_id, el de la semana 1 y el de la semana 2 se fusionaban en
+		-- uno. El alumno veia menos ejercicios de los que habia hecho, y bastaba
+		-- resolver el de una semana para que la otra contara como resuelta.
 		SELECT ec.competencia_id, c.descripcion,
-		       COUNT(DISTINCT a.exercise_id) FILTER (
+		       COUNT(DISTINCT (a.cuadernillo_id, a.exercise_id)) FILTER (
 		           WHERE a.validation_result = 'passed')  AS resueltos,
-		       COUNT(DISTINCT a.exercise_id)              AS intentados,
+		       COUNT(DISTINCT (a.cuadernillo_id, a.exercise_id)) AS intentados,
 		       COUNT(e.id)                                AS errores
 		FROM exercise_attempts a
 		JOIN ejercicio_competencias ec

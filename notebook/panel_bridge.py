@@ -278,17 +278,38 @@ def _html(datos, aviso, base_url="/"):
 
     comps = ""
     for c in (datos or {}).get("competencias", []):
-        total = c["ejercicios_intentados"] or 1
-        pct = int(100 * c["ejercicios_resueltos"] / total)
+        intentados = c["ejercicios_intentados"] or 0
+        resueltos = c["ejercicios_resueltos"] or 0
+        errores = c["errores"] or 0
+        pct = int(100 * resueltos / intentados) if intentados else 0
         color = VERDE if pct >= 70 else (AMBAR if pct >= 40 else "#c8392b")
+
+        # El titular es el numero, no la formulacion del microcurriculo: el
+        # alumno esta mirando como va, no leyendo el plan de estudios. La
+        # formulacion se queda debajo, que es la que le dice de que va.
+        ej = "ejercicio" if intentados == 1 else "ejercicios"
+        titular = f'{resueltos} de {intentados} {ej}'
+
+        if resueltos == intentados and intentados:
+            pie = "Los resolviste todos."
+        elif errores:
+            veces = "vez" if errores == 1 else "veces"
+            pie = f'Te equivocaste {errores} {veces} por el camino.'
+        else:
+            pie = "Aún no has acertado ninguno."
+
         comps += (
-            f'<div class="comp"><div class="comp-t">{html.escape(c["descripcion"])}</div>'
+            f'<div class="comp">'
+            f'<div class="comp-n">{titular}</div>'
             f'<div class="barra"><div class="relleno" style="width:{pct}%;'
             f'background:{color}"></div></div>'
-            f'<div class="pie">{c["ejercicios_resueltos"]} de '
-            f'{c["ejercicios_intentados"]} · {c["errores"]} error(es)</div></div>')
-    bloque_comp = (f'<h2>Cómo vas por competencia</h2><div class="comps">{comps}</div>'
-                   if comps else "")
+            f'<div class="comp-t">{html.escape(c["descripcion"])}</div>'
+            f'<div class="pie">{pie}</div></div>')
+
+    bloque_comp = (f'<h2>Qué has aprendido</h2>'
+                   f'<p class="sub2">Cada ejercicio del curso practica una o varias '
+                   f'de estas capacidades. Esto es lo que llevas de cada una.</p>'
+                   f'<div class="comps">{comps}</div>' if comps else "")
 
     banda = (f'<div class="banda">{html.escape(aviso)}</div>' if aviso else "")
     saludo = f", {html.escape(NOMBRE.split(' ')[0])}" if NOMBRE else ""
@@ -327,9 +348,11 @@ def _html(datos, aviso, base_url="/"):
  .relleno{{height:100%;background:{AZUL};border-radius:4px}}
  .pie{{font-size:12.5px;color:{GRIS};margin-top:4px}}
  .aviso-fila{{font-size:13px;color:{AMBAR};margin-top:3px}}
- .comps{{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}}
+ .comps{{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}}
+ .sub2{{color:{GRIS};font-size:14.5px;margin:-6px 0 14px}}
  .comp{{background:#fff;border:1px solid {BORDE};border-radius:6px;padding:13px 15px}}
- .comp-t{{font-size:13.5px;color:{TINTA};margin-bottom:8px;line-height:1.4}}
+ .comp-n{{font-size:19px;font-weight:650;color:{TINTA};margin-bottom:9px}}
+ .comp-t{{font-size:13px;color:{GRIS};margin-top:9px;line-height:1.45}}
  .banda{{background:#fdf9ef;border-left:3px solid {AMBAR};padding:11px 15px;
    border-radius:4px;margin-bottom:20px;font-size:14.5px}}
  .hecho{{background:#f0f9f4;border-left:3px solid {VERDE};padding:11px 15px;
