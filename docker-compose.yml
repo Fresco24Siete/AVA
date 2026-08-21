@@ -115,7 +115,11 @@ services:
       timeout: 5s
       retries: 5
     volumes:
-      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      # El esquema v2, no el v1: es el que trae competencias, notas y el CHECK
+      # que acepta 'sin_validar'. Se aplico a mano sobre la base viva, asi que
+      # montar el v1 aqui significaba que recrear el volumen dejaba una base sin
+      # la mitad del AVA, fallando en silencio.
+      - ./database/schema_v2.sql:/docker-entrypoint-initdb.d/schema.sql
       - postgres-data:/var/lib/postgresql/data
     networks:
       - backend_db_net

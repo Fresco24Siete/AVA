@@ -150,3 +150,44 @@ JOIN ejercicio_competencias ec
 JOIN competencias c ON c.id = ec.competencia_id
 LEFT JOIN attempt_errors e ON e.attempt_id = a.id
 GROUP BY 1, 2, 3, 4, 5;
+
+-- ---------------------------------------------------------
+-- 8. Vistas que venían del esquema v1
+-- ---------------------------------------------------------
+-- Estaban solo en schema.sql. Mientras el compose montaba el v1 como semilla no
+-- se notaba; al pasar la semilla a este archivo, una base recreada nacía sin
+-- ellas. Este archivo tiene que ser el esquema COMPLETO, no el delta.
+
+CREATE OR REPLACE VIEW exercise_stats AS
+SELECT
+    course_id,
+    cuadernillo_id,
+    exercise_id,
+    COUNT(*)                                                       AS total_attempts,
+    COUNT(DISTINCT student_id)                                     AS students_attempted,
+    COUNT(*) FILTER (WHERE validation_result = 'passed')           AS passed_attempts,
+    COUNT(DISTINCT student_id)
+        FILTER (WHERE validation_result = 'passed')                AS students_passed
+FROM exercise_attempts
+GROUP BY course_id, cuadernillo_id, exercise_id;
+
+CREATE OR REPLACE VIEW exercise_common_errors AS
+SELECT
+    ea.course_id,
+    ea.cuadernillo_id,
+    ea.exercise_id,
+    ae.error_type,
+    COUNT(*) AS occurrences
+FROM attempt_errors ae
+JOIN exercise_attempts ea ON ea.id = ae.attempt_id
+GROUP BY ea.course_id, ea.cuadernillo_id, ea.exercise_id, ae.error_type
+ORDER BY occurrences DESC;
+
+CREATE OR REPLACE VIEW cuadernillo_rating_summary AS
+SELECT
+    course_id,
+    cuadernillo_id,
+    COUNT(*)         AS total_ratings,
+    ROUND(AVG(rating), 2) AS avg_rating
+FROM cuadernillo_ratings
+GROUP BY course_id, cuadernillo_id;

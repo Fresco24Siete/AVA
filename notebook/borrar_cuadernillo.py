@@ -131,7 +131,11 @@ def _quitar_del_gradebook(tarea, destino):
         return f"no pude respaldar gradebook.db ({err}): no se tocó la base"
     try:
         from nbgrader.api import Gradebook, MissingEntry
-        with Gradebook("sqlite:///" + bd) as gb:
+        # El curso, explícito. Gradebook() lo tiene por defecto en
+        # 'default_course' y lo CREA si no existe, así que abrirlo sin decirle
+        # cuál es deja una fila de curso fantasma en el libro de notas. Ya metió
+        # una.
+        with Gradebook("sqlite:///" + bd, course_id=CURSO) as gb:
             try:
                 gb.remove_assignment(tarea)
             except MissingEntry:
