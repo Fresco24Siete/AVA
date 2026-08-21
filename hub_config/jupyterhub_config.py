@@ -1,5 +1,6 @@
 import os
 import json
+import sys
 
 # httpx viene instalado en Dockerfile.hub. Antes había un camino alterno con
 # urllib.request para cuando faltaba, pero era código muerto y además hacía I/O
@@ -12,12 +13,26 @@ from ltiauthenticator.lti11.auth import LTI11Authenticator
 c = get_config()
 
 c.JupyterHub.spawner_class = 'dockerspawner.DockerSpawner'
-c.DockerSpawner.image = 'mi_imagen_jupyterlab:latest'
+IMAGEN_ALUMNO = os.environ.get('IMAGEN_ALUMNO', 'mi_imagen_jupyterlab:latest')
+IMAGEN_DOCENTE = os.environ.get('IMAGEN_DOCENTE', 'mi_imagen_jupyterlab_docente:latest')
+c.DockerSpawner.image = IMAGEN_ALUMNO
 
 network_name = os.environ.get('DOCKER_NETWORK_NAME', 'bridge')
 c.DockerSpawner.use_internal_ip = True
 c.DockerSpawner.network_name = network_name
-c.DockerSpawner.remove = False
+# El contenedor se descarta al apagarse. Antes se conservaba, porque era lo
+# único que guardaba el trabajo del alumno; desde que cada uno tiene su volumen
+# (ava-trabajo-<alumno>, más abajo) el trabajo ya no vive ahí, y conservarlo solo
+# traía problemas: el contenedor se quedaba con la imagen y las variables de
+# entorno del día que nació, así que reconstruir la imagen o cambiar la
+# configuración del Hub no le llegaba a quien ya había entrado alguna vez. Había
+# que borrarlo a mano en el servidor para que un arreglo surtiera efecto.
+#
+# Ahora cada ingreso levanta un contenedor nuevo sobre el mismo volumen: el
+# alumno encuentra su trabajo igual que lo dejó y estrena la imagen actual. A
+# cambio, lo que instale por su cuenta dentro del contenedor no sobrevive al
+# apagado; lo que guarde en su carpeta, sí.
+c.DockerSpawner.remove = True
 
 # --- Volúmenes -------------------------------------------------------------
 # Por defecto NINGÚN contenedor monta el volumen compartido de nbgrader.
@@ -57,11 +72,11 @@ class LTIRoleAuthenticator(LTI11Authenticator):
 
         # Si el rol cambió desde el último ingreso, hay que TIRAR el contenedor.
         #
-        # `c.DockerSpawner.remove = False` conserva el contenedor entre sesiones
-        # (es lo único que preserva el trabajo del alumno), y el Hub, al ver un
-        # servidor ya corriendo, redirige a él sin volver a hacer spawn: nunca
-        # llega a ejecutarse auth_state_a_env, así que el contenedor se queda con
-        # el rol, los montajes y las variables del ingreso anterior.
+        # El Hub, al ver un servidor ya corriendo, redirige a él sin volver a
+        # hacer spawn: nunca llega a ejecutarse auth_state_a_env, así que el
+        # contenedor sigue con el rol, los montajes y las variables del ingreso
+        # anterior. Que el contenedor se descarte al apagarse no basta, porque
+        # aquí está encendido.
         #
         # Con el rol de Moodle eso es un problema de seguridad, no de comodidad:
         # el contenedor de instructor monta nbgrader_shared en lectura-escritura
@@ -158,6 +173,32 @@ async def auth_state_a_env(spawner, auth_state):
     spawner.environment['ALUMNO_ROL']     = 'instructor' if es_instructor else 'estudiante'
     spawner.environment['CURSO_ID']       = curso_id
     spawner.environment['CURSO_NOMBRE']   = str(auth_state.get('context_title', ''))
+
+    # --- Devolución de notas a Moodle ---------------------------------------
+    # Para escribir una nota en el libro de calificaciones de Moodle hacen falta
+    # dos datos que SOLO viajan en el lanzamiento LTI y que hasta ahora se
+    # descartaban: a dónde se manda la nota y a qué casilla corresponde.
+    #
+    # Moodle solo los envía si la actividad LTI tiene calificación configurada.
+    # Si faltan, no es un fallo del AVA: es que la actividad está sin nota, y
+    # entonces la devolución automática es imposible. Por eso se registra.
+    sourcedid = str(auth_state.get('lis_result_sourcedid', '') or '')
+    outcome_url = str(auth_state.get('lis_outcome_service_url', '') or '')
+    spawner.environment['LTI_RESULT_SOURCEDID'] = sourcedid
+    spawner.environment['LTI_OUTCOME_SERVICE_URL'] = outcome_url
+
+    if es_instructor:
+        pass          # al docente no se le devuelve nota
+    elif sourcedid and outcome_url:
+        spawner.log.info(
+            'Devolución de notas disponible para %s: Moodle mandó sourcedid y '
+            'servicio de resultados.', spawner.user.name)
+    else:
+        spawner.log.warning(
+            'Devolución de notas NO disponible para %s: el lanzamiento no trae '
+            'lis_result_sourcedid (%s) ni lis_outcome_service_url (%s). '
+            'Revisa que la actividad LTI de Moodle tenga calificación activada.',
+            spawner.user.name, bool(sourcedid), bool(outcome_url))
     spawner.environment['ENVIAR_AL_BACKEND'] = os.environ.get('ENVIAR_AL_BACKEND', 'false')
 
     # --- Tutor IA -----------------------------------------------------------
@@ -175,15 +216,47 @@ async def auth_state_a_env(spawner, auth_state):
     #   - estudiante: SOLO 'cuadernillos_publicados' en READ-ONLY. Nunca
     #     nbgrader_shared. Se monta en /srv/publicados (fuera de root_dir), así
     #     que el alumno ni lo ve en el explorador ni puede abrirlo (sin terminal).
+    # El trabajo de cada persona va a un volumen propio, montado en su carpeta de
+    # trabajo. Hasta ahora vivía SOLO dentro del contenedor: lo único que lo
+    # conservaba entre sesiones era que nadie lo borrara. Un `docker rm` o un
+    # `docker system prune` —que es una limpieza rutinaria— se llevaba por
+    # delante el semestre entero de todo el curso. Ya pasó una vez en pruebas.
+    #
+    # Con el volumen, el contenedor vuelve a ser desechable y el trabajo no.
+    # DockerSpawner escapa el nombre de usuario al construir el del volumen, así
+    # que un correo con @ y puntos no lo rompe.
+    volumen_trabajo = {'ava-trabajo-{username}': '/home/jovyan/work'}
+
+    # La imagen tambien depende del rol. Las plantillas de los cuadernillos son
+    # la version de origen —con soluciones y pruebas ocultas— y mientras vivieron
+    # en la imagen comun, un alumno podia leerlas desde una celda: su kernel
+    # corre como el mismo usuario que las posee. Ahora solo viajan en la imagen
+    # del docente (notebook/Dockerfile.docente).
+    spawner.image = (IMAGEN_DOCENTE if es_instructor else IMAGEN_ALUMNO)
+
     if es_instructor:
-        spawner.volumes = {
+        spawner.volumes = dict(volumen_trabajo, **{
             'nbgrader_shared': '/srv/nbgrader',
             'cuadernillos_publicados': '/srv/publicados',
-        }
+        })
     else:
-        spawner.volumes = {
+        spawner.volumes = dict(volumen_trabajo, **{
             'cuadernillos_publicados': {'bind': '/srv/publicados', 'mode': 'ro'},
-        }
+        })
+
+    # Tope de memoria por contenedor.
+    #
+    # Sin esto, un solo estudiante tumba la clase entera, y no es hipotético: la
+    # semana 4 del temario enseña ciclos `while`, así que alguien va a escribir
+    # un bucle infinito que acumule en una lista. Con el tope, se queda sin
+    # memoria él y los demás siguen trabajando.
+    #
+    # 768 MB deja holgura sobre los ~250 MB que consume una sesión normal y sobre
+    # los ~400 MB de las semanas 9 y 10, cuando entran NumPy y pandas. Al docente
+    # se le da más porque al calificar ejecuta todas las entregas.
+    spawner.mem_limit = os.environ.get(
+        'MEM_LIMIT_INSTRUCTOR' if es_instructor else 'MEM_LIMIT_ALUMNO',
+        '1536M' if es_instructor else '768M')
 
     # QUÉ cuadernillo está activo lo decide nbgrader/instructor vía el manifest
     # del volumen de publicados (publicar_cuadernillo.py -> entregar_cuadernillo.py),
@@ -247,13 +320,17 @@ async def auth_state_a_env(spawner, auth_state):
     if es_instructor:
         spawner.default_url = '/formgrader'
     else:
-        # El alumno SIEMPRE abre work/cuadernillo.ipynb: un nombre FIJO cuyo
-        # CONTENIDO lo pone el entrypoint según el cuadernillo activo (o un aviso
-        # de "cerrado"/"sin cuadernillo"). Así el Hub no necesita saber el nombre
-        # real del notebook. La raíz del server es /home/jovyan/work (root_dir),
-        # por eso la URL NO lleva 'work/' delante (con '/notebooks/work/...' daba
-        # 404 y moría el spawn).
-        spawner.default_url = '/notebooks/cuadernillo.ipynb'
+        # El alumno aterriza en su panel de progreso: los cuadernillos
+        # publicados, en qué va, su nota cuando ya se calificó, y cómo le está
+        # yendo por competencia. Lo sirve panel_bridge desde su propio
+        # contenedor, así que hereda su sesión y no necesita login aparte.
+        #
+        # El panel se dibuja aunque el backend no responda -- es la puerta de
+        # entrada, y un fallo de la analítica no puede dejar al alumno sin
+        # acceso a sus cuadernillos. Si alguna vez hay que revertir, el índice
+        # 'inicio.ipynb' se sigue generando: basta cambiar esta línea por
+        # '/notebooks/inicio.ipynb'.
+        spawner.default_url = '/panel'
 
 c.Spawner.auth_state_hook = auth_state_a_env
 
@@ -273,3 +350,83 @@ c.JupyterHub.port = 8000
 
 c.JupyterHub.hub_ip = '0.0.0.0'
 c.JupyterHub.hub_connect_ip = 'jupyterhub'
+
+# --- Cookies dentro del marco de Moodle --------------------------------------
+# Moodle puede abrir la actividad externa incrustada en su propia página. Para el
+# navegador eso es un sitio ajeno dentro de otro, y una cookie con el SameSite
+# por defecto (Lax) se guarda pero no se devuelve. El resultado es un bucle que
+# no dice lo que pasa: el POST de LTI autentica bien, el siguiente GET llega sin
+# sesión, el Hub manda a /hub/login, /hub/login manda al login del autenticador
+# —que en LTI solo acepta POST— y el alumno ve «405 : Method Not Allowed».
+#
+# SameSite=None hace que la cookie viaje también incrustada; exige Secure, que se
+# cumple porque de cara al navegador todo va por HTTPS. A cambio se pierde la
+# protección de origen que da SameSite, por eso el Hub 5 mantiene su cookie xsrf
+# —que hereda estas mismas opciones— como segunda barrera.
+#
+# Ojo: Safari, y Chrome cuando el usuario bloquea cookies de terceros, no
+# entregan NINGUNA cookie ajena dentro de un marco, con SameSite=None o sin él.
+# Para que no dependa del navegador, la actividad en Moodle debe abrirse en
+# «Ventana nueva» (Contenedor de lanzamiento). Esto es la red de seguridad.
+c.JupyterHub.tornado_settings = {
+    'cookie_options': {'SameSite': 'None', 'Secure': True},
+}
+
+# El servidor del alumno pone además las suyas —la de su sesión y la de xsrf que
+# acompaña a cada POST, telemetría incluida— y le pasa lo mismo. No hay que
+# repetirlo: el Hub le entrega estas opciones al spawner y este las reenvía al
+# contenedor en JUPYTERHUB_COOKIE_OPTIONS. Sí hay que tenerlo presente al
+# desplegar: un contenedor que ya existía conserva el entorno con el que nació,
+# así que hasta que no se rehaga sigue emitiendo las cookies viejas.
+
+# --- Estado del Hub entre despliegues ----------------------------------------
+# Por defecto el Hub guarda su base y su secreto de cookies dentro del propio
+# contenedor, así que cada `up --force-recreate` los borraba. Se notaba poco con
+# un usuario —volver a entrar desde Moodle rehace el usuario y su grupo— pero el
+# Hub también perdía el registro de qué servidores estaban vivos: los
+# contenedores de los alumnos seguían corriendo sin que el Hub lo supiera, y al
+# volver a entrar levantaba otro sobre el mismo volumen. Con 25 estudiantes eso
+# es memoria consumida por contenedores que ya nadie mira.
+#
+# Con esto la base y el secreto viven en un volumen: un redespliegue ya no cierra
+# la sesión de nadie ni deja contenedores huérfanos.
+_ESTADO = '/srv/jupyterhub/data'
+os.makedirs(_ESTADO, exist_ok=True)
+c.JupyterHub.db_url = f'sqlite:///{_ESTADO}/jupyterhub.sqlite'
+c.JupyterHub.cookie_secret_file = f'{_ESTADO}/jupyterhub_cookie_secret'
+
+# --- Apagado de contenedores inactivos ---------------------------------------
+# Un contenedor de alumno se quedaba vivo indefinidamente desde que entraba, así
+# que la memoria de la máquina se dimensionaba para TODOS los que hubieran
+# entrado alguna vez, no para los que están trabajando. Con 25 estudiantes eso es
+# la diferencia entre necesitar 8 GB o no.
+#
+# El culler apaga el servidor de quien lleva un rato sin actividad. No borra
+# nada: el trabajo vive en su volumen, y al volver a entrar se levanta otra vez.
+#
+# Se le dan permisos acotados en vez de hacerlo admin del Hub (JupyterHub 5
+# permite roles con alcances concretos): solo puede listar usuarios, leer su
+# actividad y apagar servidores.
+_CULL_INACTIVO = int(os.environ.get('CULL_TIMEOUT', '3600'))    # 1 hora sin actividad
+_CULL_CADA = int(os.environ.get('CULL_EVERY', '300'))           # revisar cada 5 min
+
+c.JupyterHub.services = [
+    {
+        'name': 'idle-culler',
+        'command': [
+            sys.executable, '-m', 'jupyterhub_idle_culler',
+            f'--timeout={_CULL_INACTIVO}',
+            f'--cull-every={_CULL_CADA}',
+        ],
+    },
+]
+
+c.JupyterHub.load_roles = [
+    {
+        'name': 'list-and-cull',
+        'scopes': [
+            'list:users', 'read:users:activity', 'read:servers', 'delete:servers',
+        ],
+        'services': ['idle-culler'],
+    },
+]

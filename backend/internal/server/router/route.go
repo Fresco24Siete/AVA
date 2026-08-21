@@ -45,10 +45,44 @@ func ConfigureRouter (db *sqlx.DB) *gin.Engine{
 	tokenMaestro := os.Getenv("METRICS_API_TOKEN")
 	metricsTokenHandler := handler.NewMetricsTokenHandler(secretoMetricas, tokenMaestro)
 
-	// Interno: solo lo llama el Hub por la red de Docker. NO exponer por Caddy.
+	// Mapeo ejercicio -> competencias, que emite build.py al construir.
+	competenciasRepository := repository.NewCompetenciasRepository(db)
+	competenciasService := service.NewCompetenciasService(competenciasRepository)
+	competenciasHandler := handler.NewCompetenciasHandler(competenciasService, tokenMaestro)
+
+	// Notas de cuadernillo: las sube el contenedor del docente tras calificar.
+	notasRepository := repository.NewNotasRepository(db)
+	notasService := service.NewNotasService(notasRepository)
+	notasHandler := handler.NewNotasHandler(notasService, tokenMaestro)
+
+	// Entregas: el alumno manda su cuadernillo terminado y el backend lo deja en
+	// submitted/ de nbgrader con la identidad que dice el token. Es la unica via
+	// de entrega: un volumen compartido no serviria, porque dentro de los
+	// contenedores todos los alumnos son el mismo usuario del sistema y podrian
+	// leerse entre ellos.
+	entregaHandler := handler.NewEntregaHandler(os.Getenv("NBGRADER_BASE"))
+
+	// Analitica del curso para el docente. Va en /internal porque devuelve el
+	// rendimiento de todo el grupo: cualquier ruta de /api es alcanzable desde
+	// una celda del alumno, que hereda su token en el entorno del proceso.
+	panelDocenteRepository := repository.NewPanelDocenteRepository(db)
+	panelDocenteHandler := handler.NewPanelDocenteHandler(panelDocenteRepository)
+
+	// Progreso del alumno: lectura acotada a quien pregunta, por su token.
+	progresoRepository := repository.NewProgresoRepository(db)
+	progresoService := service.NewProgresoService(progresoRepository)
+	progresoHandler := handler.NewProgresoHandler(progresoService)
+
+	// Interno: solo lo llama el Hub (y el contenedor del docente) por la red de
+	// Docker. NO exponer por Caddy. La autorizacion va en el grupo, no dentro de
+	// cada handler: asi no hay forma de anadir una ruta y olvidarla.
 	interno := router.Group("/internal")
+	interno.Use(middleware.RequireTokenMaestro(tokenMaestro))
 	{
 		interno.POST("/lti/mint-metrics-token", metricsTokenHandler.MintHandler)
+		interno.POST("/competencias", competenciasHandler.CargarHandler)
+		interno.POST("/notas", notasHandler.RegistrarHandler)
+		interno.GET("/curso/:curso/panel", panelDocenteHandler.PanelHandler)
 	}
 
 	api := router.Group("/api")
@@ -59,11 +93,15 @@ func ConfigureRouter (db *sqlx.DB) *gin.Engine{
 		{
 			ingesta.POST("/exercises/attempts", exerciseHandler.CreateAttemptHandler)
 			ingesta.POST("/cuadernillos/ratings", cuadernilloHandler.CreateCuadernilloHandler)
-		}
+			ingesta.GET("/mi-progreso", progresoHandler.MiProgresoHandler)
+			ingesta.POST("/entregas", entregaHandler.RecibirHandler)
 
-		// El tutor no lleva token: lo llama el mismo contenedor del alumno y no
-		// escribe nada en la base.
-		api.POST("/exercise/tutorIA", handler.ChatHandler)
+			// El tutor tambien va aqui. Estaba fuera, con el argumento de que no
+			// escribe en la base, pero lo que gasta es la cuota de Gemini: desde
+			// una celda de codigo se podia llamar en bucle sin identificarse.
+			// tutor_bridge ya manda el token del alumno.
+			ingesta.POST("/exercise/tutorIA", handler.ChatHandler)
+		}
 	}
 
 	return router

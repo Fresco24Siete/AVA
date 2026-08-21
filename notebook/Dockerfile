@@ -56,6 +56,15 @@ COPY metrics_bridge.py /etc/jupyter/metrics_bridge.py
 # Tutor IA: la extensión de servidor y el JS del panel, que ella misma sirve
 # en {base_url}tutor-ia/static/tutor_ia.js (por eso van al mismo directorio).
 COPY tutor_bridge.py /etc/jupyter/tutor_bridge.py
+# Borrado de actividades: la extension y la logica que comparte con el comando.
+COPY admin_bridge.py /etc/jupyter/admin_bridge.py
+# Panel de progreso del alumno: sustituye al indice de cuadernillos.
+COPY panel_bridge.py /etc/jupyter/panel_bridge.py
+COPY panel_docente_bridge.py /etc/jupyter/panel_docente_bridge.py
+COPY borrar_cuadernillo.py /etc/jupyter/borrar_cuadernillo.py
+# Importable, no solo ejecutable: el panel lo llama en caliente para entregar lo
+# que se haya publicado despues de que arrancara el contenedor.
+COPY entregar_cuadernillo.py /etc/jupyter/entregar_cuadernillo.py
 COPY tutor_ia.js /etc/jupyter/tutor_ia.js
 COPY jupyter_server_config.py /etc/jupyter/jupyter_server_config.py
 ENV PYTHONPATH="/etc/jupyter"
@@ -65,19 +74,50 @@ ENV PYTHONPATH="/etc/jupyter"
 RUN mkdir -p /home/jovyan/.jupyter/custom
 COPY custom.js /home/jovyan/.jupyter/custom/custom.js
 
+# Ayuda del docente dentro de formgrader. Sus plantillas NO cargan custom.js, así
+# que el archivo va a la carpeta estática de nbgrader y un parche le añade el
+# <script> a la plantilla base. Se hace aquí, al construir, para que quede a la
+# vista y sea reproducible; la versión de nbgrader está fijada por esta imagen.
+COPY formgrader_ayuda.js /tmp/ava_ayuda.js
+COPY parchar_formgrader.py /tmp/parchar_formgrader.py
+RUN cp /tmp/ava_ayuda.js \
+       "$(python -c 'import nbgrader, os; print(os.path.join(os.path.dirname(nbgrader.__file__), "server_extensions/formgrader/static/js"))')/ava_ayuda.js" \
+    && python /tmp/parchar_formgrader.py \
+    && rm -f /tmp/ava_ayuda.js /tmp/parchar_formgrader.py
+
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 # Entrega del cuadernillo activo (alumno) y publicación (instructor).
 COPY entregar_cuadernillo.py /usr/local/bin/entregar-cuadernillo
 COPY publicar_cuadernillo.py /usr/local/bin/publicar-cuadernillo
+# Refresco explícito de source/ cuando se actualiza el contenido de un
+# cuadernillo: el arranque siembra con `cp -n` y no pisa lo que ya está.
+COPY sembrar_cuadernillo.py /usr/local/bin/sembrar-cuadernillo
+# Carga al backend qué competencia evalúa cada ejercicio. El mapeo lo emite
+# build.py y viaja con las plantillas.
+COPY cargar_competencias.py /usr/local/bin/cargar-competencias
+COPY borrar_cuadernillo.py /usr/local/bin/borrar-cuadernillo
+# Sube al backend las notas del libro de nbgrader, tras "Autograde".
+COPY registrar_notas.py /usr/local/bin/registrar-notas
 RUN chmod +x /usr/local/bin/entrypoint.sh \
              /usr/local/bin/entregar-cuadernillo \
-             /usr/local/bin/publicar-cuadernillo
+             /usr/local/bin/publicar-cuadernillo \
+             /usr/local/bin/sembrar-cuadernillo \
+             /usr/local/bin/cargar-competencias \
+             /usr/local/bin/borrar-cuadernillo \
+             /usr/local/bin/registrar-notas
 
-# Plantillas de cuadernillos: van a /opt/plantillas, NO al work/ del usuario.
-# El instructor las usa para sembrar source/ en nbgrader; el alumno NO debe
-# tenerlas en su workspace (recibe solo el cuadernillo activo entregado
-# dinámicamente en work/cuadernillo.ipynb).
-COPY --chown=jovyan:jovyan notebook_semana/ /opt/plantillas/
+# Las plantillas de cuadernillos NO van en esta imagen: ver Dockerfile.docente.
+#
+# Estaban aquí, en /opt/plantillas, con el argumento de que el alumno no las
+# tiene en su carpeta de trabajo. Pero su kernel corre como jovyan, el mismo
+# usuario que las posee, así que un open('/opt/plantillas/semana_01/cuadernillo.ipynb')
+# desde una celda le devolvía el cuadernillo de origen entero: las soluciones y
+# las pruebas ocultas de todas las semanas publicadas. Que no aparezcan en el
+# explorador de archivos no las esconde del código que él mismo ejecuta.
+#
+# Tampoco basta con borrarlas con RUN rm: la capa anterior sigue en la imagen y
+# se puede extraer. Tienen que no entrar nunca. Por eso el docente arranca desde
+# otra imagen, construida encima de esta, que sí las trae.
 
 # Crear /srv/nbgrader y /srv/publicados en la imagen con dueño jovyan: al montar
 # volúmenes nombrados vacíos sobre estas rutas, Docker los inicializa copiando

@@ -26,6 +26,25 @@ import sys
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 DESTINO = os.path.abspath(os.path.join(AQUI, "..", "notebook_semana"))
+# Mapeo ejercicio -> competencias. Va aparte del notebook a propósito: es diseño
+# del curso, no dato del alumno, y el backend lo resuelve por JOIN. Así, corregir
+# una etiqueta mal puesta corrige todo el histórico ya recogido.
+MAPEO = os.path.join(AQUI, "competencias.json")
+
+
+def _leer_mapeo():
+    """El mapeo acumula todas las semanas, no solo las que se construyen ahora."""
+    try:
+        with open(MAPEO, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def _escribir_mapeo(mapeo):
+    with open(MAPEO, "w", encoding="utf-8") as f:
+        json.dump(mapeo, f, ensure_ascii=False, indent=1, sort_keys=True)
+        f.write("\n")
 
 
 def _generadores():
@@ -106,12 +125,24 @@ def main(argv):
         objetivo = disponibles
 
     problemas = 0
+    mapeo = _leer_mapeo()
     for nombre, ruta in objetivo.items():
         print(f"\n== {nombre} ==")
         modulo = _cargar(nombre, ruta)
         cuadernillo = modulo.construir(motor_comprimido=not legible)
         salida = os.path.join(DESTINO, cuadernillo.codigo, "cuadernillo.ipynb")
         cuadernillo.escribir(salida)
+
+        # Un ejercicio sin competencia no da ningún error: simplemente
+        # desaparece de los análisis. Por eso se avisa aquí.
+        mapeo[cuadernillo.codigo] = cuadernillo.competencias
+        sin_etiquetar = [f"ejercicio_{n}" for n, _ in cuadernillo._ejercicios
+                         if f"ejercicio_{n}" not in cuadernillo.competencias]
+        if sin_etiquetar:
+            print(f"     [AVISO] sin competencia asignada: {', '.join(sin_etiquetar)}")
+            print( "             No fallan, pero no aparecerán en el análisis por competencia.")
+        else:
+            print(f"     Competencias: {len(cuadernillo.competencias)} ejercicios etiquetados")
 
         with open(salida, encoding="utf-8") as f:
             nb = json.load(f)
@@ -123,6 +154,10 @@ def main(argv):
                 print(f"       - {f_}")
         else:
             print("     Validación: contratos de nbgrader, telemetría y tutor correctos.")
+
+    _escribir_mapeo(mapeo)
+    print(f"\nMapeo de competencias en {os.path.relpath(MAPEO)}")
+    print( "Para cargarlo al backend:  cargar-competencias")
 
     if problemas:
         print(f"\n{problemas} problema(s). Los cuadernillos se escribieron igual, "

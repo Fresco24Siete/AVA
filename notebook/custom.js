@@ -3,6 +3,19 @@
 
 require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
 
+    // El token xsrf, leido de la cookie.
+    //
+    // Antes se pedia con utils.get_cookie, que en nbclassic no existe: devolvia
+    // undefined y la cabecera X-XSRFToken viajaba vacia. Daba igual mientras el
+    // endpoint de telemetria estaba eximido del chequeo, pero al exigirlo —para
+    // que una pagina ajena no pudiera inyectar eventos a nombre del alumno— todos
+    // los eventos empezaron a rebotar con 403 y la telemetria dejo de llegar sin
+    // que nada en pantalla lo dijera. Se perdieron los 16 primeros.
+    function cookie_xsrf() {
+        var m = document.cookie.match(/\b_xsrf=([^;]+)/);
+        return m ? decodeURIComponent(m[1]) : '';
+    }
+
     function meta_nbgrader(cell) {
         return (cell && cell.metadata && cell.metadata.nbgrader) ? cell.metadata.nbgrader : null;
     }
@@ -57,7 +70,7 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
     }
 
     function enviar_evento(payload) {
-        var xsrf = utils.get_cookie ? utils.get_cookie('_xsrf') : '';
+        var xsrf = cookie_xsrf();
         // CORREGIDO: la URL relativa se resolvía contra la URL actual del navegador
         // (p.ej. /user/xxx/notebooks/work/...), no contra la base real del servidor,
         // así que la petición nunca llegaba a la ruta que registra metrics_bridge.py.
@@ -444,12 +457,16 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
 
     // Al cerrar/recargar la pestaña, si quedaron errores en buffer de ejercicios
     // que el alumno NUNCA validó (no corrió el test), se envían igual para no
-    // perderlos. sendBeacon es lo único confiable durante 'unload'. El endpoint
-    // está eximido de XSRF, así que un POST sin headers especiales funciona.
+    // perderlos. sendBeacon es lo único confiable durante 'unload'.
+    //
+    // No admite cabeceras, así que el token XSRF va en la URL: tornado lo busca
+    // también ahí. Antes el endpoint estaba eximido del chequeo, y eso dejaba
+    // entrar POST anónimos a nombre del alumno.
     function flush_errores_pendientes() {
         if (!navigator.sendBeacon) return;
         var base_url = (Jupyter && Jupyter.notebook && Jupyter.notebook.base_url) || '/';
-        var url = base_url + 'nbgrader-metrics/evento';
+        var url = base_url + 'nbgrader-metrics/evento?_xsrf=' +
+                  encodeURIComponent(cookie_xsrf());
         Object.keys(estado.errores || {}).forEach(function (cod) {
             var errs = estado.errores[cod];
             if (!errs || !errs.length) return;
@@ -521,6 +538,91 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
         Jupyter.notebook.events.on('notebook_loaded.Notebook', esconder_andamiaje);
         setTimeout(esconder_andamiaje, 1200);
     }
+
+
+    // --- Barra del cuadernillo ---------------------------------------------
+    // El alumno trabajaba dentro del cuadernillo pero tenía que salir al panel
+    // para entregar, y desde el cuadernillo no había forma de volver: la única
+    // salida era el botón atrás del navegador, que dentro del marco de Moodle
+    // no siempre está a la vista.
+    //
+    // Además el panel entrega el archivo tal como está en disco, así que lo que
+    // el alumno acabara de escribir y no hubiera guardado no viajaba. Aquí se
+    // guarda primero y se entrega después, que es el orden que él espera.
+    (function barra_cuadernillo() {
+        if (!Jupyter || !Jupyter.notebook) return;
+        var nombre = Jupyter.notebook.notebook_name || '';
+        if (!/\.ipynb$/.test(nombre) || nombre === 'inicio.ipynb') return;
+        var codigo = nombre.replace(/\.ipynb$/, '');
+        var base_url = Jupyter.notebook.base_url || '/';
+
+        var barra = document.createElement('div');
+        barra.id = 'ava-barra';
+        barra.style.cssText =
+            'position:sticky;top:0;z-index:20;display:flex;align-items:center;' +
+            'gap:12px;flex-wrap:wrap;background:#f7f8fa;border:1px solid #dfe3e8;' +
+            'border-radius:6px;padding:10px 14px;margin:0 0 18px;' +
+            'font:14.5px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
+        barra.innerHTML =
+            '<a href="' + base_url + 'panel" style="color:#2a78d6;text-decoration:none;' +
+            'font-weight:600">&larr; Mis cuadernillos</a>' +
+            '<span style="flex:1"></span>' +
+            '<span id="ava-barra-msg" style="color:#52514e"></span>' +
+            '<button id="ava-barra-entregar" style="background:#2a78d6;color:#fff;' +
+            'border:none;border-radius:4px;padding:7px 15px;font:600 13.5px ' +
+            'system-ui,sans-serif;cursor:pointer">Guardar y entregar</button>';
+
+        function poner() {
+            var cont = document.getElementById('notebook-container');
+            if (!cont || document.getElementById('ava-barra')) return !!cont;
+            cont.insertBefore(barra, cont.firstChild);
+            return true;
+        }
+        if (!poner()) setTimeout(poner, 1500);
+
+        var btn = barra.querySelector('#ava-barra-entregar');
+        var msg = barra.querySelector('#ava-barra-msg');
+        btn.onclick = function () {
+            btn.disabled = true;
+            msg.style.color = '#52514e';
+            msg.textContent = 'Guardando…';
+            // Guardar primero: lo que se entrega es el archivo en disco.
+            var guardado = Jupyter.notebook.save_notebook();
+            var seguir = function () {
+                msg.textContent = 'Entregando…';
+                fetch(base_url + 'panel/entregar', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-XSRFToken': cookie_xsrf()
+                    },
+                    body: JSON.stringify({ id: codigo })
+                }).then(function (r) { return r.json(); }).then(function (d) {
+                    btn.disabled = false;
+                    if (d && d.ok) {
+                        msg.style.color = '#0f8a4a';
+                        msg.textContent = 'Entregado. Tu profesor ya lo tiene.';
+                        btn.textContent = 'Entregar de nuevo';
+                    } else {
+                        msg.style.color = '#c8392b';
+                        msg.textContent = (d && d.mensaje) || 'No se pudo entregar.';
+                    }
+                }).catch(function () {
+                    btn.disabled = false;
+                    msg.style.color = '#c8392b';
+                    msg.textContent = 'No se pudo entregar ahora mismo.';
+                });
+            };
+            if (guardado && typeof guardado.then === 'function') {
+                guardado.then(seguir, seguir);
+            } else {
+                // notebook 6 no siempre devuelve promesa: se espera al evento.
+                Jupyter.notebook.events.one('notebook_saved.Notebook', seguir);
+                setTimeout(seguir, 4000);
+            }
+        };
+    })();
 
     // --- Tutor IA -----------------------------------------------------------
     // El panel del tutor vive en su propio archivo para no mezclarlo con la

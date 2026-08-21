@@ -14,6 +14,9 @@ networks:
 volumes:
   caddy_data:
   postgres-data:
+  hub_estado:
+  nbgrader_shared:
+    external: true
 
 services:
   caddy:
@@ -40,6 +43,9 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./hub_config/jupyterhub_config.py:/srv/jupyterhub/jupyterhub_config.py
+      # Base y secreto de cookies del Hub: sin esto, cada redespliegue los borra
+      # y el Hub pierde de vista los contenedores que ya estaban corriendo.
+      - hub_estado:/srv/jupyterhub/data
     networks:
       - moodle_jupyter_net
     env_file:
@@ -78,6 +84,14 @@ services:
       # ingesta se acepta sin verificar identidad y se avisa por el log.
       - METRICS_API_TOKEN=${METRICS_API_TOKEN:-}
       - METRICS_TOKEN_SECRET=${METRICS_TOKEN_SECRET:-}
+      # Donde deja las entregas de los alumnos (POST /api/entregas), en el
+      # formato que nbgrader espera: submitted/<alumno>/<tarea>/.
+      - NBGRADER_BASE=/srv/nbgrader
+    volumes:
+      # El alumno NO monta este volumen —veria las soluciones y los envios de
+      # sus companeros— asi que su entrega pasa por aqui, que si sabe quien es
+      # cada quien por el token. Ver internal/handler/entregaHandler.go.
+      - nbgrader_shared:/srv/nbgrader
     depends_on:
       postgres-database:
         condition: service_healthy
@@ -101,7 +115,11 @@ services:
       timeout: 5s
       retries: 5
     volumes:
-      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      # El esquema v2, no el v1: es el que trae competencias, notas y el CHECK
+      # que acepta 'sin_validar'. Se aplico a mano sobre la base viva, asi que
+      # montar el v1 aqui significaba que recrear el volumen dejaba una base sin
+      # la mitad del AVA, fallando en silencio.
+      - ./database/schema_v2.sql:/docker-entrypoint-initdb.d/schema.sql
       - postgres-data:/var/lib/postgresql/data
     networks:
       - backend_db_net
