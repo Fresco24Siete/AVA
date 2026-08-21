@@ -11,21 +11,20 @@ import (
 	"github.com/google/uuid"
 )
 
-
 type ExerciseHandler struct {
 	service *service.ExerciseAttempsService
 }
 
 type ExerciseAttemptRequest struct {
-	CourseID         string         `json:"course_id"`
-	CuadernilloID    string         `json:"cuadernillo_id"`
-	ExerciseID       string         `json:"exercise_id"`
-	StudentID        string         `json:"student_id"`
-	AttemptAt        time.Time      `json:"attempt_at"`
-	ValidationResult string         `json:"validation_result"`
-	PuntosMaximos    *int16         `json:"puntos_maximos"`
-	CodigoCelda      *string        `json:"codigo_celda"`
-	Orden            *int16         `json:"orden"`
+	CourseID         string                `json:"course_id"`
+	CuadernilloID    string                `json:"cuadernillo_id"`
+	ExerciseID       string                `json:"exercise_id"`
+	StudentID        string                `json:"student_id"`
+	AttemptAt        time.Time             `json:"attempt_at"`
+	ValidationResult string                `json:"validation_result"`
+	PuntosMaximos    *int16                `json:"puntos_maximos"`
+	CodigoCelda      *string               `json:"codigo_celda"`
+	Orden            *int16                `json:"orden"`
 	Errors           []AttemptErrorRequest `json:"errors"`
 }
 
@@ -36,8 +35,7 @@ type AttemptErrorRequest struct {
 	ErrorMessage string    `json:"error_message"`
 }
 
-
-func NewExerciseHandler (service *service.ExerciseAttempsService) *ExerciseHandler{
+func NewExerciseHandler(service *service.ExerciseAttempsService) *ExerciseHandler {
 	return &ExerciseHandler{service: service}
 }
 

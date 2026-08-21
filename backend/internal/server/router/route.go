@@ -67,8 +67,11 @@ func ConfigureRouter (db *sqlx.DB) *gin.Engine{
 	progresoService := service.NewProgresoService(progresoRepository)
 	progresoHandler := handler.NewProgresoHandler(progresoService)
 
-	// Interno: solo lo llama el Hub por la red de Docker. NO exponer por Caddy.
+	// Interno: solo lo llama el Hub (y el contenedor del docente) por la red de
+	// Docker. NO exponer por Caddy. La autorizacion va en el grupo, no dentro de
+	// cada handler: asi no hay forma de anadir una ruta y olvidarla.
 	interno := router.Group("/internal")
+	interno.Use(middleware.RequireTokenMaestro(tokenMaestro))
 	{
 		interno.POST("/lti/mint-metrics-token", metricsTokenHandler.MintHandler)
 		interno.POST("/competencias", competenciasHandler.CargarHandler)

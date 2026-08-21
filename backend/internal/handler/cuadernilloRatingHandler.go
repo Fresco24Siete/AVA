@@ -9,12 +9,11 @@ import (
 	"github.com/google/uuid"
 )
 
-
 type CuadernilloRatingHandler struct {
 	service *service.CuadernilloRatingService
 }
 
-func NewCuadernilloRatingHandler (service *service.CuadernilloRatingService) *CuadernilloRatingHandler{
+func NewCuadernilloRatingHandler(service *service.CuadernilloRatingService) *CuadernilloRatingHandler {
 	return &CuadernilloRatingHandler{service: service}
 }
 
@@ -28,22 +27,22 @@ func (handler *CuadernilloRatingHandler) CreateCuadernilloHandler(c *gin.Context
 	}
 
 	cuadernillo := &models.CuadernilloRating{
-		ID: uuid.New(),
-		CourseID: input.CourseID,
+		ID:            uuid.New(),
+		CourseID:      input.CourseID,
 		CuadernilloID: input.CuadernilloID,
-		StudentID: input.StudentID,
-		SubmittedAt: input.SubmittedAt,
-		Rating: input.Rating,
-		Comment: input.Comment,
+		StudentID:     input.StudentID,
+		SubmittedAt:   input.SubmittedAt,
+		Rating:        input.Rating,
+		Comment:       input.Comment,
 	}
 
 	err := handler.service.CreateCuadernilloServicie(cuadernillo)
-	
+
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error" : "fail to create cuaderniilo"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "fail to create cuaderniilo"})
 		return
 	}
 
-	c.JSON(http.StatusCreated , gin.H{"message" : "success to create cuadernillo"})
+	c.JSON(http.StatusCreated, gin.H{"message": "success to create cuadernillo"})
 
 }

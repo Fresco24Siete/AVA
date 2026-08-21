@@ -1,11 +1,9 @@
 package handler
 
 import (
-	"crypto/subtle"
 	"log"
 	"net/http"
 	"proxy-go/internal/service"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -36,16 +34,8 @@ func NewCompetenciasHandler(s *service.CompetenciasService, tokenMaestro string)
 // demás. Reemplazar en vez de acumular es deliberado — si un ejercicio deja de
 // evaluar una competencia, esa fila tiene que desaparecer.
 func (h *CompetenciasHandler) CargarHandler(c *gin.Context) {
-	if h.tokenMaestro == "" {
-		c.JSON(http.StatusServiceUnavailable,
-			gin.H{"error": "carga de competencias no configurada en el servidor"})
-		return
-	}
-	recibido := strings.TrimSpace(strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer"))
-	if subtle.ConstantTimeCompare([]byte(recibido), []byte(h.tokenMaestro)) != 1 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "no autorizado"})
-		return
-	}
+	// La autorización la pone middleware.RequireTokenMaestro sobre el grupo
+	// /internal entero: estaba copiada aquí y en otros dos handlers.
 
 	var input CompetenciasRequest
 	if err := c.ShouldBindJSON(&input); err != nil {

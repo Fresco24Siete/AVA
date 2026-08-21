@@ -1,12 +1,10 @@
 package handler
 
 import (
-	"crypto/subtle"
 	"log"
 	"net/http"
 	"proxy-go/internal/models"
 	"proxy-go/internal/service"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -41,16 +39,7 @@ func NewNotasHandler(s *service.NotasService, tokenMaestro string) *NotasHandler
 // Interno: lo llama el contenedor del docente tras calificar, con el token
 // maestro. Las notas no las manda nunca el navegador del alumno.
 func (h *NotasHandler) RegistrarHandler(c *gin.Context) {
-	if h.tokenMaestro == "" {
-		c.JSON(http.StatusServiceUnavailable,
-			gin.H{"error": "registro de notas no configurado en el servidor"})
-		return
-	}
-	recibido := strings.TrimSpace(strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer"))
-	if subtle.ConstantTimeCompare([]byte(recibido), []byte(h.tokenMaestro)) != 1 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "no autorizado"})
-		return
-	}
+	// La autorización la pone middleware.RequireTokenMaestro sobre /internal.
 
 	var input NotasLoteRequest
 	if err := c.ShouldBindJSON(&input); err != nil {

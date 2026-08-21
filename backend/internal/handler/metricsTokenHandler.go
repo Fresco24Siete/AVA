@@ -1,11 +1,9 @@
 package handler
 
 import (
-	"crypto/subtle"
 	"log"
 	"net/http"
 	"proxy-go/internal/auth"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -37,16 +35,12 @@ func NewMetricsTokenHandler(secretoFirma, tokenMaestro string) *MetricsTokenHand
 // Es un endpoint interno: solo lo llama el Hub, desde la red de Docker, con el
 // token maestro. No debe exponerse por Caddy.
 func (h *MetricsTokenHandler) MintHandler(c *gin.Context) {
-	if h.secretoFirma == "" || h.tokenMaestro == "" {
+	// Quien puede pedir tokens lo decide middleware.RequireTokenMaestro sobre
+	// /internal. Aquí solo queda lo propio de este handler: sin secreto de
+	// firma no hay token que acuñar.
+	if h.secretoFirma == "" {
 		c.JSON(http.StatusServiceUnavailable,
 			gin.H{"error": "acuñado de tokens no configurado en el servidor"})
-		return
-	}
-
-	// subtle.ConstantTimeCompare y no ==, por el mismo motivo que en la firma.
-	recibido := strings.TrimSpace(strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer"))
-	if subtle.ConstantTimeCompare([]byte(recibido), []byte(h.tokenMaestro)) != 1 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "no autorizado"})
 		return
 	}
 
