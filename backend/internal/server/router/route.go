@@ -62,6 +62,12 @@ func ConfigureRouter (db *sqlx.DB) *gin.Engine{
 	// leerse entre ellos.
 	entregaHandler := handler.NewEntregaHandler(os.Getenv("NBGRADER_BASE"))
 
+	// Analitica del curso para el docente. Va en /internal porque devuelve el
+	// rendimiento de todo el grupo: cualquier ruta de /api es alcanzable desde
+	// una celda del alumno, que hereda su token en el entorno del proceso.
+	panelDocenteRepository := repository.NewPanelDocenteRepository(db)
+	panelDocenteHandler := handler.NewPanelDocenteHandler(panelDocenteRepository)
+
 	// Progreso del alumno: lectura acotada a quien pregunta, por su token.
 	progresoRepository := repository.NewProgresoRepository(db)
 	progresoService := service.NewProgresoService(progresoRepository)
@@ -76,6 +82,7 @@ func ConfigureRouter (db *sqlx.DB) *gin.Engine{
 		interno.POST("/lti/mint-metrics-token", metricsTokenHandler.MintHandler)
 		interno.POST("/competencias", competenciasHandler.CargarHandler)
 		interno.POST("/notas", notasHandler.RegistrarHandler)
+		interno.GET("/curso/:curso/panel", panelDocenteHandler.PanelHandler)
 	}
 
 	api := router.Group("/api")
