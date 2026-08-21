@@ -51,13 +51,16 @@
         },
         {
             boton: 'Collect',
-            titulo: '3. Recoger',
-            texto: 'Trae los cuadernillos que los alumnos entregaron. Hasta que ' +
-                   'no recojas, no hay nada que calificar.'
+            titulo: 'Recoger',
+            texto: '<b>Con este AVA no hace falta.</b> Recoger trae lo que los ' +
+                   'alumnos dejaron en el buzón de nbgrader, y aquí el alumno ' +
+                   'no usa el buzón: al pulsar «Entregar» en su cuadernillo, el ' +
+                   'archivo llega directo a la carpeta de entregas. Pulsarlo no ' +
+                   'rompe nada, simplemente no encuentra nada que traer.'
         },
         {
             boton: 'Autograde',
-            titulo: '4. Calificar',
+            titulo: '3. Calificar',
             texto: 'Ejecuta las pruebas de cada entrega y pone la nota ' +
                    'automática. Después puedes revisar a mano lo que quieras y ' +
                    'ajustar la calificación.'
@@ -70,7 +73,7 @@
         'el bloque de abajo, añadido por este AVA. ' +
         'El recorrido completo es: <b>editas el cuadernillo → Generar → ' +
         'Previsualizar → Liberar → publicar-cuadernillo → (los alumnos ' +
-        'trabajan) → Recoger → Calificar</b>. ' +
+        'trabajan y entregan) → Calificar → registrar-notas</b>. ' +
         'La nota sale solo de las celdas de prueba; los puntos de experiencia y ' +
         'las insignias que ve el alumno no cuentan para nada.';
 
@@ -103,7 +106,17 @@
                 '<b>' + p.titulo + '.</b> ' + p.texto + aviso + '</td></tr>';
         }).join('');
 
+        var raiz = (window.location.pathname.split('/formgrader')[0]) || '';
         caja.innerHTML =
+            '<div style="display:flex;align-items:center;justify-content:space-between;' +
+            'gap:12px;flex-wrap:wrap;margin-bottom:12px">' +
+            '<div><b style="color:#10294d">¿Cómo va el curso?</b> ' +
+            '<span style="color:#4a5768">Quién ha entregado, qué falta por ' +
+            'calificar y en qué punto está cada cuadernillo.</span></div>' +
+            '<a href="' + raiz + '/panel-docente" style="background:#2a78d6;' +
+            'color:#fff;border-radius:5px;padding:8px 15px;font-size:14px;' +
+            'font-weight:600;text-decoration:none;white-space:nowrap">' +
+            'Ver mi curso</a></div>' +
             '<div style="font-weight:650;color:#10294d;margin-bottom:8px">' +
             'Qué hace cada botón ' +
             '<a href="#" id="ava-ayuda-toggle" style="font-weight:400;font-size:13px;' +

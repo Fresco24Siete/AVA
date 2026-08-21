@@ -60,6 +60,7 @@ COPY tutor_bridge.py /etc/jupyter/tutor_bridge.py
 COPY admin_bridge.py /etc/jupyter/admin_bridge.py
 # Panel de progreso del alumno: sustituye al indice de cuadernillos.
 COPY panel_bridge.py /etc/jupyter/panel_bridge.py
+COPY panel_docente_bridge.py /etc/jupyter/panel_docente_bridge.py
 COPY borrar_cuadernillo.py /etc/jupyter/borrar_cuadernillo.py
 # Importable, no solo ejecutable: el panel lo llama en caliente para entregar lo
 # que se haya publicado despues de que arrancara el contenedor.
