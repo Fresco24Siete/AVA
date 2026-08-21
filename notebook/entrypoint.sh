@@ -24,7 +24,7 @@ if [ "$ALUMNO_ROL" = "instructor" ]; then
     # Estos mkdir NO deben ser fatales: si el volumen nbgrader_shared quedó con
     # dueño root de una build anterior, preferimos arrancar y dejar el error en
     # el log a que el contenedor muera sin explicación.
-    if ! mkdir -p "/srv/nbgrader/${CURSO_ID}/source/semana_1" \
+    if ! mkdir -p "/srv/nbgrader/${CURSO_ID}/source" \
                   "/srv/nbgrader/exchange" \
                   "/srv/nbgrader/logs" 2>/dev/null; then
         echo "[entrypoint] AVISO: no se pudo escribir en /srv/nbgrader." >&2
@@ -68,12 +68,12 @@ if [ "$ALUMNO_ROL" = "instructor" ]; then
         fi
     done
 
-    # Compatibilidad con la plantilla suelta de la demo, que no vivía en una
-    # subcarpeta. Se mantiene para no romper cursos ya sembrados.
-    if [ -f "/opt/plantillas/cuadernillo_ejercicios.ipynb" ]; then
-        cp -n "/opt/plantillas/cuadernillo_ejercicios.ipynb" \
-              "/srv/nbgrader/${CURSO_ID}/source/semana_1/cuadernillo_ejercicios.ipynb" 2>/dev/null || true
-    fi
+    # La plantilla suelta de la demo ya no se siembra. Creaba una actividad
+    # 'semana_1' que el docente no habia pedido, indistinguible a simple vista de
+    # 'semana_01' —las dos se leen «Semana 1»— y que volvia a aparecer cada vez
+    # que el docente entraba, por mucho que la borrara: el mkdir de arriba creaba
+    # su carpeta y este cp la rellenaba. Se borro dos veces en produccion y
+    # reaparecio las dos.
 
 else
     echo "[entrypoint] Rol: estudiante. Preparando entorno estático."
