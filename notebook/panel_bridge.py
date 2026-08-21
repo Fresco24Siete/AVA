@@ -208,57 +208,73 @@ def _enlace(archivo, base_url):
                      urllib.parse.quote(archivo)])
 
 
-def _boton_entregar(codigo, entregado):
-    """El botón que manda el cuadernillo al docente.
+def _tarjeta(nb, d, activo, entregado, base_url):
+    """Un cuadernillo, como lo ve el alumno.
 
-    Manda la petición con JavaScript y no como formulario. La primera versión
-    era un formulario con el token xsrf en un campo oculto, y el servidor lo
-    rechazaba con 403: el contenedor del alumno no usa el xsrf de tornado sino
-    el de JupyterHub, que espera el valor de la cookie en la cabecera
-    X-XSRFToken. Es el mismo camino que ya usa custom.js para la telemetría.
+    Antes era una fila de tabla con cuatro columnas y dos acciones —abrir y
+    entregar— compitiendo por la atención. El alumno no tenía claro qué hacía
+    cada una, y entregar desde aquí mandaba el archivo tal como estaba en disco,
+    sin guardar lo que acabara de escribir.
 
-    Lo que no cambia es lo importante: la petición va al propio servidor del
-    alumno, y el token que autoriza la entrega ante el backend se queda aquí sin
-    bajar al navegador.
+    Ahora cada sitio hace una cosa: el panel es para saber dónde vas y abrir; se
+    entrega desde dentro del cuadernillo, que es donde estás cuando terminas y
+    donde se puede guardar antes de mandar. Aquí solo se dice si ya está
+    entregado.
     """
-    ya = (f'<div class="tenue" style="font-size:13px;margin-top:4px">'
-          f'Entregado el {html.escape(entregado)}</div>' if entregado else "")
-    etiqueta = "Entregar de nuevo" if entregado else "Entregar"
-    return (f'<button class="entregar" data-cuadernillo="{html.escape(codigo)}">'
-            f'{etiqueta}</button>{ya}')
+    titulo = html.escape(_titulo(nb["id"]))
+    marca = ('<span class="marca">Esta semana</span>' if nb["id"] == activo else "")
+
+    if d.get("origen_nota") == "nbgrader" and d.get("puntos_maximos"):
+        nota = (f'<div class="dato"><span class="et">Nota</span>'
+                f'<b>{d["puntos_obtenidos"]:g}</b> / {d["puntos_maximos"]:g}</div>')
+    else:
+        nota = ('<div class="dato"><span class="et">Nota</span>'
+                '<span class="tenue">aún sin calificar</span></div>')
+
+    intentados = d.get("ejercicios_intentados", 0)
+    if intentados:
+        resueltos = d.get("ejercicios_resueltos", 0)
+        progreso = (f'<div class="dato"><span class="et">Vas por</span>'
+                    f'{_barra(resueltos, intentados)}</div>')
+    else:
+        progreso = ('<div class="dato"><span class="et">Vas por</span>'
+                    '<span class="tenue">sin empezar</span></div>')
+
+    if entregado:
+        entrega = (f'<div class="dato"><span class="et">Entrega</span>'
+                   f'<span class="ok">Entregado</span> '
+                   f'<span class="tenue">el {html.escape(entregado)}</span></div>')
+    else:
+        entrega = ('<div class="dato"><span class="et">Entrega</span>'
+                   '<span class="tenue">sin entregar · el botón está dentro '
+                   'del cuadernillo</span></div>')
+
+    abandonos = d.get("abandonos", 0)
+    plural = "ejercicio" if abandonos == 1 else "ejercicios"
+    pendiente = (f'<div class="aviso-fila">Dejaste {abandonos} {plural} a '
+                 f'medias</div>' if abandonos else "")
+
+    return (f'<div class="tarjeta">'
+            f'<div class="cabeza"><div><span class="nombre">{titulo}</span>{marca}'
+            f'{pendiente}</div>'
+            f'<a class="abrir" href="{html.escape(_enlace(nb["archivo"], base_url))}">'
+            f'Abrir cuadernillo</a></div>'
+            f'<div class="datos">{progreso}{nota}{entrega}</div></div>')
 
 
-def _html(datos, aviso, base_url="/", mensaje=""):
+def _html(datos, aviso, base_url="/"):
     por_id = {c["cuadernillo_id"]: c for c in (datos or {}).get("cuadernillos", [])}
     activo = _activo()
     entregadas = _entregas()
     filas = []
     for nb in _cuadernillos_en_disco():
-        d = por_id.get(nb["id"], {})
-        marca = ('<span class="marca">Esta semana</span>'
-                 if nb["id"] == activo else "")
-        # Solo la nota oficial. Una provisional no coincide con la de nbgrader.
-        if d.get("origen_nota") == "nbgrader" and d.get("puntos_maximos"):
-            nota = (f'<b>{d["puntos_obtenidos"]:g}</b> / {d["puntos_maximos"]:g}')
-        else:
-            nota = '<span class="tenue">aún sin calificar</span>'
-        intentados = d.get("ejercicios_intentados", 0)
-        progreso = (_barra(d.get("ejercicios_resueltos", 0), intentados)
-                    if intentados else '<span class="tenue">sin empezar</span>')
-        abandonos = d.get("abandonos", 0)
-        pendiente = (f'<div class="aviso-fila">Dejaste {abandonos} ejercicio(s) '
-                     f'a medias</div>' if abandonos else "")
-        filas.append(
-            f'<tr><td><a href="{html.escape(_enlace(nb["archivo"], base_url))}">'
-            f'{html.escape(_titulo(nb["id"]))}</a> {marca}{pendiente}</td>'
-            f'<td>{progreso}</td><td class="nota">{nota}</td>'
-            f'<td class="nota">'
-            f'{_boton_entregar(nb["id"], entregadas.get(nb["id"], ""))}'
-            f'</td></tr>')
+        filas.append(_tarjeta(nb, por_id.get(nb["id"], {}), activo,
+                              entregadas.get(nb["id"], ""), base_url))
 
     if not filas:
-        filas = ['<tr><td colspan="4" class="tenue">Todavía no tienes '
-                 'cuadernillos entregados.</td></tr>']
+        filas = ['<div class="tarjeta"><span class="tenue">Todavía no tienes '
+                 'cuadernillos. Aparecerán aquí en cuanto tu profesor publique '
+                 'el primero.</span></div>']
 
     comps = ""
     for c in (datos or {}).get("competencias", []):
@@ -274,17 +290,7 @@ def _html(datos, aviso, base_url="/", mensaje=""):
     bloque_comp = (f'<h2>Cómo vas por competencia</h2><div class="comps">{comps}</div>'
                    if comps else "")
 
-    ruta_panel = "/".join([base_url.rstrip("/"), "panel"])
-    ruta_entregar = ruta_panel + "/entregar"
     banda = (f'<div class="banda">{html.escape(aviso)}</div>' if aviso else "")
-    # Resultado de la última entrega. Va arriba del todo: es lo que el alumno
-    # está buscando con la mirada justo después de pulsar el botón.
-    if mensaje.startswith("ok:"):
-        aviso_entrega = (f'<div class="hecho">{html.escape(mensaje[3:])}</div>')
-    elif mensaje:
-        aviso_entrega = (f'<div class="banda">{html.escape(mensaje)}</div>')
-    else:
-        aviso_entrega = ""
     saludo = f", {html.escape(NOMBRE.split(' ')[0])}" if NOMBRE else ""
 
     return f"""<!doctype html><html lang="es"><head><meta charset="utf-8">
@@ -296,10 +302,21 @@ def _html(datos, aviso, base_url="/", mensaje=""):
  h1{{font-size:27px;margin:0 0 4px;color:{TINTA}}}
  .sub{{color:{GRIS};margin:0 0 26px}}
  h2{{font-size:19px;margin:36px 0 12px;color:{TINTA}}}
- table{{width:100%;border-collapse:collapse;background:#fff;
-   border:1px solid {BORDE};border-radius:6px;overflow:hidden}}
- td{{padding:13px 15px;border-bottom:1px solid {BORDE};vertical-align:top}}
- tr:last-child td{{border-bottom:none}}
+ .lista{{display:flex;flex-direction:column;gap:12px}}
+ .tarjeta{{background:#fff;border:1px solid {BORDE};border-radius:8px;
+   padding:16px 18px}}
+ .cabeza{{display:flex;align-items:center;justify-content:space-between;
+   gap:14px;flex-wrap:wrap}}
+ .nombre{{font-size:17px;font-weight:650;color:{TINTA}}}
+ .abrir{{background:{AZUL};color:#fff;border-radius:5px;padding:8px 16px;
+   font-size:14px;font-weight:600;text-decoration:none;white-space:nowrap}}
+ .abrir:hover{{filter:brightness(1.08);text-decoration:none}}
+ .datos{{display:flex;gap:28px;flex-wrap:wrap;margin-top:14px;
+   padding-top:14px;border-top:1px solid {BORDE}}}
+ .dato{{font-size:14.5px;color:{TINTA}}}
+ .et{{display:block;font-size:12px;color:{GRIS};text-transform:uppercase;
+   letter-spacing:.04em;margin-bottom:4px}}
+ .ok{{color:{VERDE};font-weight:600}}
  a{{color:{AZUL};text-decoration:none;font-weight:600}}
  a:hover{{text-decoration:underline}}
  .marca{{background:{AZUL};color:#fff;font-size:11px;padding:2px 7px;
@@ -317,51 +334,15 @@ def _html(datos, aviso, base_url="/", mensaje=""):
    border-radius:4px;margin-bottom:20px;font-size:14.5px}}
  .hecho{{background:#f0f9f4;border-left:3px solid {VERDE};padding:11px 15px;
    border-radius:4px;margin-bottom:20px;font-size:14.5px}}
- .entregar{{background:{AZUL};color:#fff;border:none;border-radius:4px;
-   padding:7px 14px;font:600 13.5px system-ui,sans-serif;cursor:pointer}}
- .entregar:hover{{filter:brightness(1.08)}}
+
 </style></head><body><div class="caja">
 <h1>Tu progreso{saludo}</h1>
 <p class="sub">Tus cuadernillos, en qué vas y tus notas. Lo que respondiste se
 conserva siempre.</p>
-{banda}{aviso_entrega}
-<table><tr><td><b>Cuadernillo</b></td><td><b>Progreso</b></td>
-<td class="nota"><b>Nota</b></td><td class="nota"><b>Entrega</b></td></tr>
-{''.join(filas)}</table>
+{banda}
+<div class="lista">{''.join(filas)}</div>
 {bloque_comp}
 </div>
-<script>
-(function () {{
-  // JupyterHub valida el xsrf por cabecera, no por campo de formulario.
-  function xsrf() {{
-    var m = document.cookie.match(/\\b_xsrf=([^;]+)/);
-    return m ? decodeURIComponent(m[1]) : '';
-  }}
-  document.querySelectorAll('button.entregar').forEach(function (b) {{
-    b.addEventListener('click', function () {{
-      var id = b.getAttribute('data-cuadernillo');
-      b.disabled = true;
-      var antes = b.textContent;
-      b.textContent = 'Entregando…';
-      fetch('{ruta_entregar}', {{
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {{'Content-Type': 'application/json', 'X-XSRFToken': xsrf()}},
-        body: JSON.stringify({{id: id}})
-      }}).then(function (r) {{ return r.json().catch(function () {{ return {{}}; }}); }})
-        .then(function (d) {{
-          location.href = '{ruta_panel}?m=' + encodeURIComponent(d.mensaje ||
-            (d.ok ? 'ok:Entregado.' : 'No se pudo entregar.'));
-        }})
-        .catch(function () {{
-          b.disabled = false; b.textContent = antes;
-          location.href = '{ruta_panel}?m=' +
-            encodeURIComponent('No se pudo entregar ahora mismo.');
-        }});
-    }});
-  }});
-}})();
-</script>
 </body></html>"""
 
 
@@ -384,8 +365,7 @@ class PanelHandler(_BaseHandler):
         datos, aviso = _progreso()
         self.set_header("Content-Type", "text/html; charset=utf-8")
         self.finish(_html(datos, aviso,
-                          self.settings.get("base_url", "/"),
-                          self.get_query_argument("m", "")))
+                          self.settings.get("base_url", "/")))
 
 
 class EntregarHandler(_BaseHandler):

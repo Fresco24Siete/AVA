@@ -526,6 +526,96 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
         setTimeout(esconder_andamiaje, 1200);
     }
 
+
+    // --- Barra del cuadernillo ---------------------------------------------
+    // El alumno trabajaba dentro del cuadernillo pero tenía que salir al panel
+    // para entregar, y desde el cuadernillo no había forma de volver: la única
+    // salida era el botón atrás del navegador, que dentro del marco de Moodle
+    // no siempre está a la vista.
+    //
+    // Además el panel entrega el archivo tal como está en disco, así que lo que
+    // el alumno acabara de escribir y no hubiera guardado no viajaba. Aquí se
+    // guarda primero y se entrega después, que es el orden que él espera.
+    (function barra_cuadernillo() {
+        if (!Jupyter || !Jupyter.notebook) return;
+        var nombre = Jupyter.notebook.notebook_name || '';
+        if (!/\.ipynb$/.test(nombre) || nombre === 'inicio.ipynb') return;
+        var codigo = nombre.replace(/\.ipynb$/, '');
+        var base_url = Jupyter.notebook.base_url || '/';
+
+        function xsrf() {
+            var m = document.cookie.match(/\b_xsrf=([^;]+)/);
+            return m ? decodeURIComponent(m[1]) : '';
+        }
+
+        var barra = document.createElement('div');
+        barra.id = 'ava-barra';
+        barra.style.cssText =
+            'position:sticky;top:0;z-index:20;display:flex;align-items:center;' +
+            'gap:12px;flex-wrap:wrap;background:#f7f8fa;border:1px solid #dfe3e8;' +
+            'border-radius:6px;padding:10px 14px;margin:0 0 18px;' +
+            'font:14.5px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
+        barra.innerHTML =
+            '<a href="' + base_url + 'panel" style="color:#2a78d6;text-decoration:none;' +
+            'font-weight:600">&larr; Mis cuadernillos</a>' +
+            '<span style="flex:1"></span>' +
+            '<span id="ava-barra-msg" style="color:#52514e"></span>' +
+            '<button id="ava-barra-entregar" style="background:#2a78d6;color:#fff;' +
+            'border:none;border-radius:4px;padding:7px 15px;font:600 13.5px ' +
+            'system-ui,sans-serif;cursor:pointer">Guardar y entregar</button>';
+
+        function poner() {
+            var cont = document.getElementById('notebook-container');
+            if (!cont || document.getElementById('ava-barra')) return !!cont;
+            cont.insertBefore(barra, cont.firstChild);
+            return true;
+        }
+        if (!poner()) setTimeout(poner, 1500);
+
+        var btn = barra.querySelector('#ava-barra-entregar');
+        var msg = barra.querySelector('#ava-barra-msg');
+        btn.onclick = function () {
+            btn.disabled = true;
+            msg.style.color = '#52514e';
+            msg.textContent = 'Guardando…';
+            // Guardar primero: lo que se entrega es el archivo en disco.
+            var guardado = Jupyter.notebook.save_notebook();
+            var seguir = function () {
+                msg.textContent = 'Entregando…';
+                fetch(base_url + 'panel/entregar', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-XSRFToken': xsrf()
+                    },
+                    body: JSON.stringify({ id: codigo })
+                }).then(function (r) { return r.json(); }).then(function (d) {
+                    btn.disabled = false;
+                    if (d && d.ok) {
+                        msg.style.color = '#0f8a4a';
+                        msg.textContent = 'Entregado. Tu profesor ya lo tiene.';
+                        btn.textContent = 'Entregar de nuevo';
+                    } else {
+                        msg.style.color = '#c8392b';
+                        msg.textContent = (d && d.mensaje) || 'No se pudo entregar.';
+                    }
+                }).catch(function () {
+                    btn.disabled = false;
+                    msg.style.color = '#c8392b';
+                    msg.textContent = 'No se pudo entregar ahora mismo.';
+                });
+            };
+            if (guardado && typeof guardado.then === 'function') {
+                guardado.then(seguir, seguir);
+            } else {
+                // notebook 6 no siempre devuelve promesa: se espera al evento.
+                Jupyter.notebook.events.one('notebook_saved.Notebook', seguir);
+                setTimeout(seguir, 4000);
+            }
+        };
+    })();
+
     // --- Tutor IA -----------------------------------------------------------
     // El panel del tutor vive en su propio archivo para no mezclarlo con la
     // telemetría. Lo sirve la extensión tutor_bridge.py (no el directorio
