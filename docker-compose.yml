@@ -15,6 +15,8 @@ volumes:
   caddy_data:
   postgres-data:
   hub_estado:
+  nbgrader_shared:
+    external: true
 
 services:
   caddy:
@@ -82,6 +84,14 @@ services:
       # ingesta se acepta sin verificar identidad y se avisa por el log.
       - METRICS_API_TOKEN=${METRICS_API_TOKEN:-}
       - METRICS_TOKEN_SECRET=${METRICS_TOKEN_SECRET:-}
+      # Donde deja las entregas de los alumnos (POST /api/entregas), en el
+      # formato que nbgrader espera: submitted/<alumno>/<tarea>/.
+      - NBGRADER_BASE=/srv/nbgrader
+    volumes:
+      # El alumno NO monta este volumen —veria las soluciones y los envios de
+      # sus companeros— asi que su entrega pasa por aqui, que si sabe quien es
+      # cada quien por el token. Ver internal/handler/entregaHandler.go.
+      - nbgrader_shared:/srv/nbgrader
     depends_on:
       postgres-database:
         condition: service_healthy

@@ -25,6 +25,7 @@ import os
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime
 
 from tornado import web
 
@@ -105,6 +106,65 @@ def _barra(hechos, total):
             f'<div class="pie">{hechos} de {total} ejercicios</div>')
 
 
+ENTREGAS = os.path.join(CARPETA, ".ava_entregas.json")
+
+
+def _entregas():
+    """Qué ha entregado ya este alumno, según su propia carpeta.
+
+    El registro autoritativo es el del docente, en submitted/. Este es solo para
+    poder decirle al alumno «ya entregaste esto el martes», que es la diferencia
+    entre confiar en el botón y darle diez veces por si acaso.
+    """
+    try:
+        with open(ENTREGAS, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _anotar_entrega(codigo, cuando):
+    datos = _entregas()
+    datos[codigo] = cuando
+    try:
+        with open(ENTREGAS, "w", encoding="utf-8") as f:
+            json.dump(datos, f, ensure_ascii=False)
+    except OSError as err:
+        log.warning("[panel] no se pudo anotar la entrega: %s", err)
+
+
+def _entregar(codigo, archivo):
+    """Manda el cuadernillo del alumno al backend. Devuelve (ok, mensaje)."""
+    if not TOKEN:
+        return False, ("No se puede entregar en esta sesión: falta la "
+                       "credencial. Vuelve a entrar desde Moodle.")
+    ruta = os.path.join(CARPETA, archivo)
+    try:
+        with open(ruta, encoding="utf-8") as f:
+            notebook = json.load(f)
+    except Exception as err:
+        log.warning("[panel] no se pudo leer %s: %s", ruta, err)
+        return False, "No pude leer tu cuadernillo. ¿Lo guardaste?"
+
+    cuerpo = json.dumps({"cuadernillo_id": codigo, "archivo": archivo,
+                         "notebook": notebook}).encode("utf-8")
+    peticion = urllib.request.Request(
+        BASE.rstrip("/") + "/api/entregas", data=cuerpo, method="POST",
+        headers={"Authorization": f"Bearer {TOKEN}",
+                 "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(peticion, timeout=20) as resp:
+            json.loads(resp.read().decode("utf-8"))
+        return True, ""
+    except urllib.error.HTTPError as err:
+        log.warning("[panel] el backend rechazó la entrega: %s", err.code)
+        return False, ("El servidor rechazó la entrega. Avisa a tu profesor si "
+                       "sigue pasando.")
+    except Exception as err:
+        log.warning("[panel] no se pudo entregar: %s", err)
+        return False, "No se pudo entregar ahora mismo. Inténtalo otra vez."
+
+
 def _enlace(archivo, base_url):
     """URL para abrir un cuadernillo.
 
@@ -118,9 +178,28 @@ def _enlace(archivo, base_url):
                      urllib.parse.quote(archivo)])
 
 
-def _html(datos, aviso, base_url="/"):
+def _boton_entregar(codigo, base_url, xsrf, entregado):
+    """El botón que manda el cuadernillo al docente.
+
+    Va como formulario y no como fetch a propósito: el token que autoriza la
+    entrega vive aquí, en el servidor del alumno, y no baja al navegador. Es la
+    misma razón por la que el progreso se consulta desde aquí.
+    """
+    accion = html.escape("/".join([base_url.rstrip("/"), "panel", "entregar"]))
+    ya = (f'<div class="tenue" style="font-size:13px;margin-top:4px">'
+          f'Entregado el {html.escape(entregado)}</div>' if entregado else "")
+    etiqueta = "Entregar de nuevo" if entregado else "Entregar"
+    return (f'<form method="POST" action="{accion}" style="margin:0">'
+            f'<input type="hidden" name="_xsrf" value="{html.escape(xsrf)}">'
+            f'<input type="hidden" name="id" value="{html.escape(codigo)}">'
+            f'<button class="entregar" type="submit">{etiqueta}</button>'
+            f'</form>{ya}')
+
+
+def _html(datos, aviso, base_url="/", xsrf="", mensaje=""):
     por_id = {c["cuadernillo_id"]: c for c in (datos or {}).get("cuadernillos", [])}
     activo = _activo()
+    entregadas = _entregas()
     filas = []
     for nb in _cuadernillos_en_disco():
         d = por_id.get(nb["id"], {})
@@ -140,10 +219,13 @@ def _html(datos, aviso, base_url="/"):
         filas.append(
             f'<tr><td><a href="{html.escape(_enlace(nb["archivo"], base_url))}">'
             f'{html.escape(_titulo(nb["id"]))}</a> {marca}{pendiente}</td>'
-            f'<td>{progreso}</td><td class="nota">{nota}</td></tr>')
+            f'<td>{progreso}</td><td class="nota">{nota}</td>'
+            f'<td class="nota">'
+            f'{_boton_entregar(nb["id"], base_url, xsrf, entregadas.get(nb["id"], ""))}'
+            f'</td></tr>')
 
     if not filas:
-        filas = ['<tr><td colspan="3" class="tenue">Todavía no tienes '
+        filas = ['<tr><td colspan="4" class="tenue">Todavía no tienes '
                  'cuadernillos entregados.</td></tr>']
 
     comps = ""
@@ -161,6 +243,14 @@ def _html(datos, aviso, base_url="/"):
                    if comps else "")
 
     banda = (f'<div class="banda">{html.escape(aviso)}</div>' if aviso else "")
+    # Resultado de la última entrega. Va arriba del todo: es lo que el alumno
+    # está buscando con la mirada justo después de pulsar el botón.
+    if mensaje.startswith("ok:"):
+        aviso_entrega = (f'<div class="hecho">{html.escape(mensaje[3:])}</div>')
+    elif mensaje:
+        aviso_entrega = (f'<div class="banda">{html.escape(mensaje)}</div>')
+    else:
+        aviso_entrega = ""
     saludo = f", {html.escape(NOMBRE.split(' ')[0])}" if NOMBRE else ""
 
     return f"""<!doctype html><html lang="es"><head><meta charset="utf-8">
@@ -191,13 +281,19 @@ def _html(datos, aviso, base_url="/"):
  .comp-t{{font-size:13.5px;color:{TINTA};margin-bottom:8px;line-height:1.4}}
  .banda{{background:#fdf9ef;border-left:3px solid {AMBAR};padding:11px 15px;
    border-radius:4px;margin-bottom:20px;font-size:14.5px}}
+ .hecho{{background:#f0f9f4;border-left:3px solid {VERDE};padding:11px 15px;
+   border-radius:4px;margin-bottom:20px;font-size:14.5px}}
+ .entregar{{background:{AZUL};color:#fff;border:none;border-radius:4px;
+   padding:7px 14px;font:600 13.5px system-ui,sans-serif;cursor:pointer}}
+ .entregar:hover{{filter:brightness(1.08)}}
 </style></head><body><div class="caja">
 <h1>Tu progreso{saludo}</h1>
 <p class="sub">Tus cuadernillos, en qué vas y tus notas. Lo que respondiste se
 conserva siempre.</p>
-{banda}
+{banda}{aviso_entrega}
 <table><tr><td><b>Cuadernillo</b></td><td><b>Progreso</b></td>
-<td class="nota"><b>Nota</b></td></tr>{''.join(filas)}</table>
+<td class="nota"><b>Nota</b></td><td class="nota"><b>Entrega</b></td></tr>
+{''.join(filas)}</table>
 {bloque_comp}
 </div></body></html>"""
 
@@ -221,7 +317,38 @@ class PanelHandler(_BaseHandler):
         datos, aviso = _progreso()
         self.set_header("Content-Type", "text/html; charset=utf-8")
         self.finish(_html(datos, aviso,
-                          self.settings.get("base_url", "/")))
+                          self.settings.get("base_url", "/"),
+                          self.xsrf_token.decode("utf-8"),
+                          self.get_query_argument("m", "")))
+
+
+class EntregarHandler(_BaseHandler):
+    """POST /panel/entregar — manda al docente el cuadernillo del alumno.
+
+    Formulario normal, no fetch: así el token de la entrega no baja al
+    navegador. La protección xsrf es la de Jupyter, con el token que el panel
+    incrusta en el formulario.
+    """
+    @web.authenticated
+    def post(self):
+        codigo = (self.get_body_argument("id", "") or "").strip()
+        disponibles = {c["id"]: c["archivo"] for c in _cuadernillos_en_disco()}
+        if codigo not in disponibles:
+            self.redirect(self._panel("No encontré ese cuadernillo."))
+            return
+        ok, error = _entregar(codigo, disponibles[codigo])
+        if ok:
+            cuando = datetime.now().strftime("%d/%m a las %H:%M")
+            _anotar_entrega(codigo, cuando)
+            self.redirect(self._panel(
+                f"ok:Entregado. Tu profesor ya tiene {_titulo(codigo)}. "
+                f"Puedes seguir trabajando y volver a entregar si lo cambias."))
+        else:
+            self.redirect(self._panel(error))
+
+    def _panel(self, mensaje):
+        base = self.settings.get("base_url", "/").rstrip("/")
+        return f"{base}/panel?m=" + urllib.parse.quote(mensaje)
 
 
 def load_jupyter_server_extension(nbapp):
@@ -231,7 +358,10 @@ def load_jupyter_server_extension(nbapp):
         log.info("[panel_bridge] rol instructor: el panel de progreso es del alumno.")
         return
     raiz = nbapp.web_app.settings.get("base_url", "/").rstrip("/")
-    nbapp.web_app.add_handlers(".*$", [(raiz + "/panel", PanelHandler)])
+    nbapp.web_app.add_handlers(".*$", [
+        (raiz + "/panel", PanelHandler),
+        (raiz + "/panel/entregar", EntregarHandler),
+    ])
     log.info("[panel_bridge] listo: panel de progreso en %s/panel", raiz)
 
 

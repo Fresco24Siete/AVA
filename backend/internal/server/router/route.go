@@ -55,6 +55,13 @@ func ConfigureRouter (db *sqlx.DB) *gin.Engine{
 	notasService := service.NewNotasService(notasRepository)
 	notasHandler := handler.NewNotasHandler(notasService, tokenMaestro)
 
+	// Entregas: el alumno manda su cuadernillo terminado y el backend lo deja en
+	// submitted/ de nbgrader con la identidad que dice el token. Es la unica via
+	// de entrega: un volumen compartido no serviria, porque dentro de los
+	// contenedores todos los alumnos son el mismo usuario del sistema y podrian
+	// leerse entre ellos.
+	entregaHandler := handler.NewEntregaHandler(os.Getenv("NBGRADER_BASE"))
+
 	// Progreso del alumno: lectura acotada a quien pregunta, por su token.
 	progresoRepository := repository.NewProgresoRepository(db)
 	progresoService := service.NewProgresoService(progresoRepository)
@@ -77,6 +84,7 @@ func ConfigureRouter (db *sqlx.DB) *gin.Engine{
 			ingesta.POST("/exercises/attempts", exerciseHandler.CreateAttemptHandler)
 			ingesta.POST("/cuadernillos/ratings", cuadernilloHandler.CreateCuadernilloHandler)
 			ingesta.GET("/mi-progreso", progresoHandler.MiProgresoHandler)
+			ingesta.POST("/entregas", entregaHandler.RecibirHandler)
 		}
 
 		// El tutor no lleva token: lo llama el mismo contenedor del alumno y no
