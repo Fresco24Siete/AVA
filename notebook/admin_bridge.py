@@ -20,18 +20,23 @@ import os
 
 from tornado import web
 
+try:
+    from jupyter_server.base.handlers import JupyterHandler as _BaseHandler
+except ImportError:                                   # notebook 6 clásico
+    from notebook.base.handlers import IPythonHandler as _BaseHandler
+
 log = logging.getLogger(__name__)
 
 ES_INSTRUCTOR = os.environ.get("ALUMNO_ROL", "estudiante") == "instructor"
 
 
-class _Base(web.RequestHandler):
-    def check_xsrf_cookie(self):
-        # Lo llama el JS de formgrader, que no lleva el token XSRF de Jupyter.
-        # La protección real es que esta ruta solo existe en el contenedor del
-        # instructor, que es de una sola persona y está tras la sesión del Hub.
-        return
-
+class _Base(_BaseHandler):
+    # Heredaba de tornado.web.RequestHandler y se saltaba el XSRF, con lo que un
+    # POST a /ava-admin/borrar sin sesión borraba source/, release/, el buzón, lo
+    # publicado y la ficha del gradebook. El comentario anterior decía que la
+    # protección era «la sesión del Hub», pero el Hub solo enruta: quien exige
+    # sesión es @web.authenticated, aquí abajo. formgrader_ayuda.js manda ahora
+    # la cabecera X-XSRFToken.
     def _responder(self, codigo, cuerpo):
         self.set_status(codigo)
         self.set_header("Content-Type", "application/json; charset=utf-8")
@@ -41,6 +46,7 @@ class _Base(web.RequestHandler):
 class ActividadesHandler(_Base):
     """GET: qué actividades hay y cuáles tienen envíos de alumnos."""
 
+    @web.authenticated
     def get(self):
         import borrar_cuadernillo as bc
 
@@ -60,6 +66,7 @@ class ActividadesHandler(_Base):
 class BorrarHandler(_Base):
     """POST {"tarea": "...", "forzar": false}"""
 
+    @web.authenticated
     def post(self):
         import borrar_cuadernillo as bc
 

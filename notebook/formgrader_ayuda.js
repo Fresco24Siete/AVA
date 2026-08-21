@@ -74,6 +74,13 @@
         'La nota sale solo de las celdas de prueba; los puntos de experiencia y ' +
         'las insignias que ve el alumno no cuentan para nada.';
 
+    // Jupyter deja el token XSRF en una cookie; hay que devolvérselo en la
+    // cabecera para que acepte un POST.
+    function cookie_xsrf() {
+        var m = document.cookie.match(/\b_xsrf=([^;]+)/);
+        return m ? decodeURIComponent(m[1]) : '';
+    }
+
     function crearPanel() {
         var caja = document.createElement('div');
         caja.id = 'ava-ayuda-docente';
@@ -173,7 +180,7 @@
             msg.innerHTML = texto;
         }
 
-        fetch(raiz + '/ava-admin/actividades')
+        fetch(raiz + '/ava-admin/actividades', { credentials: 'same-origin' })
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (d) {
                 if (!d) { caja.style.display = 'none'; return; }
@@ -199,7 +206,13 @@
             decir('Borrando…');
             fetch(raiz + '/ava-admin/borrar', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                // El endpoint exige sesión y token XSRF: borra trabajo, así que
+                // no puede aceptar un POST que venga de cualquier página.
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-XSRFToken': cookie_xsrf(),
+                },
                 body: JSON.stringify({ tarea: tarea, forzar: false })
             })
             .then(function (r) { return r.json(); })

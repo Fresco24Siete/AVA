@@ -444,12 +444,16 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
 
     // Al cerrar/recargar la pestaña, si quedaron errores en buffer de ejercicios
     // que el alumno NUNCA validó (no corrió el test), se envían igual para no
-    // perderlos. sendBeacon es lo único confiable durante 'unload'. El endpoint
-    // está eximido de XSRF, así que un POST sin headers especiales funciona.
+    // perderlos. sendBeacon es lo único confiable durante 'unload'.
+    //
+    // No admite cabeceras, así que el token XSRF va en la URL: tornado lo busca
+    // también ahí. Antes el endpoint estaba eximido del chequeo, y eso dejaba
+    // entrar POST anónimos a nombre del alumno.
     function flush_errores_pendientes() {
         if (!navigator.sendBeacon) return;
         var base_url = (Jupyter && Jupyter.notebook && Jupyter.notebook.base_url) || '/';
-        var url = base_url + 'nbgrader-metrics/evento';
+        var xsrf = (utils && utils.get_cookie) ? (utils.get_cookie('_xsrf') || '') : '';
+        var url = base_url + 'nbgrader-metrics/evento?_xsrf=' + encodeURIComponent(xsrf);
         Object.keys(estado.errores || {}).forEach(function (cod) {
             var errs = estado.errores[cod];
             if (!errs || !errs.length) return;

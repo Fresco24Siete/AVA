@@ -85,11 +85,13 @@ func ConfigureRouter (db *sqlx.DB) *gin.Engine{
 			ingesta.POST("/cuadernillos/ratings", cuadernilloHandler.CreateCuadernilloHandler)
 			ingesta.GET("/mi-progreso", progresoHandler.MiProgresoHandler)
 			ingesta.POST("/entregas", entregaHandler.RecibirHandler)
-		}
 
-		// El tutor no lleva token: lo llama el mismo contenedor del alumno y no
-		// escribe nada en la base.
-		api.POST("/exercise/tutorIA", handler.ChatHandler)
+			// El tutor tambien va aqui. Estaba fuera, con el argumento de que no
+			// escribe en la base, pero lo que gasta es la cuota de Gemini: desde
+			// una celda de codigo se podia llamar en bucle sin identificarse.
+			// tutor_bridge ya manda el token del alumno.
+			ingesta.POST("/exercise/tutorIA", handler.ChatHandler)
+		}
 	}
 
 	return router

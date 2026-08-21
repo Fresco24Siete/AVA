@@ -3,6 +3,11 @@ import logging
 import os
 
 from tornado import web
+
+try:
+    from jupyter_server.base.handlers import JupyterHandler as _BaseHandler
+except ImportError:                                   # notebook 6 clásico
+    from notebook.base.handlers import IPythonHandler as _BaseHandler
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 # tornado.web.RequestHandler NO tiene self.log (a diferencia del handler base de
@@ -58,17 +63,18 @@ def _url_backend(tipo_evento):
     return base.rstrip("/") + ruta
 
 
-class MetricsEventoHandler(web.RequestHandler):
-
-    def check_xsrf_cookie(self):
-        # Endpoint interno de telemetría, mismo origen, dentro del propio server
-        # del alumno. jupyter_server (ServerApp) aplica XSRF y rechazaba el POST
-        # con 403 ('_xsrf argument missing'), perdiendo el 100% de la telemetría.
-        # La protección real de este flujo es el token Bearer que metrics_bridge
-        # usa al reenviar al backend, no el XSRF de esta llamada local. Por eso
-        # se exime este handler del chequeo.
-        return
-
+class MetricsEventoHandler(_BaseHandler):
+    # Heredaba de tornado.web.RequestHandler y se eximía del XSRF, con lo que
+    # aceptaba POST anónimos: cualquiera podía inyectar telemetría a nombre del
+    # dueño del contenedor, y con ella llenar la base de la VM.
+    #
+    # Ahora exige sesión. El XSRF se mantiene porque desde que las cookies van
+    # con SameSite=None —hace falta para que el AVA funcione dentro del marco de
+    # Moodle— una página cualquiera podría hacer este POST con las credenciales
+    # del alumno puestas. custom.js ya manda la cabecera X-XSRFToken; el volcado
+    # de cierre de pestaña, que usa sendBeacon y no admite cabeceras, manda el
+    # token en la URL, que tornado también acepta.
+    @web.authenticated
     async def post(self):
         try:
             evento = json.loads(self.request.body)
