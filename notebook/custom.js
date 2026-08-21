@@ -3,6 +3,19 @@
 
 require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
 
+    // El token xsrf, leido de la cookie.
+    //
+    // Antes se pedia con utils.get_cookie, que en nbclassic no existe: devolvia
+    // undefined y la cabecera X-XSRFToken viajaba vacia. Daba igual mientras el
+    // endpoint de telemetria estaba eximido del chequeo, pero al exigirlo —para
+    // que una pagina ajena no pudiera inyectar eventos a nombre del alumno— todos
+    // los eventos empezaron a rebotar con 403 y la telemetria dejo de llegar sin
+    // que nada en pantalla lo dijera. Se perdieron los 16 primeros.
+    function cookie_xsrf() {
+        var m = document.cookie.match(/\b_xsrf=([^;]+)/);
+        return m ? decodeURIComponent(m[1]) : '';
+    }
+
     function meta_nbgrader(cell) {
         return (cell && cell.metadata && cell.metadata.nbgrader) ? cell.metadata.nbgrader : null;
     }
@@ -57,7 +70,7 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
     }
 
     function enviar_evento(payload) {
-        var xsrf = utils.get_cookie ? utils.get_cookie('_xsrf') : '';
+        var xsrf = cookie_xsrf();
         // CORREGIDO: la URL relativa se resolvía contra la URL actual del navegador
         // (p.ej. /user/xxx/notebooks/work/...), no contra la base real del servidor,
         // así que la petición nunca llegaba a la ruta que registra metrics_bridge.py.
@@ -452,8 +465,8 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
     function flush_errores_pendientes() {
         if (!navigator.sendBeacon) return;
         var base_url = (Jupyter && Jupyter.notebook && Jupyter.notebook.base_url) || '/';
-        var xsrf = (utils && utils.get_cookie) ? (utils.get_cookie('_xsrf') || '') : '';
-        var url = base_url + 'nbgrader-metrics/evento?_xsrf=' + encodeURIComponent(xsrf);
+        var url = base_url + 'nbgrader-metrics/evento?_xsrf=' +
+                  encodeURIComponent(cookie_xsrf());
         Object.keys(estado.errores || {}).forEach(function (cod) {
             var errs = estado.errores[cod];
             if (!errs || !errs.length) return;
@@ -543,11 +556,6 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
         var codigo = nombre.replace(/\.ipynb$/, '');
         var base_url = Jupyter.notebook.base_url || '/';
 
-        function xsrf() {
-            var m = document.cookie.match(/\b_xsrf=([^;]+)/);
-            return m ? decodeURIComponent(m[1]) : '';
-        }
-
         var barra = document.createElement('div');
         barra.id = 'ava-barra';
         barra.style.cssText =
@@ -587,7 +595,7 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
                     credentials: 'same-origin',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-XSRFToken': xsrf()
+                        'X-XSRFToken': cookie_xsrf()
                     },
                     body: JSON.stringify({ id: codigo })
                 }).then(function (r) { return r.json(); }).then(function (d) {
