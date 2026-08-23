@@ -249,6 +249,46 @@ def historial(config=None):
     return salida
 
 
+def feedback(assignment_id, config=None):
+    """La corrección que el docente publicó para QUIEN pregunta (alumno).
+
+    Devuelve [{"filename": str, "timestamp": str, "contenido": bytes}], la más
+    reciente primero, o [] si todavía no hay. El servicio solo devuelve el
+    feedback del usuario del token, así que un alumno no puede pedir el de otro.
+
+    Existe porque el alumno no tiene ninguna otra vía: `assignment_list` está
+    deshabilitada en su imagen (es la extensión de nbgrader que traería esto),
+    así que sin este helper «Release Feedback» publicaba algo que nadie podía
+    recuperar.
+    """
+    import base64
+    from urllib.parse import quote_plus
+
+    config = config if config is not None else cargar_config()
+    ex = _exchange(Exchange, config, assignment_id)
+    r = ex.api_request(
+        f"feedback?course_id={quote_plus(CURSO)}"
+        f"&assignment_id={quote_plus(assignment_id)}")
+    try:
+        datos = r.json()
+    except ValueError:
+        raise ExchangeError(f"Respuesta ilegible del servicio: {r.text[:120]}")
+    if not datos.get("success"):
+        # "no feedback" no es un error: es que el docente aún no la ha publicado.
+        return []
+    salida = []
+    for f in datos.get("feedback") or []:
+        try:
+            contenido = base64.b64decode(f.get("content") or "")
+        except Exception:
+            continue
+        salida.append({"filename": str(f.get("filename", "correccion.html")),
+                       "timestamp": str(f.get("timestamp", "")),
+                       "contenido": contenido})
+    salida.sort(key=lambda f: f["timestamp"], reverse=True)
+    return salida
+
+
 def descargar(assignment_id, destino, config=None):
     """Trae la última liberación de `assignment_id` a la carpeta `destino`.
 

@@ -127,6 +127,51 @@ def _barra(hechos, total):
 
 
 ENTREGAS = os.path.join(CARPETA, ".ava_entregas.json")
+# Donde se guarda la corrección que el docente publicó con «Release Feedback».
+# El alumno no tiene otra vía para verla: assignment_list —la extensión de
+# nbgrader que la traería— está deshabilitada en su imagen a propósito.
+CORRECCIONES = os.path.join(CARPETA, ".ava_correcciones")
+
+
+def _ruta_correccion(tarea):
+    return os.path.join(CORRECCIONES, tarea + ".html")
+
+
+def _bajar_correccion(tarea):
+    """Trae del intercambio la corrección de `tarea` y la deja en disco.
+
+    Devuelve la ruta, o "" si el docente todavía no ha publicado ninguna (o si
+    el servicio no responde: entonces vale lo que ya hubiera en disco).
+    """
+    try:
+        from nbexchange_cliente import ava
+        archivos = ava.feedback(tarea)
+    except Exception as err:
+        log.warning("[panel] no se pudo consultar la corrección de %s: %s", tarea, err)
+        return ""
+    if not archivos:
+        return ""
+    try:
+        os.makedirs(CORRECCIONES, exist_ok=True)
+        ruta = _ruta_correccion(tarea)
+        with open(ruta, "wb") as f:
+            f.write(archivos[0]["contenido"])
+        return ruta
+    except OSError as err:
+        log.warning("[panel] no se pudo guardar la corrección de %s: %s", tarea, err)
+        return ""
+
+
+def _hay_correccion(tarea, calificado):
+    """¿Se le puede enseñar al alumno la corrección de este cuadernillo?
+
+    Si ya está en disco, sí y sin preguntar al servicio. Si no, solo se consulta
+    cuando la nota ya llegó: antes de calificar no hay nada que traer, y el
+    panel se carga en cada visita.
+    """
+    if os.path.isfile(_ruta_correccion(tarea)):
+        return True
+    return bool(calificado) and bool(_bajar_correccion(tarea))
 
 
 def _entregas():
@@ -236,7 +281,7 @@ def _enlace(archivo, base_url):
                      urllib.parse.quote(archivo)])
 
 
-def _tarjeta(nb, d, activo, entregado, base_url):
+def _tarjeta(nb, d, activo, entregado, base_url, correccion=False):
     """Un cuadernillo, como lo ve el alumno.
 
     Antes era una fila de tabla con cuatro columnas y dos acciones —abrir y
@@ -253,8 +298,15 @@ def _tarjeta(nb, d, activo, entregado, base_url):
     marca = ('<span class="marca">Esta semana</span>' if nb["id"] == activo else "")
 
     if d.get("origen_nota") == "nbgrader" and d.get("puntos_maximos"):
+        # Con nota y con corrección publicada, el enlace va pegado a la nota:
+        # es lo que el alumno quiere leer justo después de verla.
+        ver = ""
+        if correccion:
+            destino = base_url.rstrip("/") + "/panel/correccion/" + urllib.parse.quote(nb["id"])
+            ver = (f' <a class="correccion" href="{html.escape(destino)}" '
+                   f'target="_blank" rel="noopener">ver la corrección</a>')
         nota = (f'<div class="dato"><span class="et">Nota</span>'
-                f'<b>{d["puntos_obtenidos"]:g}</b> / {d["puntos_maximos"]:g}</div>')
+                f'<b>{d["puntos_obtenidos"]:g}</b> / {d["puntos_maximos"]:g}{ver}</div>')
     else:
         nota = ('<div class="dato"><span class="et">Nota</span>'
                 '<span class="tenue">aún sin calificar</span></div>')
@@ -296,8 +348,10 @@ def _html(datos, aviso, base_url="/"):
     entregadas = _entregas()
     filas = []
     for nb in _cuadernillos_en_disco():
-        filas.append(_tarjeta(nb, por_id.get(nb["id"], {}), activo,
-                              entregadas.get(nb["id"], ""), base_url))
+        d = por_id.get(nb["id"], {})
+        calificado = d.get("origen_nota") == "nbgrader" and d.get("puntos_maximos")
+        filas.append(_tarjeta(nb, d, activo, entregadas.get(nb["id"], ""), base_url,
+                              correccion=_hay_correccion(nb["id"], calificado)))
 
     if not filas:
         filas = ['<div class="tarjeta"><span class="tenue">Todavía no tienes '
@@ -360,6 +414,7 @@ def _html(datos, aviso, base_url="/"):
  .abrir{{background:{AZUL};color:#fff;border-radius:5px;padding:8px 16px;
    font-size:14px;font-weight:600;text-decoration:none;white-space:nowrap}}
  .abrir:hover{{filter:brightness(1.08);text-decoration:none}}
+ .correccion{{margin-left:8px;font-size:13.5px;color:{AZUL};text-decoration:underline}}
  .datos{{display:flex;gap:28px;flex-wrap:wrap;margin-top:14px;
    padding-top:14px;border-top:1px solid {BORDE}}}
  .dato{{font-size:14.5px;color:{TINTA}}}
@@ -453,6 +508,38 @@ class EntregarHandler(_BaseHandler):
                                 f"volver a entregar si lo cambias."}))
 
 
+class CorreccionHandler(_BaseHandler):
+    """GET /panel/correccion/<tarea> — la corrección del docente, en HTML.
+
+    Se sirve desde aquí en vez de dejar el archivo en el árbol del alumno: así
+    la ruta se valida contra los cuadernillos que tiene, y cada visita trae la
+    última versión publicada (el docente puede corregir y volver a publicar).
+    """
+    @web.authenticated
+    def get(self, tarea):
+        tarea = urllib.parse.unquote(tarea or "").strip()
+        if tarea not in {c["id"] for c in _cuadernillos_en_disco()}:
+            self.set_status(404)
+            self.set_header("Content-Type", "text/html; charset=utf-8")
+            self.finish("<p>No encontré ese cuadernillo.</p>")
+            return
+
+        # Se refresca al abrir; si el servicio no responde, vale la copia que
+        # ya estaba en disco: una corrección vieja es mejor que un error.
+        ruta = _bajar_correccion(tarea) or _ruta_correccion(tarea)
+        if not os.path.isfile(ruta):
+            self.set_status(404)
+            self.set_header("Content-Type", "text/html; charset=utf-8")
+            self.finish("<p>Tu profesor todavía no ha publicado la corrección "
+                        "de este cuadernillo.</p>")
+            return
+
+        with open(ruta, "rb") as f:
+            cuerpo = f.read()
+        self.set_header("Content-Type", "text/html; charset=utf-8")
+        self.finish(cuerpo)
+
+
 def load_jupyter_server_extension(nbapp):
     if getattr(nbapp, "log", None) is not None:
         globals()["log"] = nbapp.log
@@ -463,6 +550,7 @@ def load_jupyter_server_extension(nbapp):
     nbapp.web_app.add_handlers(".*$", [
         (raiz + "/panel", PanelHandler),
         (raiz + "/panel/entregar", EntregarHandler),
+        (raiz + r"/panel/correccion/([^/]+)", CorreccionHandler),
     ])
     log.info("[panel_bridge] listo: panel de progreso en %s/panel", raiz)
 
