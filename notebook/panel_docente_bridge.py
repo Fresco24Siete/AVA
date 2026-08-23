@@ -157,8 +157,13 @@ def _libro():
                   LEFT JOIN grade_cells gc ON gc.id = b.id
                  GROUP BY a.name"""):
             tareas[nombre] = float(maximos or 0)
+        # La nota de una celda es la manual si el docente la puso (más el
+        # extra); si no, la automática. Sumar solo auto_score mostraba 80/80
+        # donde formgrader y el backend decían 79/80.
         for alumno, tarea, obtenidos in con.execute("""
-                SELECT s.id, a.name, COALESCE(SUM(g.auto_score), 0)
+                SELECT s.id, a.name,
+                       COALESCE(SUM(COALESCE(g.manual_score, g.auto_score, 0)
+                                    + COALESCE(g.extra_credit, 0)), 0)
                   FROM grade g
                   JOIN submitted_notebook sn   ON sn.id = g.notebook_id
                   JOIN submitted_assignment sa ON sa.id = sn.assignment_id

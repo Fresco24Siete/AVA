@@ -13,7 +13,35 @@ from ltiauthenticator.lti11.auth import LTI11Authenticator
 
 c = get_config()
 
-c.JupyterHub.spawner_class = 'dockerspawner.DockerSpawner'
+from dockerspawner import DockerSpawner
+
+
+class SpawnerAva(DockerSpawner):
+    """DockerSpawner que espera el borrado del contenedor anterior.
+
+    Con remove=True, docker borra el contenedor en segundo plano al pararlo.
+    Si el usuario (o el Hub, en un cambio de rol) arranca de nuevo antes de
+    que ese borrado termine, el create choca con 409 «name already in use».
+    Pasó dos veces el 2026-08-23: en el cambio de rol y en un Stop → Start
+    seguidos desde el Control Panel. Aquí se espera a que de verdad no esté.
+    """
+
+    async def create_object(self):
+        for _ in range(30):
+            if await self.get_object() is None:
+                break
+            try:
+                await self.remove_object()
+            except Exception:      # todavía se está borrando
+                pass
+            await asyncio.sleep(1)
+        else:
+            self.log.warning("El contenedor anterior de %s sigue ahí tras 30 s; "
+                             "el create puede fallar con 409.", self.user.name)
+        return await super().create_object()
+
+
+c.JupyterHub.spawner_class = SpawnerAva
 IMAGEN_ALUMNO = os.environ.get('IMAGEN_ALUMNO', 'mi_imagen_jupyterlab:latest')
 IMAGEN_DOCENTE = os.environ.get('IMAGEN_DOCENTE', 'mi_imagen_jupyterlab_docente:latest')
 c.DockerSpawner.image = IMAGEN_ALUMNO

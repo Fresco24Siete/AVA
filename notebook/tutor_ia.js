@@ -208,7 +208,7 @@
         pintar_mensajes();
         actualizar_contador();
 
-        var payload = { mensaje: texto, contexto: '' };
+        var payload = { mensaje: texto, contexto: '', cuadernillo: cuadernillo_abierto() };
 
         try {
             var resp = await fetch(baseUrl() + 'tutor-ia/preguntar', {
@@ -301,6 +301,15 @@
     // "Habilitable en el cuadernillo": el instructor lo apaga por notebook con
     //   notebook.metadata.tutor_ia = {"enabled": false}
     // y operaciones lo apaga para todo el curso con TUTOR_IA_HABILITADO=false.
+    // El cuadernillo abierto en esta pestana. El servidor solo conoce el que
+    // estaba activo cuando nacio el contenedor; el cupo de preguntas es por
+    // cuadernillo, asi que se manda el de verdad.
+    function cuadernillo_abierto() {
+        var J = jup();
+        var nombre = (J && J.notebook && J.notebook.notebook_name) || '';
+        return nombre.replace(/\.ipynb$/, '').replace(/_v\d+$/, '');
+    }
+
     function habilitado_en_cuadernillo() {
         var J = jup();
         var meta = (J && J.notebook.metadata && J.notebook.metadata.tutor_ia) || null;
@@ -314,7 +323,8 @@
         }
 
         try {
-            var resp = await fetch(baseUrl() + 'tutor-ia/estado', {
+            var resp = await fetch(baseUrl() + 'tutor-ia/estado?cuadernillo=' +
+                                   encodeURIComponent(cuadernillo_abierto()), {
                 credentials: 'same-origin',
                 headers: { 'X-XSRFToken': xsrfToken() },
             });

@@ -24,6 +24,7 @@ que ya está documentado en metrics_bridge.py para STUDENT_METRICS_TOKEN.
 """
 
 import json
+import re
 import logging
 import os
 
@@ -92,6 +93,14 @@ _MARCAS_ESTADO = (
     "estado para la siguiente",
     "[estado para la",
     "estado para la próxima",
+    # Gemini varía la redacción: el 2026-08-23 tituló el bloque
+    # «Estado de la sesión (Historial para la siguiente interacción)» y el
+    # alumno lo vio entero.
+    "estado de la sesión",
+    "estado de la sesion",
+    "historial para la siguiente",
+    "para la siguiente interacción",
+    "para la siguiente interaccion",
 )
 
 
@@ -199,12 +208,38 @@ class _TutorHandlerBase(_BaseHandler):
         return
 
 
+_CUADERNILLO_VALIDO = re.compile(r"^[A-Za-z0-9_.-]{1,120}$")
+
+
+def _cuadernillo_pedido(handler):
+    """El cuadernillo sobre el que se pregunta.
+
+    Lo manda el navegador (?cuadernillo= o en el cuerpo), porque el del entorno
+    es el que estaba activo cuando NACIÓ el contenedor: con ese, preguntar desde
+    semana_01 gastaba el cupo de semana_02, y un cuadernillo publicado después
+    del arranque compartía el contador del anterior. Mismo fallo (y misma
+    solución) que el cuadernillo_id de la telemetría. Si no viene o viene raro,
+    se cae al del entorno, que es lo que había.
+    """
+    valor = handler.get_query_argument("cuadernillo", "")
+    if not valor:
+        try:
+            valor = str(json.loads(handler.request.body).get("cuadernillo", ""))
+        except Exception:
+            valor = ""
+    valor = valor.removesuffix(".ipynb")
+    valor = re.sub(r"_v\d+$", "", valor)
+    if valor and _CUADERNILLO_VALIDO.match(valor):
+        return valor
+    return IDENTIDAD["cuadernillo_id"]
+
+
 class TutorEstadoHandler(_TutorHandlerBase):
     """Cuántas preguntas le quedan al alumno en este cuadernillo."""
 
     @web.authenticated
     def get(self):
-        cuadernillo = IDENTIDAD["cuadernillo_id"]
+        cuadernillo = _cuadernillo_pedido(self)
         self.set_header("Content-Type", "application/json")
         self.finish(json.dumps({
             "habilitado": HABILITADO,
@@ -241,7 +276,7 @@ class TutorPreguntaHandler(_TutorHandlerBase):
             self._responder(400, {"error": "El mensaje viene vacío."})
             return
 
-        cuadernillo = IDENTIDAD["cuadernillo_id"]
+        cuadernillo = _cuadernillo_pedido(self)
 
         if ESTADO.restantes(cuadernillo) <= 0:
             self._responder(429, {

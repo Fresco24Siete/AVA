@@ -80,10 +80,16 @@ VERDE, AMBAR = "#0f8a4a", "#b57200"
 
 
 def _titulo(codigo):
+    # Una version vieja conservada (semana_01_v2) es "Semana 1 (version 2)",
+    # no una tarjeta con el codigo crudo.
+    version = re.match(r"^(.*)_v(\d+)$", codigo)
+    sufijo = ""
+    if version:
+        codigo, sufijo = version.group(1), f" (versión {version.group(2)})"
     partes = codigo.split("_")
     if len(partes) == 2 and partes[1].isdigit():
-        return f"{partes[0].capitalize()} {int(partes[1])}"
-    return codigo
+        return f"{partes[0].capitalize()} {int(partes[1])}{sufijo}"
+    return codigo + sufijo
 
 
 def _progreso():

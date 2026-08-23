@@ -38,6 +38,10 @@ if [ "$ALUMNO_ROL" = "instructor" ]; then
     rm -f /home/jovyan/work/publicados 2>/dev/null || true
 
     jupyter nbextension enable    --sys-prefix create_assignment/main || true
+    # Las pestanas "Formgrader" y "Courses" del arbol de archivos: sin ellas,
+    # desde /tree no habia camino de vuelta a formgrader salvo escribir la URL.
+    jupyter nbextension enable    --sys-prefix formgrader/main --section=tree || true
+    jupyter nbextension enable    --sys-prefix course_list/main --section=tree || true
     jupyter serverextension enable --sys-prefix nbgrader.server_extensions.formgrader || true
     jupyter serverextension enable --sys-prefix nbgrader.server_extensions.course_list || true
     jupyter server extension enable --sys-prefix nbgrader.server_extensions.formgrader || true
