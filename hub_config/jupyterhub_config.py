@@ -27,16 +27,23 @@ class SpawnerAva(DockerSpawner):
     """
 
     async def create_object(self):
-        for _ in range(30):
+        # En esta VM un docker rm puede tardar más de 30 s (se midió 2026-08-23:
+        # el contenedor seguía existiendo pasada la espera y el create falló
+        # igual). Espera larga, y a los 10 s se fuerza el borrado por nombre.
+        for intento in range(90):
             if await self.get_object() is None:
                 break
-            try:
-                await self.remove_object()
-            except Exception:      # todavía se está borrando
-                pass
+            if intento == 10:
+                try:
+                    await self.docker("remove_container", self.container_name,
+                                      v=True, force=True)
+                    self.log.warning("Borrado forzado del contenedor anterior "
+                                     "de %s.", self.user.name)
+                except Exception:  # ya se está borrando o ya no está
+                    pass
             await asyncio.sleep(1)
         else:
-            self.log.warning("El contenedor anterior de %s sigue ahí tras 30 s; "
+            self.log.warning("El contenedor anterior de %s sigue ahí tras 90 s; "
                              "el create puede fallar con 409.", self.user.name)
         return await super().create_object()
 
