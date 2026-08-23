@@ -71,9 +71,15 @@ MAX_MENSAJE = int(os.environ.get("TUTOR_MAX_MENSAJE", "2000"))
 MAX_CONTEXTO = int(os.environ.get("TUTOR_MAX_CONTEXTO", "4000"))
 MAX_HISTORIAL = int(os.environ.get("TUTOR_MAX_HISTORIAL", "4000"))
 
-# Fuera de root_dir (/home/jovyan/work), así no aparece en el explorador de
-# archivos del alumno.
-DIR_ESTADO = os.environ.get("TUTOR_ESTADO_DIR", "/home/jovyan/.tutor_ia")
+# Dentro del volumen del alumno (/home/jovyan/work) y oculto: los nombres que
+# empiezan por punto no se listan en el explorador de archivos (allow_hidden es
+# False por defecto), igual que .ava_publicados.json y .ava_entregas.json.
+#
+# Estuvo en /home/jovyan/.tutor_ia, que NO se conserva: ahí el contador de
+# preguntas se reiniciaba cada vez que el contenedor se recreaba —parar y
+# arrancar el servidor desde el Control Panel, cambiar de rol, o un despliegue—,
+# así que el tope de 5 preguntas se saltaba con dos clics.
+DIR_ESTADO = os.environ.get("TUTOR_ESTADO_DIR", "/home/jovyan/work/.ava_tutor")
 ARCHIVO_ESTADO = os.path.join(DIR_ESTADO, "estado.json")
 
 
