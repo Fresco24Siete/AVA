@@ -396,6 +396,24 @@ def main():
         caso("(a) exercise_attempt con cookie+X-XSRFToken -> stub recibe el intento con identidad del servidor",
              conds, {"status": st, "stub": r})
 
+        # ---- (a2) el cuadernillo lo dice el navegador; el activo es respaldo -----
+        stub.reset(201)
+        enviado = dict(PAYLOAD_ATTEMPT, cuadernillo="semana_03")
+        st, js, raw = nav.post(enviado, modo="cookie+xsrf")
+        reqs = esperar_stub(stub, 1)
+        b1 = (reqs[0].get("body") or {}) if reqs else {}
+        stub.reset(201)
+        enviado = dict(PAYLOAD_ATTEMPT, cuadernillo="../otro")
+        st2, js2, raw2 = nav.post(enviado, modo="cookie+xsrf")
+        reqs2 = esperar_stub(stub, 1)
+        b2 = (reqs2[0].get("body") or {}) if reqs2 else {}
+        caso("(a2) cuadernillo del navegador manda; uno invalido cae al activo del arranque",
+             [("con 'semana_03' -> cuadernillo_id=semana_03", b1.get("cuadernillo_id") == "semana_03"),
+              ("el campo 'cuadernillo' no se reenvia", "cuadernillo" not in b1),
+              ("con '../otro' -> cuadernillo_id=semana_prueba", b2.get("cuadernillo_id") == "semana_prueba"),
+              ("ambos 204", st == 204 and st2 == 204)],
+             {"b1": b1.get("cuadernillo_id"), "b2": b2.get("cuadernillo_id")})
+
         # ---- (b) cuadernillo_rating -------------------------------------------
         stub.reset(201)
         st, js, raw = nav.post(PAYLOAD_RATING, modo="cookie+xsrf")

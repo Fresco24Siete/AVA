@@ -16,6 +16,17 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
         return m ? decodeURIComponent(m[1]) : '';
     }
 
+    // El cuadernillo en el que está el alumno, por el nombre del archivo:
+    // 'semana_02.ipynb' -> 'semana_02', y 'semana_02_v3.ipynb' (una corrección
+    // entregada al lado) -> 'semana_02'. Viaja en cada evento. Antes no viajaba
+    // y el puente etiquetaba todo con el cuadernillo activo al ARRANCAR el
+    // contenedor: si el docente publicaba después, o el alumno abría otra
+    // semana, la telemetría quedaba sin cuadernillo o con el equivocado.
+    function codigo_cuadernillo() {
+        var nombre = (Jupyter && Jupyter.notebook && Jupyter.notebook.notebook_name) || '';
+        return nombre.replace(/\.ipynb$/, '').replace(/_v\d+$/, '');
+    }
+
     function meta_nbgrader(cell) {
         return (cell && cell.metadata && cell.metadata.nbgrader) ? cell.metadata.nbgrader : null;
     }
@@ -316,6 +327,7 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
         guardar_estado(estado);
         enviar_evento({
             tipo_evento: "cuadernillo_rating",
+            cuadernillo: codigo_cuadernillo(),
             submitted_at: new Date().toISOString(),
             rating: rating,
             comment: comment || null
@@ -450,6 +462,7 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
         // cliente. attempts_count tampoco: lo cuenta el backend contando eventos.
         var payload = {
             tipo_evento: "exercise_attempt",
+            cuadernillo: codigo_cuadernillo(),
             exercise_id: cod,
             codigo_celda: grade_id,
             orden: obtener_orden_celda(cell),
@@ -502,6 +515,7 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
             if (!errs || !errs.length) return;
             var payload = {
                 tipo_evento: "exercise_attempt",
+                cuadernillo: codigo_cuadernillo(),
                 exercise_id: cod,
                 attempt_at: new Date().toISOString(),
                 validation_result: "sin_validar", // cerró sin correr el test

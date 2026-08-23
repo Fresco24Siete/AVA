@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 
 from tornado import web
 
@@ -40,6 +41,9 @@ IDENTIDAD = {
     "cuadernillo_id": os.environ.get("CUADERNILLO_CODIGO")
                       or os.environ.get("CUADERNILLO_ID"),
 }
+
+# Un cuadernillo es un nombre de carpeta de nbgrader: letras, dígitos, guiones.
+_NOMBRE_SEGURO = re.compile(r"^[A-Za-z0-9_.-]{1,120}$")
 
 # Ruteo por tipo de evento hacia los endpoints del backend (sección 5).
 RUTAS_BACKEND = {
@@ -90,8 +94,17 @@ class MetricsEventoHandler(_BaseHandler):
 
         enviar_backend = os.environ.get("ENVIAR_AL_BACKEND", "false").lower() in ("true", "1", "yes")
 
-        # La identidad la pone el servidor, nunca el cliente.
+        # La identidad la pone el servidor, nunca el cliente: quién es y de qué
+        # curso salen del entorno que dejó el Hub. El CUADERNILLO, en cambio, lo
+        # dice el navegador, que es quien sabe qué archivo tiene abierto; el
+        # activo del arranque queda como respaldo. Con solo el activo, un alumno
+        # que entraba antes de la primera publicación mandaba toda su telemetría
+        # sin cuadernillo, y uno que repasaba la semana 1 la etiquetaba como la 2.
+        cuadernillo = str(evento.pop("cuadernillo", "") or "").strip()
+        if not _NOMBRE_SEGURO.match(cuadernillo):
+            cuadernillo = ""
         evento.update(IDENTIDAD)
+        evento["cuadernillo_id"] = cuadernillo or IDENTIDAD.get("cuadernillo_id") or ""
 
         # tipo_evento es solo el discriminador de ruteo; no forma parte del
         # payload de la sección 5, así que se saca antes de reenviar.

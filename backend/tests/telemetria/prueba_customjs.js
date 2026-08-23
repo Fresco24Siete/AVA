@@ -209,7 +209,7 @@ caso('1. Intento exitoso -> un fetch exercise_attempt passed con cabeceras', () 
   igual(b.tipo_evento, 'exercise_attempt'); igual(b.exercise_id, 'ejercicio_1'); igual(b.codigo_celda, 'test_ejercicio_1');
   igual(b.orden, 3, 'orden = indice+1 (indice 2)'); igual(b.puntos_maximos, 3); igual(b.validation_result, 'passed'); igual(b.errors, []);
   afirmar(ISO.test(b.attempt_at), 'attempt_at ISO');
-  igual(Object.keys(b).sort(), ['attempt_at', 'codigo_celda', 'errors', 'exercise_id', 'orden', 'puntos_maximos', 'tipo_evento', 'validation_result'], 'claves exactas');
+  igual(Object.keys(b).sort(), ['attempt_at', 'codigo_celda', 'cuadernillo', 'errors', 'exercise_id', 'orden', 'puntos_maximos', 'tipo_evento', 'validation_result'], 'claves exactas');
 });
 
 caso('2. Fallo: NameError en solucion + AssertionError en prueba -> failed con 2 errores en orden', () => {
@@ -265,7 +265,7 @@ caso('4a. sin_validar: solucion con error sin correr la prueba + beforeunload ->
   igual(b.tipo_evento, 'exercise_attempt'); igual(b.exercise_id, 'ejercicio_1'); igual(b.validation_result, 'sin_validar');
   igual(b.errors.length, 1); igual(b.errors[0].error_type, 'NameError');
   afirmar(!('codigo_celda' in b) && !('orden' in b) && !('puntos_maximos' in b), 'sin codigo_celda/orden/puntos_maximos');
-  igual(Object.keys(b).sort(), ['attempt_at', 'errors', 'exercise_id', 'tipo_evento', 'validation_result']);
+  igual(Object.keys(b).sort(), ['attempt_at', 'cuadernillo', 'errors', 'exercise_id', 'tipo_evento', 'validation_result']);
   igual(env.fetches.length, 0, 'no usa fetch');
   const st = JSON.parse(env.localStorage.getItem('nbgrader-metrics:semana_01.ipynb'));
   igual(st.errores.ejercicio_1, [], 'buffer vaciado tras el beacon');
@@ -336,7 +336,7 @@ caso('6b. Rating: con input_prompt_number numerico en finished_execute SI se ofr
   const b = env.fetches[2].body;
   igual(b.tipo_evento, 'cuadernillo_rating'); igual(b.rating, 4); igual(b.comment, 'muy bueno');
   afirmar(ISO.test(b.submitted_at), 'submitted_at ISO');
-  igual(Object.keys(b).sort(), ['comment', 'rating', 'submitted_at', 'tipo_evento']);
+  igual(Object.keys(b).sort(), ['comment', 'cuadernillo', 'rating', 'submitted_at', 'tipo_evento']);
   igual(env.fetches[2].options.headers['X-XSRFToken'], 'abc');
   btn.dispatch('click');
   igual(env.fetches.length, 3, 'no se reenvia el rating');
@@ -375,17 +375,19 @@ caso('8. Estado por notebook: clave localStorage nbgrader-metrics:<notebook_path
   igual(env2.fetches[0].body.validation_result, 'passed');
 });
 
-caso('9. El payload no lleva student_id/course_id/cuadernillo_id ni nombre del notebook', () => {
+caso('9. El payload lleva el cuadernillo abierto (sin _vN) y NO la identidad del alumno', () => {
   const doc = crearDocumento(); const nb = notebookBasico(doc);
   const env = cargarEntorno(nb.celdas);
+  env.Jupyter.notebook.notebook_name = 'semana_01_v2.ipynb';
   ejecutar(env, nb.sol1, [errorOutput('NameError', 'x')]);
   ejecutar(env, nb.test1, [errorOutput('AssertionError', 'a')]);
   env.ventana.dispatchEvent('beforeunload');
   ejecutar(env, nb.test1, []);
   const cuerpos = env.fetches.map(f => f.body).concat(env.beacons.map(b => b.body));
+  afirmar(cuerpos.length >= 2, 'hay eventos');
   for (const b of cuerpos) {
-    for (const k of ['student_id', 'course_id', 'cuadernillo_id', 'notebook', 'notebook_path', 'notebook_name']) afirmar(!(k in b), 'no lleva ' + k);
-    afirmar(JSON.stringify(b).indexOf('semana_01') < 0, 'no menciona el notebook');
+    for (const k of ['student_id', 'course_id', 'cuadernillo_id', 'notebook_path']) afirmar(!(k in b), 'no lleva ' + k);
+    igual(b.cuadernillo, 'semana_01', 'el cuadernillo va por el nombre del archivo, sin .ipynb ni _vN');
   }
 });
 
