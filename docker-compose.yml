@@ -15,8 +15,14 @@ volumes:
   caddy_data:
   postgres-data:
   hub_estado:
+  # El curso de nbgrader del docente (source/, release/, submitted/, gradebook).
+  # Solo lo monta el contenedor del instructor (ver jupyterhub_config.py).
   nbgrader_shared:
     external: true
+  # Base y ficheros del servicio de intercambio. Aquí viven las liberaciones y
+  # las entregas hasta que el docente las recoge. Ningún otro contenedor lo
+  # monta: se llega por HTTP.
+  nbexchange_data:
 
 services:
   caddy:
@@ -60,6 +66,39 @@ services:
       # Token maestro con el que el Hub pide a la API un token por alumno
       # (ver _mintear_token_estudiante). Sin el, la telemetria se descarta.
       - METRICS_API_TOKEN=${METRICS_API_TOKEN:-}
+      # Servicio de intercambio de nbgrader (ver NBEXCHANGE.md). El token es el
+      # mismo que recibe el servicio: asi el Hub sabe que es el y le deja leer
+      # quien es cada usuario.
+      - NBEXCHANGE_URL=http://nbexchange:9000
+      - NBEXCHANGE_API_TOKEN=${NBEXCHANGE_API_TOKEN:-}
+
+  nbexchange:
+    build:
+      context: ./nbexchange
+      provenance: false
+      sbom: false
+    container_name: nbexchange
+    restart: unless-stopped
+    # Sin `ports`: solo se le habla desde la red interna (Hub y contenedores de
+    # alumnos/docente). Nada de esto pasa por Caddy.
+    environment:
+      # La API interna del Hub (hub_port por defecto, 8081). Con ella valida el
+      # token de cada contenedor que lo llama y lee el auth_state del usuario.
+      - JUPYTERHUB_API_URL=http://jupyterhub:8081/hub/api
+      - JUPYTERHUB_API_TOKEN=${NBEXCHANGE_API_TOKEN:-}
+      - JUPYTERHUB_SERVICE_PREFIX=/services/nbexchange/
+      # Base propia del servicio, SEPARADA de la de telemetria: SQLite en su
+      # volumen. Cambiarla a Postgres es cambiar esta URL (y meter el servicio
+      # en backend_db_net); hoy no hace falta, guarda unos cientos de filas.
+      - NBEX_DB_URL=sqlite:////var/nbexchange/nbexchange.sqlite
+      - NBEX_BASE_STORE=/var/nbexchange/almacen
+      # Tope por subida. Un cuadernillo pesa ~350 KB; 50 MB sobra. El cliente
+      # (notebook/nbgrader_config.py) usa el mismo valor.
+      - NBEX_MAX_BUFFER_SIZE=52428800
+    volumes:
+      - nbexchange_data:/var/nbexchange
+    networks:
+      - moodle_jupyter_net
 
   api_go:
     build:
@@ -84,14 +123,9 @@ services:
       # ingesta se acepta sin verificar identidad y se avisa por el log.
       - METRICS_API_TOKEN=${METRICS_API_TOKEN:-}
       - METRICS_TOKEN_SECRET=${METRICS_TOKEN_SECRET:-}
-      # Donde deja las entregas de los alumnos (POST /api/entregas), en el
-      # formato que nbgrader espera: submitted/<alumno>/<tarea>/.
-      - NBGRADER_BASE=/srv/nbgrader
-    volumes:
-      # El alumno NO monta este volumen —veria las soluciones y los envios de
-      # sus companeros— asi que su entrega pasa por aqui, que si sabe quien es
-      # cada quien por el token. Ver internal/handler/entregaHandler.go.
-      - nbgrader_shared:/srv/nbgrader
+    # Las entregas de los alumnos ya no pasan por aqui: van al servicio
+    # nbexchange y el docente las recoge desde formgrader. El backend no monta
+    # el volumen de nbgrader.
     depends_on:
       postgres-database:
         condition: service_healthy

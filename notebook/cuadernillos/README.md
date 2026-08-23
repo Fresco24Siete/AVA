@@ -41,10 +41,11 @@ entrypoint.sh (rol instructor)   siembra source/semana_01/ en nbgrader
 formgrader -> Generate           borra soluciones y pruebas ocultas -> release/
    │
    ▼
-publicar-cuadernillo semana_01   escribe el manifest con la ventana de tiempo
-   │
+publicar-cuadernillo semana_01   libera en el servicio nbexchange, con la
+   │                             ventana de tiempo dentro (ava_publicacion.json)
    ▼
-entrypoint.sh (rol estudiante)   entregar-cuadernillo -> work/cuadernillo.ipynb
+entrypoint.sh (rol estudiante)   entregar-cuadernillo -> work/semana_01.ipynb
+   (y cada vez que abre su panel)
 ```
 
 Dos consecuencias de este camino que condicionan todo el diseño:
@@ -53,9 +54,10 @@ Dos consecuencias de este camino que condicionan todo el diseño:
   `.ipynb` y nada más. No hay imágenes, ni módulos, ni `requirements.txt` al
   lado. Por eso los diagramas van incrustados como SVG y el motor lúdico va
   incrustado como código dentro de la primera celda.
-- **El nombre de la carpeta es el `cuadernillo_id`.** `semana_01` viaja hasta el
-  manifest y de ahí a `CUADERNILLO_CODIGO`, que es la clave con la que el tutor
-  cuenta las 5 preguntas por cuadernillo y con la que se etiqueta la telemetría.
+- **El nombre de la carpeta es el `cuadernillo_id`.** `semana_01` es el
+  `assignment_id` en el exchange y de ahí pasa a `CUADERNILLO_CODIGO`, que es la
+  clave con la que el tutor cuenta las 5 preguntas por cuadernillo y con la que
+  se etiqueta la telemetría.
 
 ## Construir
 

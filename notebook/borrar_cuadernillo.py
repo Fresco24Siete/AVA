@@ -13,8 +13,7 @@ operación en la que se borra lo que no era.
 Qué borra:
   - source/<tarea>      lo que autoró el docente
   - release/<tarea>     la versión generada para el alumno
-  - exchange/.../<tarea> el buzón
-  - lo publicado y su entrada en el manifest, si estaba publicada
+  - su liberación en el servicio de intercambio (deja de aparecerle al alumno)
   - su ficha en gradebook.db, para que el nombre quede libre de verdad
 
 Qué NO borra nunca sin --forzar:
@@ -23,7 +22,6 @@ Qué NO borra nunca sin --forzar:
 Antes de borrar nada guarda una copia completa con fecha. La copia se conserva:
 recuperarla es mover una carpeta, y no tenerla es perder el semestre.
 """
-import json
 import os
 import shutil
 import sys
@@ -31,8 +29,6 @@ from datetime import datetime
 
 CURSO = os.environ.get("CURSO_ID", "curso_default")
 RAIZ = f"/srv/nbgrader/{CURSO}"
-EXCHANGE = f"/srv/nbgrader/exchange/{CURSO}"
-PUB = os.environ.get("PUBLICADOS_BASE", "/srv/publicados") + f"/{CURSO}"
 RESPALDOS = f"{RAIZ}/respaldos_borrados"
 
 # Carpetas del docente: se borran. Carpetas con trabajo de alumnos: se protegen.
@@ -42,8 +38,6 @@ DEL_ALUMNOS = ["submitted", "autograded", "feedback"]
 
 def _carpetas(tarea):
     rutas = [(d, os.path.join(RAIZ, d, tarea)) for d in DEL_DOCENTE + DEL_ALUMNOS]
-    rutas.append(("exchange", os.path.join(EXCHANGE, "outbound", tarea)))
-    rutas.append(("publicado", os.path.join(PUB, tarea)))
     return [(etiqueta, ruta) for etiqueta, ruta in rutas if os.path.isdir(ruta)]
 
 
@@ -85,32 +79,21 @@ def _listar():
     return 0
 
 
-def _quitar_del_manifest(tarea):
-    """Saca la tarea del manifest para que deje de aparecerle al alumno."""
-    ruta = os.path.join(PUB, "manifest.json")
+def _retirar_del_exchange(tarea):
+    """Deja de ofrecer la tarea en el servicio de intercambio.
+
+    Es el «unrelease» de nbgrader: el alumno deja de verla en su índice. Lo que
+    ya tenga en su carpeta, y las entregas que estén en el servicio, no se
+    tocan. Devuelve (ok, mensaje).
+    """
     try:
-        with open(ruta, encoding="utf-8") as f:
-            m = json.load(f)
-    except (OSError, ValueError):
-        return False
-
-    publicados = [c for c in (m.get("cuadernillos") or []) if c.get("id") != tarea]
-    cambio = len(publicados) != len(m.get("cuadernillos") or [])
-
-    # Si era el activo, se pasa el testigo al último que quede.
-    if m.get("cuadernillo_id") == tarea:
-        if publicados:
-            m["cuadernillo_id"] = publicados[-1]["id"]
-            m["notebook"] = publicados[-1].get("notebook", "cuadernillo.ipynb")
-        else:
-            m["cuadernillo_id"] = ""
-        cambio = True
-
-    if cambio:
-        m["cuadernillos"] = publicados
-        with open(ruta, "w", encoding="utf-8") as f:
-            json.dump(m, f, ensure_ascii=False, indent=2)
-    return cambio
+        from nbexchange_cliente import ava
+        ava.retirar(tarea)
+        return True, "retirada del intercambio: deja de aparecerle al alumno"
+    except Exception as err:
+        return False, (f"no se pudo retirar del intercambio ({err}); el alumno "
+                       f"seguirá viéndola hasta que se retire a mano con "
+                       f"'nbgrader list --remove {tarea}'")
 
 
 def _quitar_del_gradebook(tarea, destino):
@@ -183,8 +166,8 @@ def borrar(tarea, forzar=False):
     if aviso_bd:
         msgs.append(aviso_bd)
 
-    if _quitar_del_manifest(tarea):
-        msgs.append("quitada del manifest: deja de aparecerle al alumno")
+    _, aviso_exchange = _retirar_del_exchange(tarea)
+    msgs.append(aviso_exchange)
 
     if envios:
         msgs.append(f"ATENCION: se borraron entregas de {envios} estudiante(s).")

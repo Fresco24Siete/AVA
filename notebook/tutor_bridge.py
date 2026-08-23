@@ -363,7 +363,7 @@ def load_jupyter_server_extension(nbapp):
         # cuadernillo y pasa a ser uno solo para todo el curso.
         log.warning("[tutor_bridge] AVISO: no llegó CUADERNILLO_CODIGO. Las %d preguntas "
                     "se contarán de forma global, no por cuadernillo. Revisa "
-                    "entregar-cuadernillo y el manifest de /srv/publicados.", MAX_PREGUNTAS)
+                    "entregar-cuadernillo y el servicio nbexchange.", MAX_PREGUNTAS)
 
 
 def _load_jupyter_server_extension(server_app):

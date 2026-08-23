@@ -22,6 +22,7 @@ import html
 import json
 import logging
 import os
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -42,8 +43,21 @@ TOKEN = os.environ.get("STUDENT_METRICS_TOKEN", "")
 CARPETA = os.environ.get("PANEL_CARPETA", "/home/jovyan/work")
 NOMBRE = os.environ.get("ALUMNO_NOMBRE", "")
 CURSO = os.environ.get("CURSO_ID", "curso_default")
-MANIFEST = (os.environ.get("PUBLICADOS_BASE", "/srv/publicados")
-            + f"/{CURSO}/manifest.json")
+
+
+def _publicados():
+    """Qué hay publicado, según la última consulta al servicio de intercambio.
+
+    La escribe entregar_cuadernillo cada vez que este panel se abre (ver
+    PanelHandler.get), así que está al día sin volver a preguntar.
+    """
+    try:
+        import entregar_cuadernillo
+        with open(entregar_cuadernillo.PUBLICADOS, encoding="utf-8") as f:
+            datos = json.load(f)
+        return datos if isinstance(datos, dict) else {}
+    except Exception:
+        return {}
 
 
 def _activo():
@@ -52,12 +66,12 @@ def _activo():
     Antes se leía de CUADERNILLO_CODIGO, que el entrypoint fija una sola vez al
     arrancar el contenedor. Publicar con sesiones abiertas no le llegaba a nadie
     hasta el siguiente arranque: el alumno seguía viendo la semana anterior
-    marcada, y con el culler en una hora eso es toda una clase. El manifest está
-    montado y leerlo cuesta nada.
+    marcada, y con el culler en una hora eso es toda una clase. Ahora sale de lo
+    último que se consultó al servicio, que se refresca al abrir el panel.
     """
     try:
-        with open(MANIFEST, encoding="utf-8") as f:
-            return str(json.load(f).get("cuadernillo_id", ""))
+        import entregar_cuadernillo
+        return entregar_cuadernillo.activo_de(_publicados().get("cuadernillos") or {})
     except Exception:
         return os.environ.get("CUADERNILLO_CODIGO", "")
 
@@ -110,17 +124,35 @@ ENTREGAS = os.path.join(CARPETA, ".ava_entregas.json")
 
 
 def _entregas():
-    """Qué ha entregado ya este alumno, según su propia carpeta.
+    """Qué ha entregado ya este alumno.
 
-    El registro autoritativo es el del docente, en submitted/. Este es solo para
-    poder decirle al alumno «ya entregaste esto el martes», que es la diferencia
-    entre confiar en el botón y darle diez veces por si acaso.
+    Lo dice el servicio de intercambio, que es quien recibió la entrega (la
+    última consulta queda en la nota local que escribe entregar_cuadernillo).
+    Si no hay respuesta del servicio, vale la anotación propia de este panel.
+    Sirve para decirle al alumno «ya entregaste esto el martes», que es la
+    diferencia entre confiar en el botón y darle diez veces por si acaso.
     """
     try:
         with open(ENTREGAS, encoding="utf-8") as f:
-            return json.load(f)
+            datos = json.load(f)
     except Exception:
-        return {}
+        datos = {}
+    for codigo, ts in (_publicados().get("entregas") or {}).items():
+        cuando = _hora_legible(ts)
+        if cuando:
+            datos[codigo] = cuando
+    return datos
+
+
+def _hora_legible(ts):
+    """'2026-08-22 21:10:00.123456 UTC' -> '22/08 a las 16:10' (hora de Colombia)."""
+    try:
+        from datetime import timedelta, timezone
+        base = str(ts).rsplit(" ", 1)[0]
+        f = datetime.strptime(base, "%Y-%m-%d %H:%M:%S.%f").replace(tzinfo=timezone.utc)
+        return f.astimezone(timezone(timedelta(hours=-5))).strftime("%d/%m a las %H:%M")
+    except Exception:
+        return ""
 
 
 def _anotar_entrega(codigo, cuando):
@@ -133,6 +165,16 @@ def _anotar_entrega(codigo, cuando):
         log.warning("[panel] no se pudo anotar la entrega: %s", err)
 
 
+def _tarea_de(codigo):
+    """'semana_02_v3' -> 'semana_02'.
+
+    Cuando el docente corrige un cuadernillo, la versión nueva llega al alumno
+    como <id>_vN.ipynb. La TAREA de nbgrader sigue siendo <id>: entregar bajo
+    el nombre con sufijo crearía una tarea que no existe y nadie calificaría.
+    """
+    return re.sub(r"_v\d+$", "", codigo)
+
+
 def _nombre_en_nbgrader(codigo):
     """Con qué nombre tiene que archivarse la entrega de este cuadernillo.
 
@@ -142,57 +184,37 @@ def _nombre_en_nbgrader(codigo):
     run generate_assignment?», que no dice nada de lo que pasa de verdad.
 
     En la carpeta del alumno el archivo se llama semana_02.ipynb, porque ahí el
-    nombre tiene que decirle a él de qué semana es. El de nbgrader es el del
-    manifest, que sale de source/: cuadernillo.ipynb.
+    nombre tiene que decirle a él de qué semana es. El de nbgrader es el que
+    liberó el docente, que sale de source/: cuadernillo.ipynb.
     """
-    try:
-        with open(MANIFEST, encoding="utf-8") as f:
-            m = json.load(f)
-        for entrada in m.get("cuadernillos") or []:
-            if str(entrada.get("id", "")) == codigo:
-                nombre = str(entrada.get("notebook", "")).strip()
-                if nombre.endswith(".ipynb"):
-                    return nombre
-        if str(m.get("cuadernillo_id", "")) == codigo:
-            nombre = str(m.get("notebook", "")).strip()
-            if nombre.endswith(".ipynb"):
-                return nombre
-    except Exception as err:
-        log.warning("[panel] no pude leer el nombre de nbgrader: %s", err)
-    return f"{codigo}.ipynb"
+    info = (_publicados().get("cuadernillos") or {}).get(_tarea_de(codigo)) or {}
+    nombre = str(info.get("notebook", "")).strip()
+    return nombre if nombre.endswith(".ipynb") else f"{_tarea_de(codigo)}.ipynb"
 
 
 def _entregar(codigo, archivo):
-    """Manda el cuadernillo del alumno al backend. Devuelve (ok, mensaje)."""
-    if not TOKEN:
-        return False, ("No se puede entregar en esta sesión: falta la "
-                       "credencial. Vuelve a entrar desde Moodle.")
+    """Manda el cuadernillo del alumno al servicio de intercambio.
+
+    Devuelve (ok, mensaje). De ahí lo recoge el docente con «Collect» en
+    formgrader. Quién entrega lo decide el servicio por el token del contenedor,
+    no por nada que venga en la petición.
+    """
     ruta = os.path.join(CARPETA, archivo)
     try:
         with open(ruta, encoding="utf-8") as f:
-            notebook = json.load(f)
+            json.load(f)
     except Exception as err:
         log.warning("[panel] no se pudo leer %s: %s", ruta, err)
         return False, "No pude leer tu cuadernillo. ¿Lo guardaste?"
 
-    cuerpo = json.dumps({"cuadernillo_id": codigo,
-                         "archivo": _nombre_en_nbgrader(codigo),
-                         "notebook": notebook}).encode("utf-8")
-    peticion = urllib.request.Request(
-        BASE.rstrip("/") + "/api/entregas", data=cuerpo, method="POST",
-        headers={"Authorization": f"Bearer {TOKEN}",
-                 "Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(peticion, timeout=20) as resp:
-            json.loads(resp.read().decode("utf-8"))
+        from nbexchange_cliente import ava
+        ava.entregar(_tarea_de(codigo), {_nombre_en_nbgrader(codigo): ruta})
         return True, ""
-    except urllib.error.HTTPError as err:
-        log.warning("[panel] el backend rechazó la entrega: %s", err.code)
-        return False, ("El servidor rechazó la entrega. Avisa a tu profesor si "
-                       "sigue pasando.")
     except Exception as err:
-        log.warning("[panel] no se pudo entregar: %s", err)
-        return False, "No se pudo entregar ahora mismo. Inténtalo otra vez."
+        log.warning("[panel] no se pudo entregar %s: %s", codigo, err)
+        return False, ("No se pudo entregar ahora mismo. Inténtalo otra vez y, "
+                       "si sigue pasando, avisa a tu profesor.")
 
 
 def _enlace(archivo, base_url):

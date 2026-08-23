@@ -55,12 +55,10 @@ func ConfigureRouter (db *sqlx.DB) *gin.Engine{
 	notasService := service.NewNotasService(notasRepository)
 	notasHandler := handler.NewNotasHandler(notasService, tokenMaestro)
 
-	// Entregas: el alumno manda su cuadernillo terminado y el backend lo deja en
-	// submitted/ de nbgrader con la identidad que dice el token. Es la unica via
-	// de entrega: un volumen compartido no serviria, porque dentro de los
-	// contenedores todos los alumnos son el mismo usuario del sistema y podrian
-	// leerse entre ellos.
-	entregaHandler := handler.NewEntregaHandler(os.Getenv("NBGRADER_BASE"))
+	// Las entregas de los alumnos ya no pasan por aqui: van al servicio
+	// nbexchange (el exchange de nbgrader por HTTP, ver NBEXCHANGE.md), que
+	// tambien sabe quien es cada quien por el token del Hub, y el docente las
+	// recoge con Collect. Este backend ya no monta el volumen de nbgrader.
 
 	// Analitica del curso para el docente. Va en /internal porque devuelve el
 	// rendimiento de todo el grupo: cualquier ruta de /api es alcanzable desde
@@ -94,7 +92,6 @@ func ConfigureRouter (db *sqlx.DB) *gin.Engine{
 			ingesta.POST("/exercises/attempts", exerciseHandler.CreateAttemptHandler)
 			ingesta.POST("/cuadernillos/ratings", cuadernilloHandler.CreateCuadernilloHandler)
 			ingesta.GET("/mi-progreso", progresoHandler.MiProgresoHandler)
-			ingesta.POST("/entregas", entregaHandler.RecibirHandler)
 
 			// El tutor tambien va aqui. Estaba fuera, con el argumento de que no
 			// escribe en la base, pero lo que gasta es la cuota de Gemini: desde

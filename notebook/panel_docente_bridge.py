@@ -1,19 +1,18 @@
 """Panel del docente: cómo va el curso, servido por su propio contenedor.
 
 Formgrader responde a «¿qué actividades tengo?» y a nada más. El docente no
-tiene forma de ver qué le ha llegado ni en qué punto del ciclo está cada
-cuadernillo, y desde que el alumno entrega por HTTP —directo a `submitted/`, sin
-pasar por el buzón— «Collect» ya no trae nada: una entrega puede estar en disco
-sin que nada en la pantalla lo diga.
+tiene forma de ver en qué punto del ciclo está cada cuadernillo —generado,
+publicado, con entregas recogidas, calificado— sin recorrer carpetas.
 
 Tres decisiones que gobiernan este archivo:
 
-**Solo lee disco.** Todo lo que muestra sale de lo que este contenedor ya monta:
-`source/`, `release/`, `submitted/`, `autograded/`, el manifest de publicados y
-el libro de notas. Sin backend, sin red, sin base de datos. Lo agregado —cómo va
-el grupo por competencia, qué ejercicio se atasca— vendrá después y en su propia
-sección, para que un fallo de la analítica no se lleve por delante lo que el
-docente necesita para trabajar hoy.
+**Lee disco, y al servicio de intercambio solo para saber qué está publicado.**
+Lo demás sale de lo que este contenedor ya monta: `source/`, `release/`,
+`submitted/`, `autograded/` y el libro de notas. Lo agregado —cómo va el grupo
+por competencia, qué ejercicio se atasca— va en su propia sección, para que un
+fallo de la analítica no se lleve por delante lo que el docente necesita para
+trabajar hoy. Si el intercambio no responde, la columna «publicado» se marca
+como no disponible y el resto se dibuja igual.
 
 **El libro de notas se abre en solo lectura.** `nbgrader.api.Gradebook` escribe
 al abrirse —crea el curso si no existe— y compite por el lock con un Autograde
@@ -43,8 +42,6 @@ log = logging.getLogger(__name__)
 
 CURSO = os.environ.get("CURSO_ID", "curso_default")
 RAIZ = os.environ.get("NBGRADER_BASE", "/srv/nbgrader") + f"/{CURSO}"
-MANIFEST = (os.environ.get("PUBLICADOS_BASE", "/srv/publicados")
-            + f"/{CURSO}/manifest.json")
 
 API = (os.environ.get("METRICS_API_BASE")
        or os.environ.get("STUDENT_METRICS_API_BASE")
@@ -64,12 +61,31 @@ def _carpetas(ruta):
         return []
 
 
-def _manifest():
+def _publicados():
+    """Qué está liberado en el servicio de intercambio, con su ventana.
+
+    La ventana y la marca de «activar» viajan dentro de la liberación
+    (release/<tarea>/ava_publicacion.json, que escribe publicar-cuadernillo), y
+    el docente tiene esa carpeta montada: se lee de ahí. Devuelve
+    ({tarea: info}, pudo_consultar).
+    """
     try:
-        with open(MANIFEST, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {}
+        from nbexchange_cliente import ava
+        liberadas, _ = ava.liberados()
+    except Exception as err:
+        log.warning("[panel-docente] no se pudo consultar el intercambio: %s", err)
+        return {}, False
+    publicados = {}
+    for tarea, info in liberadas.items():
+        pub = ava.leer_publicacion(os.path.join(RAIZ, "release", tarea))
+        publicados[tarea] = {
+            "id": tarea,
+            "timestamp": info["timestamp"],
+            "abre": pub.get("abre"),
+            "cierra": pub.get("cierra"),
+            "activar": pub.get("activar", True),
+        }
+    return publicados, True
 
 
 def _entregas():
@@ -198,9 +214,12 @@ async def _analitica():
 
 def _ciclo():
     """En qué punto está cada cuadernillo, juntando las cuatro fuentes."""
-    m = _manifest()
-    activo = str(m.get("cuadernillo_id", ""))
-    publicados = {str(e.get("id", "")): e for e in (m.get("cuadernillos") or [])}
+    publicados, consulto = _publicados()
+    try:
+        import entregar_cuadernillo
+        activo = entregar_cuadernillo.activo_de(publicados) if consulto else ""
+    except Exception:
+        activo = ""
     tareas_libro, _ = _libro()
 
     entregas_por_tarea = {}
@@ -218,6 +237,9 @@ def _ciclo():
         pub = n in publicados
         ent = entregas_por_tarea.get(n, {"total": 0, "calificadas": 0})
         entrada = publicados.get(n, {})
+        # Lo que los alumnos entregaron y aún no está en submitted/: el
+        # intercambio lo guarda hasta que el docente pulsa «Collect».
+        sin_recoger = _sin_recoger(n, consulto) if pub else (0 if consulto else None)
         filas.append({
             "tarea": n,
             "generada": generada,
@@ -227,18 +249,45 @@ def _ciclo():
             "cierra": entrada.get("cierra"),
             "puntos": tareas_libro.get(n),
             "entregas": ent["total"],
+            "sin_recoger": sin_recoger,
             "calificadas": ent["calificadas"],
-            "siguiente": _siguiente_paso(generada, pub, ent),
+            "siguiente": _siguiente_paso(generada, pub, ent, sin_recoger),
         })
     return activo, filas
 
 
-def _siguiente_paso(generada, publicada, ent):
+def _sin_recoger(tarea, preguntar):
+    """Cuántos alumnos tienen en el intercambio una entrega más nueva que la
+    que hay en submitted/ (o ninguna en submitted/). None si no se pudo saber."""
+    if not preguntar:
+        return None
+    try:
+        from nbexchange_cliente import ava
+        en_exchange = ava.entregas_en_exchange(tarea)
+    except Exception as err:
+        log.warning("[panel-docente] no se pudo listar entregas de %s: %s", tarea, err)
+        return None
+    pendientes = 0
+    for alumno, ts in en_exchange.items():
+        carpeta = os.path.join(RAIZ, "submitted", alumno, tarea)
+        try:
+            with open(os.path.join(carpeta, "timestamp.txt"), encoding="utf-8") as f:
+                recogida = f.read().strip()
+        except OSError:
+            recogida = ""
+        if ts > recogida:
+            pendientes += 1
+    return pendientes
+
+
+def _siguiente_paso(generada, publicada, ent, sin_recoger=None):
     """Qué le toca hacer al docente con este cuadernillo. Uno solo, el primero."""
     if not generada:
         return "Generar"
     if not publicada:
         return "Publicar con publicar-cuadernillo"
+    if sin_recoger:
+        return "Recoger con Collect en formgrader"
     if ent["total"] and ent["calificadas"] < ent["total"]:
         return "Calificar"
     if ent["total"] and ent["calificadas"] == ent["total"]:
@@ -357,14 +406,22 @@ def _seccion_ciclo(filas):
             f'<td class="tenue">{ventana}</td>'
             f'<td class="num">{puntos}</td>'
             f'<td class="num">{f["entregas"] or "—"}</td>'
+            f'<td class="num">{_pendientes(f["sin_recoger"])}</td>'
             f'<td class="num">{f["calificadas"] or "—"}</td>'
             f'<td class="sig">{html.escape(f["siguiente"])}</td></tr>')
     return ('<div class="caja"><table>'
             '<tr><th>Cuadernillo</th><th>Generada</th><th>Publicada</th>'
             '<th>Ventana</th><th class="num">Puntos</th>'
-            '<th class="num">Entregas</th><th class="num">Calificadas</th>'
+            '<th class="num">Recogidas</th><th class="num">Sin recoger</th>'
+            '<th class="num">Calificadas</th>'
             '<th>Te toca</th></tr>'
             f'{cuerpo}</table></div>')
+
+
+def _pendientes(n):
+    if n is None:
+        return '<span class="tenue" title="El servicio de intercambio no respondió">?</span>'
+    return f'<span class="mal">{n}</span>' if n else "—"
 
 
 def _paso(hecho):

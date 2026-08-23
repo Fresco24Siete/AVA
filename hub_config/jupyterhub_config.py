@@ -131,6 +131,20 @@ c.LTI11Authenticator.username_key = 'lis_person_contact_email_primary'
 c.Authenticator.enable_auth_state = True
 
 
+# --- Servicio de intercambio (nbexchange) -------------------------------------
+# El exchange de nbgrader por HTTP: el docente libera ahí, el alumno trae de ahí
+# y entrega ahí, el docente recoge de ahí. Corre como un contenedor más
+# (docker-compose.yml) y se registra como servicio del Hub más abajo. El token
+# es el mismo de los dos lados: con él el servicio le pide al Hub quién es cada
+# usuario que lo llama. Generarlo: openssl rand -hex 32. Rotarlo: NBEXCHANGE.md.
+_NBEXCHANGE_URL = os.environ.get('NBEXCHANGE_URL', 'http://nbexchange:9000')
+_NBEXCHANGE_TOKEN = os.environ.get('NBEXCHANGE_API_TOKEN', '')
+if not _NBEXCHANGE_TOKEN:
+    print('[jupyterhub_config] AVISO: NBEXCHANGE_API_TOKEN no definido; el servicio '
+          'nbexchange no queda registrado y nadie podrá liberar ni entregar '
+          'cuadernillos.')
+
+
 async def _mintear_token_estudiante(auth_state, curso_id, cuadernillo_codigo, spawner):
     """Pide al backend un token de métricas acotado a este estudiante."""
     url = os.environ.get('METRICS_MINT_URL',
@@ -212,10 +226,12 @@ async def auth_state_a_env(spawner, auth_state):
     )
 
     # Montaje por rol:
-    #   - instructor: nbgrader_shared (soluciones/envíos) + publicados, ambos rw.
-    #   - estudiante: SOLO 'cuadernillos_publicados' en READ-ONLY. Nunca
-    #     nbgrader_shared. Se monta en /srv/publicados (fuera de root_dir), así
-    #     que el alumno ni lo ve en el explorador ni puede abrirlo (sin terminal).
+    #   - instructor: nbgrader_shared (su curso de nbgrader: source/, release/,
+    #     submitted/, gradebook.db), rw.
+    #   - estudiante: ningún volumen compartido. Lo que el docente libera le
+    #     llega por el servicio nbexchange, y lo que entrega vuelve por el mismo
+    #     camino (ver NBEXCHANGE.md). Antes había un volumen de «publicados»
+    #     montado solo-lectura en el alumno; ya no hace falta.
     # El trabajo de cada persona va a un volumen propio, montado en su carpeta de
     # trabajo. Hasta ahora vivía SOLO dentro del contenedor: lo único que lo
     # conservaba entre sesiones era que nadie lo borrara. Un `docker rm` o un
@@ -237,12 +253,14 @@ async def auth_state_a_env(spawner, auth_state):
     if es_instructor:
         spawner.volumes = dict(volumen_trabajo, **{
             'nbgrader_shared': '/srv/nbgrader',
-            'cuadernillos_publicados': '/srv/publicados',
         })
     else:
-        spawner.volumes = dict(volumen_trabajo, **{
-            'cuadernillos_publicados': {'bind': '/srv/publicados', 'mode': 'ro'},
-        })
+        spawner.volumes = dict(volumen_trabajo)
+
+    # Dónde escucha el servicio de intercambio. Lo leen nbgrader_config.py y los
+    # comandos del AVA; el token con el que se presentan es JUPYTERHUB_API_TOKEN,
+    # que el propio Hub pone en cada contenedor.
+    spawner.environment['NBEXCHANGE_URL'] = _NBEXCHANGE_URL
 
     # Tope de memoria por contenedor.
     #
@@ -258,12 +276,12 @@ async def auth_state_a_env(spawner, auth_state):
         'MEM_LIMIT_INSTRUCTOR' if es_instructor else 'MEM_LIMIT_ALUMNO',
         '1536M' if es_instructor else '768M')
 
-    # QUÉ cuadernillo está activo lo decide nbgrader/instructor vía el manifest
-    # del volumen de publicados (publicar_cuadernillo.py -> entregar_cuadernillo.py),
-    # NO el backend. El entrypoint del alumno lo resuelve y exporta
-    # CUADERNILLO_CODIGO. Por eso el Hub ya NO le pregunta al backend cuál está
-    # activo: esa "doble responsabilidad" backend<->nbgrader era justo lo que
-    # había que eliminar.
+    # QUÉ cuadernillo está activo lo decide nbgrader/instructor: es el último
+    # que liberó en el exchange y está dentro de su ventana (publicar-cuadernillo
+    # -> nbexchange -> entregar-cuadernillo), NO el backend. El entrypoint del
+    # alumno lo resuelve y exporta CUADERNILLO_CODIGO. Por eso el Hub ya NO le
+    # pregunta al backend cuál está activo: esa "doble responsabilidad"
+    # backend<->nbgrader era justo lo que había que eliminar.
 
     if es_instructor:
         spawner.environment['METRICS_API_URL'] = os.environ.get(
@@ -430,3 +448,26 @@ c.JupyterHub.load_roles = [
         'services': ['idle-culler'],
     },
 ]
+
+# --- nbexchange como servicio del Hub -----------------------------------------
+# Servicio EXTERNO (tiene url, no command): lo levanta docker-compose, no el Hub.
+# Registrarlo hace dos cosas: el Hub conoce su api_token, con el que el servicio
+# consulta `/hub/api/users/<nombre>`; y el proxy del Hub enruta
+# /services/nbexchange/ hacia él, por si algún día hace falta llegarle desde
+# fuera (hoy los contenedores le hablan directo por la red interna).
+#
+# El rol acota lo que puede hacer con ese token: leer usuarios y su auth_state.
+# Lo segundo es lo que le permite guardar a cada alumno bajo su user_id de LTI,
+# el mismo que lleva la telemetría y la nota (ver nbexchange/nbexchange_config.py).
+if _NBEXCHANGE_TOKEN:
+    c.JupyterHub.services.append({
+        'name': 'nbexchange',
+        'url': _NBEXCHANGE_URL,
+        'api_token': _NBEXCHANGE_TOKEN,
+        'display': False,
+    })
+    c.JupyterHub.load_roles.append({
+        'name': 'nbexchange',
+        'scopes': ['read:users', 'admin:auth_state'],
+        'services': ['nbexchange'],
+    })

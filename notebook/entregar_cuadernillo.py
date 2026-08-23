@@ -1,93 +1,112 @@
 #!/usr/bin/env python3
-"""Entrega al alumno el cuadernillo ACTIVO decidido por el instructor vía nbgrader.
+"""Trae al alumno los cuadernillos que el instructor publicó vía nbgrader.
 
-Lo decide un manifest publicado por el instructor (NO el backend): el instructor
-libera la tarea en nbgrader y la publica con una ventana de tiempo. Este script
-corre en el arranque del contenedor del ALUMNO y:
+Lo decide el instructor al liberar la tarea en el servicio de intercambio
+(nbexchange) con `publicar-cuadernillo`, NO el backend. Este módulo corre en el
+contenedor del ALUMNO, al arrancar y cada vez que abre su panel, y:
 
-  1. Lee /srv/publicados/<CURSO_ID>/manifest.json (volumen read-only).
-  2. Valida la ventana de tiempo (abre/cierra).
-  3. Copia el notebook liberado (sin soluciones) a /home/jovyan/work/cuadernillo.ipynb
-     — nombre FIJO, para que el Hub siempre pueda apuntar default_url ahí.
-  4. Si está fuera de ventana o no hay activo, entrega un notebook "cerrado".
-  5. Imprime en stdout el codigo del cuadernillo, que el entrypoint exporta como
-     CUADERNILLO_CODIGO para que la telemetría lo etiquete.
+  1. Pregunta al servicio qué tareas hay liberadas para su curso (lo responde
+     para ese alumno y ese curso, autenticado con el token del contenedor).
+  2. Trae las que no tenga o hayan cambiado, a una carpeta temporal.
+  3. Lee la ventana de tiempo (abre/cierra) que el docente dejó dentro de la
+     liberación (ava_publicacion.json) y descarta lo que está fuera de ella.
+  4. Deja cada cuadernillo en /home/jovyan/work/<id>.ipynb. Si el alumno ya lo
+     tenía y el docente corrigió el contenido, la versión nueva va al lado
+     (<id>_v2.ipynb): su trabajo está dentro del anterior y no se toca.
+  5. Escribe el índice (inicio.ipynb) y una nota local de qué hay publicado
+     (.ava_publicados.json), que el panel lee sin volver a preguntar.
+  6. Imprime en stdout el código del cuadernillo activo, que el entrypoint
+     exporta como CUADERNILLO_CODIGO para que la telemetría lo etiquete.
 
-No sobrescribe el trabajo del alumno: si ya existe cuadernillo.ipynb (re-spawn),
-no lo toca, para no borrar su progreso.
+Activo = la liberación más reciente que esté en ventana y no se haya publicado
+con --sin-activar.
+
+Si el servicio no responde, no falla: se queda con lo que ya tenía en disco y
+la nota local, y el panel se dibuja igual. Un fallo del intercambio no puede
+dejar al alumno sin sus cuadernillos.
+
+No sobrescribe el trabajo del alumno nunca.
 """
+import hashlib
 import json
 import os
 import shutil
+import tempfile
 from datetime import datetime, timezone
 
 CURSO = os.environ.get("CURSO_ID", "curso_default")
-# Rutas configurables por env (defaults de producción); facilita las pruebas.
-PUB_BASE = os.environ.get("PUBLICADOS_BASE", "/srv/publicados")
 DESTINO = os.environ.get("CUADERNILLO_DESTINO", "/home/jovyan/work/cuadernillo.ipynb")
-PUB_DIR = f"{PUB_BASE}/{CURSO}"
-MANIFEST = f"{PUB_DIR}/manifest.json"
+CARPETA = os.path.dirname(DESTINO)
+
+# El alumno abre `inicio.ipynb`: un indice con los cuadernillos publicados hasta
+# hoy, marcando el de esta semana. Cada cuadernillo vive en `<id>.ipynb`.
+INICIO = os.environ.get("CUADERNILLO_INICIO", os.path.join(CARPETA, "inicio.ipynb"))
+
+# Qué versión de cada archivo tiene ya el alumno. Vive en su carpeta de trabajo
+# -- es decir, en su volumen -- para sobrevivir a que se recree el contenedor.
+REGISTRO = os.path.join(CARPETA, ".ava_versiones.json")
+
+# Qué hay publicado, según la última vez que se pudo preguntar al servicio. Lo
+# lee el panel (marca de «Esta semana», nombre del notebook para nbgrader,
+# constancia de entrega) sin tener que volver a llamar al servicio.
+PUBLICADOS = os.path.join(CARPETA, ".ava_publicados.json")
 
 
-def _nb_markdown(titulo, cuerpo):
-    """Devuelve un .ipynb mínimo válido con un solo cell markdown.
-
-    Va marcado con `ava_aviso`: es un cartel, no un cuadernillo, y hay que poder
-    distinguirlo más tarde de algo que el alumno haya escrito (ver la migración
-    en main()).
-    """
-    return {
-        "cells": [{
-            "cell_type": "markdown",
-            "metadata": {},
-            "source": [f"# {titulo}\n", "\n", cuerpo],
-        }],
-        "metadata": {"ava_aviso": True},
-        "nbformat": 4,
-        "nbformat_minor": 5,
-    }
+def _leer_json(ruta, por_defecto):
+    try:
+        with open(ruta, encoding="utf-8") as f:
+            datos = json.load(f)
+        return datos if isinstance(datos, type(por_defecto)) else por_defecto
+    except (OSError, ValueError):
+        return por_defecto
 
 
-def _escribir(nb):
-    with open(DESTINO, "w", encoding="utf-8") as f:
-        json.dump(nb, f, ensure_ascii=False)
+def _guardar_json(ruta, datos):
+    try:
+        with open(ruta, "w", encoding="utf-8") as f:
+            json.dump(datos, f, ensure_ascii=False, indent=1)
+    except OSError:
+        pass          # no vale la pena tumbar el arranque por esto
 
 
 def _parse(ts):
     if not ts:
         return None
     try:
-        return datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+        f = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
     except ValueError:
         return None
+    return f if f.tzinfo else f.replace(tzinfo=timezone.utc)
 
 
-# El alumno abre `inicio.ipynb`: un indice con los cuadernillos publicados hasta
-# hoy, marcando el de esta semana. Cada cuadernillo vive en `<id>.ipynb`.
-INICIO = os.environ.get("CUADERNILLO_INICIO",
-                        os.path.join(os.path.dirname(DESTINO), "inicio.ipynb"))
+def _disponible(entrada, ahora):
+    """True si el cuadernillo esta dentro de su ventana de tiempo."""
+    abre = _parse(entrada.get("abre"))
+    cierra = _parse(entrada.get("cierra"))
+    if abre and ahora < abre:
+        return False
+    if cierra and ahora > cierra:
+        return False
+    return True
 
 
-# Qué versión de cada cuadernillo tiene ya el alumno. Vive en su carpeta de
-# trabajo -- es decir, en su volumen -- para sobrevivir a que se recree el
-# contenedor.
-REGISTRO = os.path.join(os.path.dirname(DESTINO), ".ava_versiones.json")
+def activo_de(publicados, ahora=None):
+    """Cuál es el cuadernillo de esta semana, dado lo publicado.
 
-
-def _leer_registro():
-    try:
-        with open(REGISTRO, encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return {}
-
-
-def _guardar_registro(datos):
-    try:
-        with open(REGISTRO, "w", encoding="utf-8") as f:
-            json.dump(datos, f, ensure_ascii=False, indent=1)
-    except OSError:
-        pass          # no vale la pena tumbar el arranque por esto
+    El liberado más reciente que está en ventana. Los publicados con
+    --sin-activar (una errata corregida) ceden el turno a cualquier otro que
+    sí active; solo si no hay ninguno otro, vale el que haya. Lo comparten el
+    alumno (panel, telemetría) y el docente (su panel), para que los dos vean
+    lo mismo.
+    """
+    ahora = ahora or datetime.now(timezone.utc)
+    disponibles = [(info.get("timestamp", ""), codigo)
+                   for codigo, info in publicados.items()
+                   if _disponible(info, ahora)]
+    activables = [c for c in disponibles
+                  if publicados[c[1]].get("activar", True) is not False]
+    elegibles = activables or disponibles
+    return max(elegibles)[1] if elegibles else ""
 
 
 def _titulo_bonito(codigo):
@@ -96,6 +115,15 @@ def _titulo_bonito(codigo):
     if len(partes) == 2 and partes[1].isdigit():
         return f"{partes[0].capitalize()} {int(partes[1])}"
     return codigo
+
+
+def _nb_markdown(texto):
+    return {
+        "cells": [{"cell_type": "markdown", "metadata": {}, "source": [texto]}],
+        "metadata": {"kernelspec": {"display_name": "Python 3", "language": "python",
+                                    "name": "python3"}},
+        "nbformat": 4, "nbformat_minor": 5,
+    }
 
 
 def _escribir_indice(entregados, activo):
@@ -129,25 +157,136 @@ def _escribir_indice(entregados, activo):
             "cierra por fecha deja de aparecer aqui, pero lo que ya hiciste no "
             "se borra.",
         ]
-    _escribir_en(INICIO, _nb_markdown_crudo("\n".join(lineas)))
+    try:
+        with open(INICIO, "w", encoding="utf-8") as f:
+            json.dump(_nb_markdown("\n".join(lineas)), f, ensure_ascii=False)
+    except OSError:
+        pass
 
 
-def _nb_markdown_crudo(texto):
-    return {
-        "cells": [{"cell_type": "markdown", "metadata": {}, "source": [texto]}],
-        "metadata": {"kernelspec": {"display_name": "Python 3", "language": "python",
-                                    "name": "python3"}},
-        "nbformat": 4, "nbformat_minor": 5,
-    }
+def _sha(ruta):
+    with open(ruta, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()[:12]
 
 
-def _escribir_en(ruta, nb):
-    with open(ruta, "w", encoding="utf-8") as f:
-        json.dump(nb, f, ensure_ascii=False)
+def _consultar(publicados):
+    """Pregunta al servicio y actualiza `publicados` en sitio.
+
+    Devuelve (pudo_consultar, entregas, descargas) donde `descargas` es
+    {id: carpeta temporal con la liberación} para lo que hubo que traer. Quien
+    llama borra esas carpetas.
+    """
+    try:
+        from nbexchange_cliente import ava
+        liberadas, entregas = ava.liberados()
+    except Exception:
+        return False, {}, {}
+
+    descargas = {}
+    for codigo, info in liberadas.items():
+        conocido = publicados.get(codigo, {})
+        if conocido.get("timestamp") == info["timestamp"]:
+            continue          # ya se sabía de esta liberación
+        tmp = tempfile.mkdtemp(prefix="ava-pub-")
+        try:
+            ava.descargar(codigo, os.path.join(tmp, codigo))
+        except Exception:
+            shutil.rmtree(tmp, ignore_errors=True)
+            continue
+        carpeta = os.path.join(tmp, codigo)
+        pub = ava.leer_publicacion(carpeta)
+        notebooks = sorted(n for n in os.listdir(carpeta) if n.endswith(".ipynb"))
+        principal = pub.get("notebook") if pub.get("notebook") in notebooks else (
+            notebooks[0] if notebooks else "")
+        if not principal:
+            shutil.rmtree(tmp, ignore_errors=True)
+            continue
+        publicados[codigo] = {
+            "timestamp": info["timestamp"],
+            "notebook": principal,
+            "abre": pub.get("abre"),
+            "cierra": pub.get("cierra"),
+            "activar": pub.get("activar", True),
+            "version": str(pub.get("version") or _sha(os.path.join(carpeta, principal))),
+        }
+        descargas[codigo] = tmp
+
+    # Lo que el docente retiró del servicio deja de estar publicado. El archivo
+    # del alumno, si lo tenía, se queda donde está.
+    for codigo in list(publicados):
+        if codigo not in liberadas:
+            del publicados[codigo]
+    return True, entregas, descargas
+
+
+def main():
+    nota = _leer_json(PUBLICADOS, {})
+    publicados = dict(nota.get("cuadernillos") or {})
+    entregas = dict(nota.get("entregas") or {})
+
+    consulto, entregas_nuevas, descargas = _consultar(publicados)
+    if consulto:
+        entregas = entregas_nuevas
+
+    ahora = datetime.now(timezone.utc)
+    registro = _leer_json(REGISTRO, {})
+    _migrar_modelo_viejo(activo_de(publicados, ahora))
+    entregados = []
+    try:
+        for codigo in sorted(publicados):
+            info = publicados[codigo]
+            if not _disponible(info, ahora):
+                continue
+
+            archivo = f"{codigo}.ipynb"
+            destino = os.path.join(CARPETA, archivo)
+            version = info.get("version", "")
+            anterior = None
+
+            if os.path.exists(destino):
+                if version and registro.get(archivo, version) != version:
+                    # El docente corrigio el cuadernillo despues de que este
+                    # alumno ya lo tenia. NO se sobrescribe: su trabajo esta
+                    # dentro. La version nueva se entrega al lado y el indice
+                    # enlaza las dos.
+                    anterior = archivo
+                    n = 2
+                    while os.path.exists(os.path.join(CARPETA, f"{codigo}_v{n}.ipynb")):
+                        if registro.get(f"{codigo}_v{n}.ipynb") == version:
+                            break          # esa correccion ya se le habia entregado
+                        n += 1
+                    archivo = f"{codigo}_v{n}.ipynb"
+                    destino = os.path.join(CARPETA, archivo)
+
+            if not os.path.exists(destino):
+                origen = _origen(codigo, info, descargas)
+                if not origen:
+                    continue
+                try:
+                    shutil.copyfile(origen, destino)
+                except OSError:
+                    continue
+                registro[archivo] = version
+
+            entregados.append({"id": codigo, "archivo": archivo, "anterior": anterior})
+    finally:
+        for tmp in descargas.values():
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    _guardar_json(REGISTRO, registro)
+    _guardar_json(PUBLICADOS, {"cuadernillos": publicados, "entregas": entregas,
+                               "consultado": consulto,
+                               "en": datetime.now(timezone.utc).isoformat()})
+    activo = activo_de(publicados, ahora)
+    _escribir_indice(entregados, activo)
+
+    # El codigo que se devuelve etiqueta la telemetria y el cupo del tutor: es
+    # el del cuadernillo de esta semana.
+    return activo
 
 
 def _es_aviso(ruta):
-    """True si el .ipynb de esa ruta es un cartel puesto por este script."""
+    """True si el .ipynb de esa ruta es un cartel puesto por una version vieja."""
     try:
         with open(ruta, encoding="utf-8") as f:
             return bool(json.load(f).get("metadata", {}).get("ava_aviso"))
@@ -157,112 +296,38 @@ def _es_aviso(ruta):
         return False
 
 
-def _disponible(entrada, ahora):
-    """True si el cuadernillo esta dentro de su ventana de tiempo."""
-    abre = _parse(entrada.get("abre"))
-    cierra = _parse(entrada.get("cierra"))
-    if abre and ahora < abre:
-        return False
-    if cierra and ahora > cierra:
-        return False
-    return True
+def _migrar_modelo_viejo(activo):
+    """El trabajo del alumno estaba en 'cuadernillo.ipynb' a secas.
 
-
-def main():
-    try:
-        with open(MANIFEST, encoding="utf-8") as f:
-            m = json.load(f)
-    except FileNotFoundError:
-        _escribir_indice([], "")
-        _escribir(_nb_markdown(
-            "Aun no hay cuadernillo",
-            "El profesor todavia no ha publicado un cuadernillo para este curso."))
-        return ""
-    except Exception as exc:  # manifest corrupto
-        _escribir_indice([], "")
-        _escribir(_nb_markdown("No se pudo cargar el cuadernillo", str(exc)))
-        return ""
-
-    activo = str(m.get("cuadernillo_id", ""))
-    ahora = datetime.now(timezone.utc)
-
-    # Formato nuevo (lista) con respaldo al viejo (uno solo).
-    publicados = m.get("cuadernillos") or []
-    if not publicados and activo:
-        publicados = [{"id": activo, "notebook": m.get("notebook", ""),
-                       "abre": m.get("abre"), "cierra": m.get("cierra")}]
-
-    carpeta = os.path.dirname(DESTINO)
-
-    # Migracion del modelo viejo: el trabajo del alumno estaba en
-    # 'cuadernillo.ipynb' a secas. Se renombra al nombre nuevo para que no lo
-    # pierda al pasar al indice.
-    #
-    # Solo si de verdad hay trabajo dentro. Antes se movia cualquier cosa que
-    # estuviera en esa ruta, y ahi es donde se escribe el cartel de "aun no hay
-    # cuadernillo" cuando el alumno entra antes de la primera publicacion. El
-    # cartel acababa llamandose semana_02.ipynb, y como el nombre ya existia el
-    # cuadernillo de verdad no se copiaba nunca: el alumno se quedaba con el
-    # cartel para siempre, y sin acceso al servidor no habia forma de arreglarlo.
-    # Le pasaria a toda la cohorte que entre el primer dia antes de publicar.
-    destino_activo = os.path.join(carpeta, f"{activo}.ipynb") if activo else None
-    if (destino_activo and os.path.exists(DESTINO)
-            and not os.path.exists(destino_activo)
+    Se renombra al nombre nuevo para que no lo pierda al pasar al indice. Solo
+    si de verdad hay trabajo dentro: ahi es donde las versiones viejas
+    escribian el cartel de "aun no hay cuadernillo".
+    """
+    if not activo:
+        return
+    destino = os.path.join(CARPETA, f"{activo}.ipynb")
+    if (os.path.exists(DESTINO) and not os.path.exists(destino)
             and not _es_aviso(DESTINO)):
         try:
-            shutil.move(DESTINO, destino_activo)
-        except Exception:
+            shutil.move(DESTINO, destino)
+        except OSError:
             pass
 
-    registro = _leer_registro()
-    entregados = []
-    for entrada in publicados:
-        codigo = str(entrada.get("id", ""))
-        if not codigo or not _disponible(entrada, ahora):
-            continue
 
-        version = str(entrada.get("version", ""))
-        origen = f"{PUB_DIR}/{codigo}/{entrada.get('notebook', '')}"
-        archivo = f"{codigo}.ipynb"
-        destino = os.path.join(carpeta, archivo)
-        anterior = None
-
-        if not os.path.exists(destino):
-            # Primera vez: se entrega con su nombre normal.
-            try:
-                shutil.copyfile(origen, destino)
-            except Exception:
-                continue
-            registro[archivo] = version
-
-        elif version and registro.get(archivo, version) != version:
-            # El docente corrigio el cuadernillo despues de que este alumno ya lo
-            # tenia. NO se sobrescribe: su trabajo esta dentro. La version nueva
-            # se entrega al lado y el indice enlaza las dos.
-            anterior = archivo
-            n = 2
-            while os.path.exists(os.path.join(carpeta, f"{codigo}_v{n}.ipynb")):
-                if registro.get(f"{codigo}_v{n}.ipynb") == version:
-                    break          # esa correccion ya se le habia entregado
-                n += 1
-            archivo = f"{codigo}_v{n}.ipynb"
-            destino = os.path.join(carpeta, archivo)
-            if not os.path.exists(destino):
-                try:
-                    shutil.copyfile(origen, destino)
-                except Exception:
-                    continue
-                registro[archivo] = version
-
-        entregados.append({"id": codigo, "archivo": archivo, "anterior": anterior})
-
-    _guardar_registro(registro)
-
-    _escribir_indice(entregados, activo)
-
-    # El codigo que se devuelve etiqueta la telemetria y el cupo del tutor: es
-    # el del cuadernillo de esta semana.
-    return activo
+def _origen(codigo, info, descargas):
+    """Ruta local del notebook liberado, trayéndolo si hace falta."""
+    if codigo not in descargas:
+        # Se sabía de esta liberación pero el archivo no está (el alumno lo
+        # borró, o el registro es de otro volumen): se vuelve a traer.
+        try:
+            from nbexchange_cliente import ava
+            tmp = tempfile.mkdtemp(prefix="ava-pub-")
+            ava.descargar(codigo, os.path.join(tmp, codigo))
+            descargas[codigo] = tmp
+        except Exception:
+            return None
+    ruta = os.path.join(descargas[codigo], codigo, info.get("notebook", ""))
+    return ruta if os.path.isfile(ruta) else None
 
 
 if __name__ == "__main__":

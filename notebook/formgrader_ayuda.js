@@ -40,27 +40,31 @@
         {
             boton: 'Release',
             titulo: '2. Liberar',
-            texto: 'Deja el cuadernillo en el buzón de nbgrader. <b>En este AVA ' +
-                   'no es lo que se lo entrega al alumno</b>: eso lo hace el ' +
-                   'comando publicar-cuadernillo, que además define desde ' +
-                   'cuándo y hasta cuándo está abierto.',
-            aviso: 'Al volver a pulsarlo dice «unrelease» y lo retira del buzón, ' +
-                   'pero NO se lo quita a los alumnos: quien ya lo tenga sigue ' +
-                   'trabajando en él. Para retirarlo de verdad hay que publicar ' +
-                   'otro cuadernillo o cerrarle la fecha.'
+            texto: 'Sube el cuadernillo al servicio de intercambio, y desde ese ' +
+                   'momento lo recibe cualquier alumno que entre o abra su ' +
+                   'panel, sin que nadie tenga que reconstruir nada. Es lo mismo ' +
+                   'que hace el comando <b>publicar-cuadernillo</b>, que además ' +
+                   'permite fijar desde cuándo y hasta cuándo está abierto, y ' +
+                   'corregir una errata sin quitarle el turno a la semana en ' +
+                   'curso (--sin-activar). El último liberado pasa a ser «el de ' +
+                   'esta semana».',
+            aviso: 'Al volver a pulsarlo dice «unrelease» y lo retira del ' +
+                   'servicio: deja de aparecerle a los alumnos, pero quien ya lo ' +
+                   'tenga sigue trabajando en él y puede entregarlo.'
         },
         {
             boton: 'Collect',
-            titulo: 'Recoger',
-            texto: '<b>Con este AVA no hace falta.</b> Recoger trae lo que los ' +
-                   'alumnos dejaron en el buzón de nbgrader, y aquí el alumno ' +
-                   'no usa el buzón: al pulsar «Entregar» en su cuadernillo, el ' +
-                   'archivo llega directo a la carpeta de entregas. Pulsarlo no ' +
-                   'rompe nada, simplemente no encuentra nada que traer.'
+            titulo: '3. Recoger',
+            texto: 'Trae a la carpeta de entregas lo que los alumnos mandaron ' +
+                   'con «Entregar» desde su cuadernillo. <b>Hasta que no lo ' +
+                   'pulses, Calificar no ve nada.</b> Se puede pulsar las veces ' +
+                   'que haga falta: solo trae lo nuevo, y si un alumno volvió a ' +
+                   'entregar se queda con su versión más reciente. El panel del ' +
+                   'curso dice cuántas entregas hay sin recoger.'
         },
         {
             boton: 'Autograde',
-            titulo: '3. Calificar',
+            titulo: '4. Calificar',
             texto: 'Ejecuta las pruebas de cada entrega y pone la nota ' +
                    'automática. Después puedes revisar a mano lo que quieras y ' +
                    'ajustar la calificación.'
@@ -69,11 +73,11 @@
 
     var RESUMEN =
         '<b>nbgrader no trae forma de borrar una actividad</b>: lo más parecido ' +
-        'es retirarla del buzón con Release, que no elimina nada. Para eso está ' +
-        'el bloque de abajo, añadido por este AVA. ' +
+        'es retirarla del servicio con Release, que no elimina nada. Para eso ' +
+        'está el bloque de abajo, añadido por este AVA. ' +
         'El recorrido completo es: <b>editas el cuadernillo → Generar → ' +
-        'Previsualizar → Liberar → publicar-cuadernillo → (los alumnos ' +
-        'trabajan y entregan) → Calificar → registrar-notas</b>. ' +
+        'Previsualizar → Liberar (o publicar-cuadernillo) → (los alumnos ' +
+        'trabajan y entregan) → Recoger → Calificar → registrar-notas</b>. ' +
         'La nota sale solo de las celdas de prueba; los puntos de experiencia y ' +
         'las insignias que ve el alumno no cuentan para nada.';
 

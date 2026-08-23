@@ -28,10 +28,14 @@ RUN apt-get update && apt-get install -y curl git \
 # kernel que la importe, y la VM tiene 2 GB. Por eso los cuadernillos de las
 # primeras semanas NO lo importan: sus gráficas y diagramas van pre-renderizados
 # como SVG dentro del propio notebook (ver notebook/cuadernillos/diagramas/).
+#
+# humanize lo usa el cliente de nbexchange (notebook/nbexchange_cliente) para
+# decir "50 MB" en un mensaje de error. Va en el mismo pip por la razón de arriba.
 RUN pip install --no-cache-dir \
         "notebook<7" nbclassic nbgrader jupyterhub requests \
         "ipywidgets==8.1.8" \
-        "matplotlib==3.9.2"
+        "matplotlib==3.9.2" \
+        humanize
 
 # widgetsnbextension 4.x sí trae la extensión clásica; su fichero .d/ ya la
 # auto-activa, pero dejarlo explícito cuesta poco y evita depender de eso.
@@ -51,6 +55,10 @@ RUN useradd -m -s /bin/bash -u 1000 jovyan
 # Configuración global de nbgrader (course_id dinámico vía env) y el plugin
 # de exportación hacia Postgres
 COPY nbgrader_config.py /etc/jupyter/nbgrader_config.py
+# El exchange de nbgrader por HTTP (servicio nbexchange). Ver su ORIGEN.md:
+# son las clases del plugin upstream copiadas, porque el paquete no se puede
+# instalar sobre nbgrader 0.8.5 sin arrastrar jupyter_server 2 y JupyterLab 4.
+COPY nbexchange_cliente/ /etc/jupyter/nbexchange_cliente/
 COPY plugins/api_export.py /etc/jupyter/api_export.py
 COPY metrics_bridge.py /etc/jupyter/metrics_bridge.py
 # Tutor IA: la extensión de servidor y el JS del panel, que ella misma sirve
@@ -86,7 +94,7 @@ RUN cp /tmp/ava_ayuda.js \
     && rm -f /tmp/ava_ayuda.js /tmp/parchar_formgrader.py
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-# Entrega del cuadernillo activo (alumno) y publicación (instructor).
+# Traer lo publicado (alumno) y publicar = liberar en el intercambio (instructor).
 COPY entregar_cuadernillo.py /usr/local/bin/entregar-cuadernillo
 COPY publicar_cuadernillo.py /usr/local/bin/publicar-cuadernillo
 # Refresco explícito de source/ cuando se actualiza el contenido de un
@@ -119,12 +127,12 @@ RUN chmod +x /usr/local/bin/entrypoint.sh \
 # se puede extraer. Tienen que no entrar nunca. Por eso el docente arranca desde
 # otra imagen, construida encima de esta, que sí las trae.
 
-# Crear /srv/nbgrader y /srv/publicados en la imagen con dueño jovyan: al montar
-# volúmenes nombrados vacíos sobre estas rutas, Docker los inicializa copiando
-# el dueño de la imagen -> jovyan puede escribir. Sin esto, el volumen queda de
-# root y publicar/entregar fallan con PermissionError.
-RUN mkdir -p /srv/nbgrader /srv/publicados \
-    && chown -R jovyan:jovyan /srv/nbgrader /srv/publicados
+# Crear /srv/nbgrader en la imagen con dueño jovyan: al montar un volumen
+# nombrado vacío sobre esta ruta, Docker lo inicializa copiando el dueño de la
+# imagen -> jovyan puede escribir. Sin esto, el volumen queda de root y
+# formgrader falla con PermissionError.
+RUN mkdir -p /srv/nbgrader \
+    && chown -R jovyan:jovyan /srv/nbgrader
 
 # El workspace del alumno debe existir y pertenecer a jovyan. Antes lo creaba
 # implícitamente el COPY de notebook_semana; al quitarlo, WORKDIR lo crearía
