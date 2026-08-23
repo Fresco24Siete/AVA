@@ -50,20 +50,40 @@ type ResumenCuadernilloCurso struct {
 	Alumnos        int    `db:"alumnos" json:"alumnos_con_actividad"`
 	IntentosReales int    `db:"intentos_reales" json:"intentos_reales"`
 	Ejercicios     int    `db:"ejercicios" json:"ejercicios_distintos"`
+	NotasSubidas   int    `db:"notas_subidas" json:"notas_subidas"`
 }
 
+// PorCuadernillo: actividad de telemetría por cuadernillo, más cuántas notas
+// de nbgrader ya llegaron (cuadernillo_notas). Lo segundo es lo que le dice al
+// panel del docente si «subir notas» ya está hecho; sin eso, el paso seguía
+// apareciendo como pendiente después de hacerlo.
 func (r *PanelDocenteRepository) PorCuadernillo(curso string) ([]ResumenCuadernilloCurso, error) {
 	// Nunca nil: un slice vacío se serializa como null y obliga a quien lo
 	// consume a distinguir «no hay» de «falló».
 	salida := []ResumenCuadernilloCurso{}
-	err := r.db.Select(&salida, intentosReales+`
-		SELECT cuadernillo_id,
-		       COUNT(DISTINCT student_id)                    AS alumnos,
-		       COUNT(*) FILTER (WHERE NOT stub)              AS intentos_reales,
-		       COUNT(DISTINCT exercise_id)                   AS ejercicios
-		  FROM t
-		 GROUP BY cuadernillo_id
-		 ORDER BY cuadernillo_id`, curso)
+	err := r.db.Select(&salida, intentosReales+`,
+		tele AS (
+		    SELECT cuadernillo_id,
+		           COUNT(DISTINCT student_id)                    AS alumnos,
+		           COUNT(*) FILTER (WHERE NOT stub)              AS intentos_reales,
+		           COUNT(DISTINCT exercise_id)                   AS ejercicios
+		      FROM t
+		     GROUP BY cuadernillo_id
+		),
+		notas AS (
+		    SELECT cuadernillo_id, COUNT(*) AS notas_subidas
+		      FROM cuadernillo_notas
+		     WHERE course_id = $1
+		     GROUP BY cuadernillo_id
+		)
+		SELECT COALESCE(tele.cuadernillo_id, notas.cuadernillo_id) AS cuadernillo_id,
+		       COALESCE(tele.alumnos, 0)                           AS alumnos,
+		       COALESCE(tele.intentos_reales, 0)                   AS intentos_reales,
+		       COALESCE(tele.ejercicios, 0)                        AS ejercicios,
+		       COALESCE(notas.notas_subidas, 0)                    AS notas_subidas
+		  FROM tele
+		  FULL OUTER JOIN notas ON notas.cuadernillo_id = tele.cuadernillo_id
+		 ORDER BY 1`, curso)
 	return salida, err
 }
 

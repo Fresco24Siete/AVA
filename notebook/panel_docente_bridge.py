@@ -296,9 +296,12 @@ def _ciclo(datos, historial):
         if e["calificada"][0]:
             d["calificadas"] += 1
 
-    # Alumnos con telemetría por cuadernillo: los que están trabajando.
+    # Alumnos con telemetría por cuadernillo: los que están trabajando. Y
+    # cuántas notas de ese cuadernillo ya están en el backend.
     trabajando = {c.get("cuadernillo_id"): c.get("alumnos_con_actividad", 0)
                   for c in (datos or {}).get("cuadernillos", [])}
+    notas_subidas = {c.get("cuadernillo_id"): c.get("notas_subidas", 0)
+                     for c in (datos or {}).get("cuadernillos", [])}
 
     nombres = sorted(set(_carpetas(os.path.join(RAIZ, "source")))
                      | set(publicados) | set(tareas_libro))
@@ -332,23 +335,34 @@ def _ciclo(datos, historial):
             "sin_recoger": sin_recoger,
             "calificadas": ent["calificadas"],
             "siguiente": _siguiente_paso(generada, pub, ent, sin_recoger,
-                                         trabajando.get(n, 0), entregado),
+                                         trabajando.get(n, 0), entregado,
+                                         notas_subidas.get(n, 0) if datos else None),
         })
     return activo, filas
 
 
-def _siguiente_paso(generada, publicada, ent, sin_recoger, trabajando, entregado):
-    """Qué le toca hacer al docente con este cuadernillo. Uno solo, el primero."""
+def _siguiente_paso(generada, publicada, ent, sin_recoger, trabajando, entregado,
+                    notas_subidas=None):
+    """Qué le toca hacer al docente con este cuadernillo. Uno solo, el primero.
+
+    notas_subidas: cuántas notas de este cuadernillo tiene ya el backend, o
+    None si el backend no respondió (entonces no se afirma nada sobre ellas).
+    """
     if not generada:
         return "Generar"
     if not publicada:
-        return "Publicar con publicar-cuadernillo"
+        return "Publicar (Release en formgrader o publicar-cuadernillo)"
     if sin_recoger:
         return "Recoger con Collect en formgrader"
     if ent["total"] and ent["calificadas"] < ent["total"]:
-        return "Calificar"
+        return "Calificar (Autograde en formgrader; sube la nota solo)"
     if ent["total"] and ent["calificadas"] == ent["total"]:
-        return "Subir notas (botón «Subir notas» en formgrader, o registrar-notas)"
+        if notas_subidas is None:
+            return "Calificado; el backend no respondió para saber si la nota subió"
+        if notas_subidas < ent["calificadas"]:
+            return (f"Subir notas: {ent['calificadas'] - notas_subidas} sin subir "
+                    "(botón «Subir notas» en formgrader)")
+        return "Al día: calificado y con las notas en el panel del alumno"
     if trabajando:
         return f"{trabajando} trabajando, sin entregas"
     return "Esperando que empiecen"
