@@ -19,6 +19,13 @@
         return (window.Jupyter && window.Jupyter.notebook) ? window.Jupyter : null;
     }
 
+    // El token XSRF, leido de la cookie: acompana cada peticion al servidor
+    // del alumno (ver custom.js para el porque).
+    function xsrfToken() {
+        var m = document.cookie.match(/\b_xsrf=([^;]+)/);
+        return m ? decodeURIComponent(m[1]) : '';
+    }
+
     function baseUrl() {
         var J = jup();
         return (J && J.notebook.base_url) || '/';
@@ -207,7 +214,7 @@
             var resp = await fetch(baseUrl() + 'tutor-ia/preguntar', {
                 method: 'POST',
                 credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-XSRFToken': xsrfToken() },
                 body: JSON.stringify(payload)
             });
             var datos = await resp.json().catch(function () { return {}; });
@@ -307,7 +314,10 @@
         }
 
         try {
-            var resp = await fetch(baseUrl() + 'tutor-ia/estado', { credentials: 'same-origin' });
+            var resp = await fetch(baseUrl() + 'tutor-ia/estado', {
+                credentials: 'same-origin',
+                headers: { 'X-XSRFToken': xsrfToken() },
+            });
             if (!resp.ok) throw new Error('HTTP ' + resp.status);
             estadoServidor = await resp.json();
         } catch (err) {

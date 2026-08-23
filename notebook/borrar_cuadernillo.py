@@ -42,21 +42,25 @@ def _carpetas(tarea):
 
 
 def _envios(tarea):
-    """Cuántos estudiantes entregaron algo de esta tarea."""
-    total = 0
+    """Cuántos estudiantes entregaron algo de esta tarea.
+
+    Personas distintas: un alumno que está en submitted/, autograded/ y
+    feedback/ es uno, no tres. Antes se sumaban pares (etapa, alumno) y un solo
+    alumno calificado salía como «2 con entregas».
+    """
+    alumnos = set()
     for d in DEL_ALUMNOS:
         base = os.path.join(RAIZ, d)
         if not os.path.isdir(base):
             continue
         for alumno in os.listdir(base):
             if os.path.isdir(os.path.join(base, alumno, tarea)):
-                total += 1
-    # nbgrader guarda submitted/<alumno>/<tarea>, pero algunos flujos dejan
-    # submitted/<tarea>. Se cuentan los dos.
-    for d in DEL_ALUMNOS:
-        if os.path.isdir(os.path.join(RAIZ, d, tarea)):
-            total += 1
-    return total
+                alumnos.add(alumno)
+        # nbgrader guarda submitted/<alumno>/<tarea>, pero algunos flujos dejan
+        # submitted/<tarea>. Se cuenta también.
+        if os.path.isdir(os.path.join(base, tarea)):
+            alumnos.add(f"({d})")
+    return len(alumnos)
 
 
 def _listar():

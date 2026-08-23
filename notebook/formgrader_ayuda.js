@@ -197,7 +197,15 @@
             msg.innerHTML = texto;
         }
 
-        fetch(raiz + '/ava-admin/actividades', { credentials: 'same-origin' })
+        // Tambien el GET lleva el token XSRF: desde JupyterHub 4.1 una peticion
+        // autenticada por cookie que no es una navegacion se trata como anonima
+        // si no lo trae, y el servidor la manda al OAuth, que la devuelve sin
+        // token, y asi veinte veces hasta que el navegador se rinde. La lista
+        // de actividades nunca llegaba a pintarse.
+        fetch(raiz + '/ava-admin/actividades', {
+            credentials: 'same-origin',
+            headers: { 'X-XSRFToken': cookie_xsrf() },
+        })
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (d) {
                 if (!d) { caja.style.display = 'none'; return; }
