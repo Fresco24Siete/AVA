@@ -556,7 +556,7 @@ Todo lo de abajo se comprobó **después** de desplegar `5fd252e` + `dbcf336` en
 
 ## Parte 3 · Hallazgos
 
-Numerados en el orden en que aparecieron. **Los ocho están corregidos, desplegados y
+Numerados en el orden en que aparecieron. **Los nueve están corregidos, desplegados y
 verificados** en este mismo ambiente, con las mismas dos cuentas.
 
 | # | Qué pasaba | Por qué importa | Estado |
@@ -567,6 +567,7 @@ verificados** en este mismo ambiente, con las mismas dos cuentas.
 | **H4** | El panel del docente sumaba solo `auto_score` del gradebook: una entrega corregida a mano se mostraba como **80/80** mientras formgrader y el backend decían **79/80**. | Dos cifras distintas para la misma nota, y la del panel es la que el docente mira a diario. | Corregido (`5fd252e`) y verificado |
 | **H5** | Una versión conservada se mostraba al alumno como `semana_01_v2`, en crudo. | Ruido en la única pantalla que ve el alumno. | Corregido (`5fd252e`) y verificado |
 | **H6** | **Stop My Server → Start My Server** seguidos fallaban con `409 … name already in use`: Docker borra el contenedor en segundo plano y el nuevo `create` llegaba antes. Con 30 s de espera todavía fallaba en esta VM. | El alumno se queda sin servidor y con un error en pantalla, en el botón más visible del Hub. Es el mismo fallo que el del cambio de rol (`cdd3281`), pero por otra vía. | Corregido (`5fd252e` + `dbcf336`: spawner propio que espera hasta 90 s y fuerza el borrado a los 10 s) y verificado |
+| **H9** | Con fecha de entrega puesta, **Collect descartaba en silencio toda entrega posterior**: el cliente de nbexchange hacía `continue` sin log alguno, e ignoraba el flag `before_duedate` de nbgrader (por defecto False = «recoge la última aunque llegue tarde»). El docente leía «Successfully collected» y la entrega tardía no aparecía en la tabla, ni en un aviso, ni en el log. | Es pérdida silenciosa del trabajo de un alumno, en el camino más normal del curso: poner fecha límite y recoger. Nadie se entera hasta que el alumno reclama la nota. | Corregido (`8b06906`) y verificado |
 | **H8** | El **cupo de 5 preguntas del Tutor IA se reiniciaba** cada vez que el contenedor se recreaba: parar y arrancar el servidor desde el Control Panel, cambiar de rol o un despliegue devolvían al alumno sus 5 preguntas. El contador vivía en `/home/jovyan/.tutor_ia`, fuera del único volumen que se conserva (`ava-trabajo-<alumno>` → `/home/jovyan/work`). | El tope existe para controlar el gasto de Gemini, y se saltaba con dos clics. | Corregido (`3e02af8`: el estado vive en `work/.ava_tutor`, oculto igual que el resto) y verificado |
 | **H7** | **Release Feedback** subía la retroalimentación al exchange, pero **el alumno no tenía ninguna forma de recuperarla**: `assignment_list` está deshabilitada en su imagen (por diseño) y ni el panel, ni `entregar-cuadernillo`, ni `custom.js` llamaban a `fetch_feedback`. | El docente creía que devolvió la corrección y el alumno nunca la veía. | Corregido (`4f8659d`) y verificado |
 
@@ -588,6 +589,16 @@ verificados** en este mismo ambiente, con las mismas dos cuentas.
 | 9.1 | Agotar el cupo del Tutor IA: 5 preguntas y una sexta (§11) | OK — la sexta responde **429** «Ya usaste tus 5 preguntas de este cuadernillo», con `restantes: 0` | estado del tutor: `usadas 5, restantes 0` |
 | 9.2 | Al hacerlo se descubrió que el contador **se reiniciaba** al recrear el contenedor | **HALLAZGO H8** — ver Parte 3 | vivía en `/home/jovyan/.tutor_ia`, fuera del volumen `ava-trabajo-<alumno>` |
 | 9.3 | Tras el arreglo (`3e02af8`): 1 pregunta usada → **Stop My Server → Start My Server** | OK — el estado sobrevive: `{"semana_01": {"usadas": 1, …}}` en `work/.ava_tutor/estado.json` | 0 errores 409 en el reinicio |
+
+### 2.10 Entregas fuera de plazo (probado a raíz del barrido de cobertura)
+
+| # | Acción | Resultado | Evidencia |
+|---|---|---|---|
+| 10.1 | Poner fecha de entrega **en el pasado** en `semana_02` y que el alumno entregue después | La entrega llega al intercambio con normalidad | exchange: tercer `submitted` 21:10:57 |
+| 10.2 | **Collect** con la fecha vencida (antes del arreglo) | **HALLAZGO H9** — «Successfully collected», `Processing 3 submissions`… y **ninguna recogida**: ni una línea de aviso | el log del modal salta de «Processing 3» al final, sin `Collecting` ni `Updating` |
+| 10.3 | **Collect** tras el arreglo (`8b06906`) | OK — recoge las tres **y avisa**: «3 entrega(s) llegaron después de la fecha de entrega (2026-08-22 23:59) y se recogieron igualmente: 3135 (17:13:50), 3135 (17:21:39), 3135 (21:10:57)» | modal de formgrader |
+
+> **Nota de despliegue aprendida aquí:** la imagen del docente hereda de la del alumno (`FROM mi_imagen_jupyterlab:latest`). Reconstruir solo la del docente deja dentro el código viejo de `notebook/`. **Siempre en este orden: alumno primero, docente después.**
 
 ### Notas del ensayo (no son fallos del AVA)
 
