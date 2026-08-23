@@ -88,10 +88,21 @@ class ExchangeCollect(ABCExchangeCollect, NBExchange):
             )
 
         self.duedate = self._get_duedate()
+        tardias = []
         for submission in submissions:
-            # Skip any submissions after the due date
+            # AVA: aquí upstream descartaba EN SILENCIO toda entrega posterior a
+            # la fecha de entrega, ignorando el flag `before_duedate` de nbgrader
+            # —que por defecto es False y significa «recoge la última aunque
+            # llegue tarde»—. El docente leía «Successfully collected» y la
+            # entrega tardía no aparecía en ningún sitio: ni en la tabla, ni en
+            # un aviso, ni en el log. Ahora solo se descarta si el docente lo
+            # pidió, y en ambos casos se dice quién llegó tarde: es él quien
+            # decide qué hacer con una entrega fuera de plazo.
             if self.duedate and submission["timestamp"] > self.duedate:
-                continue
+                tardias.append(f"{submission.get('student_id', '?')} "
+                               f"({submission['timestamp']})")
+                if self.before_duedate:
+                    continue
 
             student_id = submission["student_id"]
             full_name = submission.get("full_name") or ""
@@ -161,6 +172,19 @@ class ExchangeCollect(ABCExchangeCollect, NBExchange):
                         self.log.info(
                             f"Submission already exists, use --update to update: {student_id} {self.coursedir.assignment_id}"  # noqa: E501
                         )
+
+        if tardias:
+            if self.before_duedate:
+                self.log.warning(
+                    "%d entrega(s) NO se recogieron por llegar después de la "
+                    "fecha de entrega (%s): %s. Quita o amplía la fecha con el "
+                    "lápiz de la actividad si quieres recogerlas.",
+                    len(tardias), self.duedate, ", ".join(tardias))
+            else:
+                self.log.warning(
+                    "%d entrega(s) llegaron después de la fecha de entrega (%s) "
+                    "y se recogieron igualmente: %s",
+                    len(tardias), self.duedate, ", ".join(tardias))
 
     def copy_files(self):
         self.do_collect()
