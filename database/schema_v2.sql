@@ -86,6 +86,18 @@ CREATE TABLE competencias (
     descripcion     TEXT NOT NULL
 );
 
+-- El catálogo va sembrado aquí, no solo en la migración: una base creada desde
+-- cero arrancaba con la tabla vacía y cargar-competencias fallaba por la clave
+-- foránea de ejercicio_competencias, sin que nada lo explicara.
+INSERT INTO competencias (id, codigo_anterior, descripcion) VALUES
+ ('I1','mCP17','Aplica conocimientos de álgebra lineal, cálculo diferencial e integral y métodos numéricos para solucionar problemas mediante programación.'),
+ ('I2','mCC85','Identifica que la complejidad computacional de las soluciones algorítmicas puede generar impactos económicos y ambientales.'),
+ ('I3','mCC87','Identifica variables, conceptos y aspectos relevantes de un problema para desarrollar algoritmos que permitan solucionarlo.'),
+ ('I4','mCC103','Reconoce problemas de sistemas y organizaciones susceptibles de tratamiento algorítmico.'),
+ ('I5','mCA14','Comunica efectivamente a distintas audiencias conceptos, problemas y propuestas de solución de ingeniería.'),
+ ('I6','mCA65','Trabaja en equipo, establece objetivos y asume roles para planear y ejecutar actividades de solución de problemas.'),
+ ('I7','mCP88','Investiga y selecciona fuentes confiables y relevantes para adquirir los conocimientos que necesita.');
+
 -- ---------------------------------------------------------
 -- 5. Qué competencia evalúa cada ejercicio               [NUEVA]
 -- ---------------------------------------------------------
