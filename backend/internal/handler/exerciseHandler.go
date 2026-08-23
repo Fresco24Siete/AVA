@@ -60,6 +60,22 @@ func (handler *ExerciseHandler) CreateAttemptHandler(c *gin.Context) {
 		return
 	}
 
+	// Un timestamp que no viene se convertía en 0001-01-01 y contaminaba todo
+	// lo que ordena por fecha. custom.js siempre los manda; quien no, que se
+	// entere.
+	if input.ExerciseID == "" || input.AttemptAt.IsZero() {
+		c.JSON(http.StatusBadRequest,
+			gin.H{"error": "exercise_id y attempt_at son obligatorios"})
+		return
+	}
+	for _, e := range input.Errors {
+		if e.Timestamp.IsZero() {
+			c.JSON(http.StatusBadRequest,
+				gin.H{"error": "cada error debe traer timestamp"})
+			return
+		}
+	}
+
 	// La identidad sale del token, no del cuerpo. El alumno puede leer su propio
 	// token dentro de su contenedor y hacer POST a mano; si nos fiáramos del
 	// cuerpo, podría escribir telemetría a nombre de un compañero.

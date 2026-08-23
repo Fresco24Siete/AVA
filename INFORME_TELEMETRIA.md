@@ -16,6 +16,29 @@ El mapa del flujo con evidencia de código (archivo:línea de cada endpoint, pay
 tabla y columna) está en la sección 6. Nada del comportamiento se modificó: las
 correcciones se proponen, no se aplican.
 
+## 0. Actualización 2026-08-23: correcciones aplicadas
+
+Tras este informe se aplicaron las correcciones de la sección 5 (salvo la 9,
+que es una política) y la suite pasa entera: **79/79** (41 backend, 20 puente,
+18 custom.js; los casos nuevos cubren el token de docente y la reposición del
+buffer). Verificado además con el Hub real: el docente entra con
+`METRICS_DOCENTE_TOKEN`, lee su panel (200), no puede leer otro curso (403) ni
+acuñar tokens (401), y `registrar-notas` sube las notas igual que antes.
+
+| Bug | Qué se hizo |
+|---|---|
+| 1 Rating con identidad del cuerpo | `cuadernilloRatingHandler.go` toma `student_id`/`course_id` del token y valida `rating` 1..5 → 400. |
+| 2 Tarjeta de rating nunca aparece | `verificar_finalizacion_cuadernillo(celda_recien_ejecutada)` evalúa la celda recién ejecutada como ejecutada. |
+| 3 Eventos perdidos en silencio | `enviar_evento` mira `resp.ok`; si el puente rechaza, los errores vuelven al buffer y viajan con el siguiente intento; el rating rechazado se puede reenviar; aviso en consola con el código HTTP y cuando falta la cookie `_xsrf`. |
+| 4 Token del docente sin curso | El Hub acuña para el instructor un token con `rol=docente` y su curso (`METRICS_DOCENTE_TOKEN`) y ya no le da el maestro. `/internal/notas`, `/internal/competencias` y `/internal/curso/:curso/panel` aceptan maestro o docente; panel y notas exigen que el curso sea el del token (403 si no). Acuñar tokens sigue siendo solo del maestro. `registrar-notas`, `cargar-competencias` y el panel del docente leen el token nuevo (con el maestro como respaldo para un Hub anterior). El `ports: 8080:8080` del compose se deja como está: en la VM lo tapa el firewall y en local hace falta para la suite. |
+| 5 `cuadernillo_id` del activo de la sesión | **No aplicado**: exige cambiar el contrato del puente; queda como estaba (AUDITORIA 6.1). |
+| 6 JSON no-objeto → 500 | `metrics_bridge.py` responde 400. |
+| 7 Validaciones | `exercise_id`, `attempt_at` y cada `errors[].timestamp` obligatorios (400); `rating` 1..5 (400). |
+| 8 Horas negativas | `en_riesgo` usa `received_at` (reloj del servidor) y `GREATEST(0, …)`. |
+| 9 Secreto vacío deja pasar | **No aplicado**: es la política documentada en PENDIENTES §5; decidirla aparte. |
+
+Lo que sigue es el informe original, con los hallazgos tal como se encontraron.
+
 ## 1. Resumen por tramo
 
 | Tramo | Estado | Evidencia |

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"regexp"
 
+	"proxy-go/internal/middleware"
 	"proxy-go/internal/repository"
 
 	"github.com/gin-gonic/gin"
@@ -28,12 +29,16 @@ var cursoValido = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 
 // PanelHandler responde a GET /internal/curso/:curso/panel.
 //
-// El curso viene en la ruta y se filtra SIEMPRE en el WHERE: el token maestro no
-// acota curso, así que quien acota es la consulta.
+// El curso viene en la ruta y se filtra SIEMPRE en el WHERE. Un docente solo
+// puede pedir el curso de su token; el maestro, cualquiera.
 func (h *PanelDocenteHandler) PanelHandler(c *gin.Context) {
 	curso := c.Param("curso")
 	if !cursoValido.MatchString(curso) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "curso no válido"})
+		return
+	}
+	if !middleware.CursoAutorizado(c, curso) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ese curso no es el tuyo"})
 		return
 	}
 

@@ -14,6 +14,10 @@ type MintMetricsTokenRequest struct {
 	EstudianteID      string `json:"estudiante_id"`
 	CursoID           string `json:"curso_id"`
 	CuadernilloCodigo string `json:"cuadernillo_codigo"`
+	// Vacío para un alumno; "docente" para un instructor. Con ese rol el token
+	// abre las rutas de /internal de su curso (panel, notas), y así el
+	// contenedor del docente no necesita el token maestro.
+	Rol string `json:"rol"`
 }
 
 // MetricsTokenHandler acuña los tokens de telemetría.
@@ -55,8 +59,13 @@ func (h *MetricsTokenHandler) MintHandler(c *gin.Context) {
 		return
 	}
 
-	token, err := auth.Mint(h.secretoFirma, input.EstudianteID, input.CursoID,
-		input.CuadernilloCodigo, auth.DuracionPorDefecto)
+	if input.Rol != "" && input.Rol != auth.RolDocente {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "rol debe ir vacío o ser 'docente'"})
+		return
+	}
+
+	token, err := auth.MintConRol(h.secretoFirma, input.EstudianteID, input.CursoID,
+		input.CuadernilloCodigo, input.Rol, auth.DuracionPorDefecto)
 	if err != nil {
 		log.Printf("[metrics] no se pudo acuñar el token: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "no se pudo acuñar el token"})

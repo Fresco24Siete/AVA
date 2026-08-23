@@ -326,10 +326,11 @@ def caso_6_medianoche():
                  intento("ejercicio_sin_ts", "2026-08-23T05:00:00Z", "failed", errors=[e]), token=tokens[A])
     aid = (r or {}).get("attempt_id") if isinstance(r, dict) else None
     fila = sql1(f"select to_char(occurred_at at time zone 'UTC','YYYY-MM-DD') from attempt_errors where attempt_id='{aid}'") if aid else None
-    registrar("6.ts errors[].timestamp ausente: documentar que ocurre", True, f"status={st} occurred_at={fila}")
+    registrar("6.ts errors[].timestamp ausente -> 400 y no se guarda nada", st == 400 and not aid,
+              f"status={st} body={r} occurred_at={fila}")
     if st == 201 and fila and fila[0].startswith("0001"):
         hallazgo("errors[].timestamp ausente se acepta (201) y se guarda occurred_at=0001-01-01: "
-                 "exerciseHandler.go no valida que venga (backend/internal/handler/exerciseHandler.go:31-36,90-97).")
+                 "exerciseHandler.go no valida que venga.")
 
 
 def caso_7_rating():
@@ -364,10 +365,9 @@ def caso_7_rating():
               len(en_c2) == 0, f"status={st} filas en C2={en_c2}")
     # rating fuera de rango
     st, r = http("POST", "/api/cuadernillos/ratings", dict(base, rating=9), token=tokens[A])
-    registrar("7d rating=9 fuera de rango: documentar respuesta", True, f"status={st} body={r}")
+    registrar("7d rating=9 fuera de rango -> 400", st == 400, f"status={st} body={r}")
     if st == 500:
-        hallazgo("rating fuera de 1..5 responde 500 'fail to create cuaderniilo' (CHECK de la DB); "
-                 "deberia ser 400 validado en Go (cuadernilloRatingHandler.go:21-27).")
+        hallazgo("rating fuera de 1..5 responde 500 (CHECK de la DB); deberia ser 400 validado en Go.")
 
 
 def caso_8_mi_progreso():
@@ -459,14 +459,44 @@ def caso_9_panel_docente():
     st, r = http("GET", f"/internal/curso/{C1}/panel", token=tokens[A])
     registrar("9d panel con token de ALUMNO -> 401", st == 401, f"status={st} body={r}")
 
-    # El maestro no acota curso: el mismo token lee cualquier curso (por diseno, documentar)
+    # El maestro (solo el Hub lo tiene) lee cualquier curso: es quien administra.
     st_real, real = http("GET", "/internal/curso/28053/panel", token=TOKEN_MAESTRO)
-    registrar("9e (documentacion) el token maestro lee cualquier curso, p.ej. 28053", st_real == 200,
+    registrar("9e el token maestro (del Hub) lee cualquier curso, p.ej. 28053", st_real == 200,
               f"status={st_real} salud={real.get('salud') if isinstance(real, dict) else real}")
-    hallazgo("El token maestro (METRICS_API_TOKEN) no acota curso: cualquier docente/TA con el token puede pedir "
-             "/internal/curso/<cualquiera>/panel, acunar tokens de cualquier alumno y subir notas. "
-             "panelDocenteHandler.go:31-32 lo reconoce. Ademas docker-compose.yml publica 8080:8080 en el host y "
-             "/internal es alcanzable desde la red moodle_jupyter_net (contenedores de alumnos); Caddy no lo expone por HTTPS.")
+
+    # El docente recibe un token con rol docente acotado a SU curso: lee el
+    # suyo, no el de al lado, y no sube notas ajenas. Con un token de alumno
+    # (sin rol) no entra.
+    st, r = http("POST", "/internal/lti/mint-metrics-token",
+                 {"estudiante_id": "PRUEBA-DOC", "curso_id": C1, "cuadernillo_codigo": "", "rol": "docente"},
+                 token=TOKEN_MAESTRO)
+    tok_doc = (r or {}).get("token") if isinstance(r, dict) else None
+    registrar("9f mint con rol docente -> 200", st == 200 and bool(tok_doc), f"status={st} body={r}")
+    if tok_doc:
+        st, r = http("GET", f"/internal/curso/{C1}/panel", token=tok_doc)
+        registrar("9g docente de C1 lee el panel de C1 -> 200", st == 200 and isinstance(r, dict) and r.get("curso_id") == C1,
+                  f"status={st} curso_id={r.get('curso_id') if isinstance(r, dict) else r}")
+        st, r = http("GET", f"/internal/curso/{C2}/panel", token=tok_doc)
+        registrar("9h docente de C1 pide el panel de C2 -> 403", st == 403, f"status={st} body={r}")
+        st, r = http("POST", "/internal/notas",
+                     {"course_id": C2, "cuadernillo_id": "PRUEBA-semana_02", "origen": "nbgrader",
+                      "notas": [{"student_id": C, "puntos_obtenidos": 1, "puntos_maximos": 10}]}, token=tok_doc)
+        en_c2 = sql(f"select count(*) from cuadernillo_notas where course_id='{C2}'")
+        registrar("9i docente de C1 sube notas de C2 -> 403 y nada guardado", st == 403 and en_c2 == [["0"]],
+                  f"status={st} body={r} notas en C2={en_c2}")
+        st, r = http("POST", "/internal/notas",
+                     {"course_id": C1, "cuadernillo_id": CUAD, "origen": "nbgrader",
+                      "notas": [{"student_id": A, "puntos_obtenidos": 7, "puntos_maximos": 10}]}, token=tok_doc)
+        en_c1 = sql(f"select student_id, puntos_obtenidos from cuadernillo_notas where course_id='{C1}'")
+        registrar("9j docente de C1 sube notas de C1 -> 201 y guardadas", st in (200, 201) and en_c1 == [[A, "7.00"]],
+                  f"status={st} body={r} notas en C1={en_c1}")
+        st, r = http("POST", "/internal/lti/mint-metrics-token",
+                     {"estudiante_id": "PRUEBA-X", "curso_id": C1, "cuadernillo_codigo": ""}, token=tok_doc)
+        registrar("9k docente no puede acunar tokens (solo el maestro) -> 401", st == 401, f"status={st} body={r}")
+    st, r = http("POST", "/internal/lti/mint-metrics-token",
+                 {"estudiante_id": "PRUEBA-DOC", "curso_id": C1, "cuadernillo_codigo": "", "rol": "rector"},
+                 token=TOKEN_MAESTRO)
+    registrar("9l mint con un rol desconocido -> 400", st == 400, f"status={st} body={r}")
     # relaciones_competencia en salud es global, no por curso
     if isinstance(p1, dict) and isinstance(p2, dict):
         r1, r2 = salud1.get("relaciones_competencia"), salud2.get("relaciones_competencia")

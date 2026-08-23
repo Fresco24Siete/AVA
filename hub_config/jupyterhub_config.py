@@ -145,8 +145,14 @@ if not _NBEXCHANGE_TOKEN:
           'cuadernillos.')
 
 
-async def _mintear_token_estudiante(auth_state, curso_id, cuadernillo_codigo, spawner):
-    """Pide al backend un token de métricas acotado a este estudiante."""
+async def _mintear_token_estudiante(auth_state, curso_id, cuadernillo_codigo, spawner,
+                                    rol=''):
+    """Pide al backend un token de métricas acotado a esta persona y este curso.
+
+    Con rol='docente' el token abre además las rutas de /internal de SU curso
+    (panel, notas, competencias). Es lo que recibe el instructor en vez del
+    token maestro, que abría las de todos los cursos.
+    """
     url = os.environ.get('METRICS_MINT_URL',
                          'http://api_go:8080/internal/lti/mint-metrics-token')
     master_token = os.environ.get('METRICS_API_TOKEN', '')
@@ -154,6 +160,7 @@ async def _mintear_token_estudiante(auth_state, curso_id, cuadernillo_codigo, sp
         'estudiante_id': str(auth_state.get('user_id', '')),
         'curso_id': curso_id,
         'cuadernillo_codigo': cuadernillo_codigo,
+        'rol': rol,
     }
     async with httpx.AsyncClient(timeout=5) as client:
         resp = await client.post(
@@ -284,10 +291,20 @@ async def auth_state_a_env(spawner, auth_state):
     # backend<->nbgrader era justo lo que había que eliminar.
 
     if es_instructor:
-        spawner.environment['METRICS_API_URL'] = os.environ.get(
-            'METRICS_API_URL', 'http://api_go:8080/internal/metrics'
-        )
-        spawner.environment['METRICS_API_TOKEN'] = os.environ.get('METRICS_API_TOKEN', '')
+        # El docente recibe un token acotado a su curso, no el maestro. Con el
+        # maestro, cualquier instructor de cualquier curso del Hub podía leer el
+        # panel de los demás, subir notas ajenas y acuñar tokens de cualquier
+        # alumno; y el contenedor del docente tiene terminal, así que el token
+        # está a un `env` de distancia. Lo leen registrar-notas,
+        # cargar-competencias y el panel del curso (METRICS_DOCENTE_TOKEN).
+        try:
+            spawner.environment['METRICS_DOCENTE_TOKEN'] = await _mintear_token_estudiante(
+                auth_state, curso_id, '', spawner, rol='docente')
+        except Exception as exc:
+            spawner.log.error('No se pudo acuñar METRICS_DOCENTE_TOKEN para %s: %s. '
+                              'El docente no podrá subir notas ni ver el panel del curso.',
+                              spawner.user.name, exc)
+            spawner.environment['METRICS_DOCENTE_TOKEN'] = ''
     else:
         # El alumno debe quedarse en el notebook clásico. Sin esto, JupyterHub
         # arranca SingleUserLabApp (JupyterLab) y el alumno puede irse a /lab.

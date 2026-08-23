@@ -22,7 +22,10 @@ CURSO = os.environ.get("CURSO_ID", "curso_default")
 RAIZ = f"/home/jovyan/work/nbgrader/{CURSO}"
 BASE = os.environ.get("METRICS_API_BASE",
                       os.environ.get("STUDENT_METRICS_API_BASE", "http://api_go:8080"))
-TOKEN = os.environ.get("METRICS_API_TOKEN", "")
+# El token de docente, acotado a este curso, que el Hub acuña al arrancar el
+# contenedor. METRICS_API_TOKEN queda como respaldo para un Hub anterior.
+TOKEN = (os.environ.get("METRICS_DOCENTE_TOKEN")
+         or os.environ.get("METRICS_API_TOKEN", ""))
 
 
 def _libro():
@@ -77,7 +80,7 @@ def main(argv):
 
     cuadernillo = argv[0]
     if not TOKEN:
-        print("[ERROR] Falta METRICS_API_TOKEN: es el que autoriza a subir notas.")
+        print("[ERROR] Falta METRICS_DOCENTE_TOKEN: es el que autoriza a subir notas.")
         return 2
 
     try:

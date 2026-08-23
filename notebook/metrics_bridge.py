@@ -79,6 +79,11 @@ class MetricsEventoHandler(_BaseHandler):
         try:
             evento = json.loads(self.request.body)
         except Exception:
+            evento = None
+        # Un JSON válido que no es objeto ([1,2,3]) reventaba más abajo con un
+        # 500 y su traceback en el log. Es la misma falta: el cuerpo no es un
+        # evento.
+        if not isinstance(evento, dict):
             self.set_status(400)
             self.finish(json.dumps({"error": "json invalido"}))
             return

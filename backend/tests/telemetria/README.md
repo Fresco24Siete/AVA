@@ -15,19 +15,18 @@ Cada tramo corre solo:
 
 | Script | Qué prueba | Contra qué | Dura |
 |---|---|---|---|
-| `prueba_customjs.js` (`node`) | `custom.js` real cargado en Node con un Jupyter simulado: qué captura, qué payload arma, cuándo manda el beacon, cuándo ofrece el rating. 14 casos. | nada (todo en memoria) | 1 s |
+| `prueba_customjs.js` (`node`) | `custom.js` real cargado en Node con un Jupyter simulado: qué captura, qué payload arma, cuándo manda el beacon, cuándo ofrece el rating, qué repone si el puente rechaza. 18 casos. | nada (todo en memoria) | 1 s |
 | `prueba_puente.sh` | `metrics_bridge.py` real dentro de un contenedor de la imagen del alumno, con un backend stub en el mismo contenedor: autenticación (cookie+xsrf, beacon, token, página ajena), identidad impuesta, ruteo, 204/400/502/503, simulación. 20 casos. | `mi_imagen_jupyterlab:latest`; sin red externa | ~2 min |
-| `prueba_backend.py` | backend Go + PostgreSQL vivos: acuñado de tokens, `passed`/`failed`/`sin_validar`, intentos múltiples, medianoche Bogotá/UTC, rating, aislamiento de lectura y escritura, 40 intentos en paralelo, limpieza. 34 casos. | `localhost:8080` y `postgres-db` del compose local | 10 s |
+| `prueba_backend.py` | backend Go + PostgreSQL vivos: acuñado de tokens, `passed`/`failed`/`sin_validar`, intentos múltiples, medianoche Bogotá/UTC, rating, aislamiento de lectura y escritura, 40 intentos en paralelo, limpieza. 41 casos. | `localhost:8080` y `postgres-db` del compose local | 10 s |
 
 Todo lo que escribe usa `course_id`/`student_id` con prefijo `PRUEBA-` y se borra al
 terminar (y al empezar, por si una corrida anterior murió a medias). `correr_todo.sh`
 cuenta las filas de las cuatro tablas antes y después y falla si cambiaron.
 
-**Un FALLO en la suite es un bug del sistema, no de la prueba.** A 2026-08-22 fallan
-tres casos, los tres bugs confirmados y documentados en `INFORME_TELEMETRIA.md`
-(raíz del repo): el rating acepta la identidad del cuerpo (7b, 7c) y el puente
-responde 500 a un JSON que no es objeto (d2). Cuando se corrijan, la suite debe pasar
-entera sin tocarla.
+**Un FALLO en la suite es un bug del sistema, no de la prueba.** La primera corrida
+(2026-08-22) encontró tres —el rating aceptaba la identidad del cuerpo, y el puente
+respondía 500 a un JSON que no es objeto—; están corregidos y la suite pasa entera
+(79 casos). La historia está en `INFORME_TELEMETRIA.md`, en la raíz del repo.
 
 ## Variables
 

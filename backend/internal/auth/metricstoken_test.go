@@ -66,3 +66,18 @@ func TestSinSecreto(t *testing.T) {
 		t.Fatalf("Verify sin secreto debería fallar; error=%v", err)
 	}
 }
+
+// El token de un alumno no lleva rol; el de un docente lleva "docente". Es lo
+// que separa poder leer el panel del curso de no poder.
+func TestRolDocente(t *testing.T) {
+	alumno, _ := Mint(secreto, "alumno-1", "28053", "", time.Hour)
+	claims, err := Verify(secreto, alumno)
+	if err != nil || claims.Rol != "" {
+		t.Fatalf("el token de alumno no debe llevar rol: %+v, %v", claims, err)
+	}
+	docente, _ := MintConRol(secreto, "9002", "28053", "", RolDocente, time.Hour)
+	claims, err = Verify(secreto, docente)
+	if err != nil || claims.Rol != RolDocente || claims.CursoID != "28053" {
+		t.Fatalf("el token de docente debe llevar rol y curso: %+v, %v", claims, err)
+	}
+}

@@ -25,14 +25,17 @@ import urllib.request
 MAPEO = os.environ.get("COMPETENCIAS_MAPEO", "/opt/plantillas/competencias.json")
 BASE = os.environ.get("METRICS_API_BASE",
                       os.environ.get("STUDENT_METRICS_API_BASE", "http://api_go:8080"))
-TOKEN = os.environ.get("METRICS_API_TOKEN", "")
+# El token de docente, acotado a este curso, que el Hub acuña al arrancar el
+# contenedor. METRICS_API_TOKEN queda como respaldo para un Hub anterior.
+TOKEN = (os.environ.get("METRICS_DOCENTE_TOKEN")
+         or os.environ.get("METRICS_API_TOKEN", ""))
 
 
 def main(argv):
     ruta = argv[1] if len(argv) > 1 else MAPEO
 
     if not TOKEN:
-        print("[ERROR] Falta METRICS_API_TOKEN: es el que autoriza a cargar el mapeo.")
+        print("[ERROR] Falta METRICS_DOCENTE_TOKEN: es el que autoriza a cargar el mapeo.")
         return 2
 
     try:

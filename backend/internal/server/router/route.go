@@ -71,16 +71,24 @@ func ConfigureRouter (db *sqlx.DB) *gin.Engine{
 	progresoService := service.NewProgresoService(progresoRepository)
 	progresoHandler := handler.NewProgresoHandler(progresoService)
 
-	// Interno: solo lo llama el Hub (y el contenedor del docente) por la red de
-	// Docker. NO exponer por Caddy. La autorizacion va en el grupo, no dentro de
-	// cada handler: asi no hay forma de anadir una ruta y olvidarla.
+	// Interno: solo se llama por la red de Docker. NO exponer por Caddy. La
+	// autorizacion va en el grupo, no dentro de cada handler: asi no hay forma
+	// de anadir una ruta y olvidarla.
+	//
+	// Dos niveles. Acunar tokens es cosa del Hub y exige el maestro. Lo demas
+	// lo usa el docente desde su contenedor con un token acotado a su curso:
+	// el handler comprueba que el curso que pide es el del token.
 	interno := router.Group("/internal")
-	interno.Use(middleware.RequireTokenMaestro(tokenMaestro))
 	{
-		interno.POST("/lti/mint-metrics-token", metricsTokenHandler.MintHandler)
-		interno.POST("/competencias", competenciasHandler.CargarHandler)
-		interno.POST("/notas", notasHandler.RegistrarHandler)
-		interno.GET("/curso/:curso/panel", panelDocenteHandler.PanelHandler)
+		hub := interno.Group("")
+		hub.Use(middleware.RequireTokenMaestro(tokenMaestro))
+		hub.POST("/lti/mint-metrics-token", metricsTokenHandler.MintHandler)
+
+		docente := interno.Group("")
+		docente.Use(middleware.RequireMaestroODocente(secretoMetricas, tokenMaestro))
+		docente.POST("/competencias", competenciasHandler.CargarHandler)
+		docente.POST("/notas", notasHandler.RegistrarHandler)
+		docente.GET("/curso/:curso/panel", panelDocenteHandler.PanelHandler)
 	}
 
 	api := router.Group("/api")

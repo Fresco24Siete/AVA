@@ -69,13 +69,21 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
             .replace(/'/g, '&#039;');
     }
 
-    function enviar_evento(payload) {
+    // Manda un evento al puente del servidor. `al_fallar(motivo)` se llama si
+    // el puente no lo aceptó (red caída, 403 por xsrf, 502 porque el backend
+    // rechazó): quien envía decide qué reponer. Antes solo se miraba el error
+    // de red; un 403 o un 502 se daban por enviados y el intento se perdía sin
+    // que nada lo dijera (así se perdieron los 16 primeros eventos del curso).
+    function enviar_evento(payload, al_fallar) {
         var xsrf = cookie_xsrf();
         // CORREGIDO: la URL relativa se resolvía contra la URL actual del navegador
         // (p.ej. /user/xxx/notebooks/work/...), no contra la base real del servidor,
         // así que la petición nunca llegaba a la ruta que registra metrics_bridge.py.
         var base_url = (Jupyter && Jupyter.notebook && Jupyter.notebook.base_url) || '/';
-        fetch(base_url + 'nbgrader-metrics/evento', {
+        if (!xsrf) {
+            console.warn('[nbgrader-metrics] sin cookie _xsrf: el puente va a rechazar el evento');
+        }
+        return fetch(base_url + 'nbgrader-metrics/evento', {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
@@ -83,8 +91,16 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
                 'X-XSRFToken': xsrf,
             },
             body: JSON.stringify(payload),
+        }).then(function (resp) {
+            if (resp && resp.ok) return true;
+            var motivo = 'HTTP ' + (resp ? resp.status : '?');
+            console.warn('[nbgrader-metrics] el puente no aceptó el evento (' + motivo + ')');
+            if (al_fallar) al_fallar(motivo);
+            return false;
         }).catch(function (err) {
             console.warn('[nbgrader-metrics] no se pudo enviar el evento', err);
+            if (al_fallar) al_fallar(String(err));
+            return false;
         });
     }
 
@@ -254,12 +270,15 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
         guardar_estado(estado);
     }
 
-    function verificar_finalizacion_cuadernillo() {
+    // `celda_recien_ejecutada` es la celda de prueba cuyo finished_execute
+    // acaba de llegar. En ese instante su input_prompt_number todavía vale '*'
+    // (ver evaluar_celda), así que sin esta salvedad la última prueba del
+    // cuadernillo siempre contaba como no ejecutada y la tarjeta de valoración
+    // no aparecía nunca: cuadernillo_ratings se quedaba vacía.
+    function verificar_finalizacion_cuadernillo(celda_recien_ejecutada) {
         if (!Jupyter || !Jupyter.notebook) return;
         var cells = Jupyter.notebook.get_cells();
-        var evalCells = cells.filter(function (c) {
-            return c && c.metadata && c.metadata.nbgrader && c.metadata.nbgrader.grade && c.metadata.nbgrader.grade_id;
-        });
+        var evalCells = cells.filter(es_celda_de_prueba);
 
         if (evalCells.length === 0) return;
 
@@ -272,7 +291,7 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
             var pMax = cell.metadata.nbgrader.points || 1;
             puntajeMaximo += pMax;
 
-            if (evaluar_celda(cell).exito) {
+            if (evaluar_celda(cell, cell === celda_recien_ejecutada).exito) {
                 puntajeObtenido += pMax;
             } else {
                 todosAprobados = false;
@@ -300,6 +319,10 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
             submitted_at: new Date().toISOString(),
             rating: rating,
             comment: comment || null
+        }, function () {
+            // No llegó: que se pueda volver a ofrecer en vez de darlo por hecho.
+            estado.rating_enviado = false;
+            guardar_estado(estado);
         });
         console.log('[nbgrader-metrics] rating del cuadernillo enviado:', rating);
     }
@@ -451,8 +474,15 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
             ultimo ? ultimo.error_message : null,
             duracion_seg, payload);
 
-        enviar_evento(payload);
-        verificar_finalizacion_cuadernillo();
+        enviar_evento(payload, function () {
+            // El puente no lo aceptó: los errores vuelven al buffer, delante de
+            // los que hayan llegado mientras tanto, y viajan con el siguiente
+            // intento (o con el volcado al cerrar). Antes se vaciaba el buffer
+            // antes de saber si llegó, y un 403 o un 502 los perdía para siempre.
+            estado.errores[cod] = errores_acumulados.concat(estado.errores[cod] || []);
+            guardar_estado(estado);
+        });
+        verificar_finalizacion_cuadernillo(cell);
     }
 
     // Al cerrar/recargar la pestaña, si quedaron errores en buffer de ejercicios

@@ -36,7 +36,7 @@ func NewPanelDocenteRepository(db *sqlx.DB) *PanelDocenteRepository {
 const intentosReales = `
 	WITH t AS (
 	    SELECT a.id, a.student_id, a.cuadernillo_id, a.exercise_id,
-	           a.validation_result, a.attempt_at,
+	           a.validation_result, a.attempt_at, a.received_at,
 	           EXISTS (SELECT 1 FROM attempt_errors e
 	                    WHERE e.attempt_id = a.id
 	                      AND e.error_type = 'NotImplementedError') AS stub
@@ -201,7 +201,10 @@ func (r *PanelDocenteRepository) EnRiesgo(curso string) ([]AlumnoEnRiesgo, error
 	               bool_or(validation_result = 'passed')                   AS paso,
 	               bool_or(validation_result = 'failed' AND NOT stub)      AS intento_real,
 	               bool_or(validation_result = 'sin_validar' AND NOT stub) AS a_medias,
-	               max(attempt_at)                                         AS ultima
+	               -- received_at y no attempt_at: el primero lo pone este
+	               -- servidor, el segundo el reloj del navegador del alumno,
+	               -- y restarle now() daba horas negativas.
+	               max(received_at)                                        AS ultima
 	          FROM t
 	         GROUP BY student_id, cuadernillo_id, exercise_id
 	    )
@@ -209,7 +212,7 @@ func (r *PanelDocenteRepository) EnRiesgo(curso string) ([]AlumnoEnRiesgo, error
 		       COUNT(*) FILTER (WHERE paso)                        AS resueltos,
 		       COUNT(*) FILTER (WHERE intento_real AND NOT paso)   AS atascados,
 		       COUNT(*) FILTER (WHERE a_medias AND NOT paso)       AS a_medias,
-		       EXTRACT(EPOCH FROM (now() - max(ultima))) / 3600.0  AS ultima_horas
+		       GREATEST(0, EXTRACT(EPOCH FROM (now() - max(ultima))) / 3600.0) AS ultima_horas
 		  FROM porAlumno
 		 GROUP BY student_id
 		HAVING COUNT(*) FILTER (WHERE intento_real AND NOT paso) > 0

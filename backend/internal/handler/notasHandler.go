@@ -3,6 +3,7 @@ package handler
 import (
 	"log"
 	"net/http"
+	"proxy-go/internal/middleware"
 	"proxy-go/internal/models"
 	"proxy-go/internal/service"
 	"time"
@@ -36,8 +37,9 @@ func NewNotasHandler(s *service.NotasService, tokenMaestro string) *NotasHandler
 
 // RegistrarHandler responde a POST /internal/notas.
 //
-// Interno: lo llama el contenedor del docente tras calificar, con el token
-// maestro. Las notas no las manda nunca el navegador del alumno.
+// Interno: lo llama el contenedor del docente tras calificar, con su token de
+// docente (acotado a su curso). Las notas no las manda nunca el navegador del
+// alumno.
 func (h *NotasHandler) RegistrarHandler(c *gin.Context) {
 	// La autorización la pone middleware.RequireTokenMaestro sobre /internal.
 
@@ -49,6 +51,11 @@ func (h *NotasHandler) RegistrarHandler(c *gin.Context) {
 	if input.CourseID == "" || input.CuadernilloID == "" {
 		c.JSON(http.StatusBadRequest,
 			gin.H{"error": "course_id y cuadernillo_id son obligatorios"})
+		return
+	}
+	// Un docente sube notas de su curso, no de otro.
+	if !middleware.CursoAutorizado(c, input.CourseID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ese curso no es el tuyo"})
 		return
 	}
 	if len(input.Notas) == 0 {

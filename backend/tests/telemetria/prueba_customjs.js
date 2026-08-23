@@ -134,7 +134,10 @@ function cargarEntorno(celdas, opts) {
     Blob: class { constructor(partes) { this._texto = partes.join(''); } },
     fetch(url, options) {
       fetches.push({ url, options, body: options && options.body ? JSON.parse(options.body) : null });
-      return Promise.resolve({ ok: true, status: 204, json() { return Promise.resolve({}); } });
+      // opts.respuesta permite simular un puente que rechaza (403, 502...)
+      const r = opts.respuesta || { ok: true, status: 204 };
+      if (r.error) return Promise.reject(new Error(r.error));
+      return Promise.resolve({ ok: r.ok, status: r.status, json() { return Promise.resolve({}); } });
     },
     console: { log(...a) { consola.push(['log', a.join(' ')]); }, warn(...a) { consola.push(['warn', a.join(' ')]); }, error(...a) { consola.push(['error', a.join(' ')]); } },
     setTimeout(fn, ms) { timeouts.push({ fn, ms }); return timeouts.length; },
@@ -299,18 +302,17 @@ function notebookDosEjercicios(doc) {
   return { s1, t1, s2, t2, celdas: [s1, t1, s2, t2] };
 }
 
-caso('6a. Rating (AUDITORIA 6.6): ultima prueba pasa con input_prompt_number="*" en finished_execute -> NO se ofrece la tarjeta', () => {
+caso('6a. Rating (AUDITORIA 6.6, corregido): ultima prueba pasa con input_prompt_number="*" en finished_execute -> SI se ofrece la tarjeta', () => {
   const doc = crearDocumento(); const nb = notebookDosEjercicios(doc);
   const env = cargarEntorno(nb.celdas);
   ejecutar(env, nb.t1, [], 5);           // ya tiene numero (reply llego antes)
   igual(env.fetches.length, 1); igual(env.fetches[0].body.validation_result, 'passed');
+  afirmar(env.doc.getElementById('nbgrader-rating-card') === null, 'con una prueba pendiente no se ofrece');
   ejecutar(env, nb.t2, [], '*');         // como en nbclassic: finished_iopub antes que execute_reply
   igual(env.fetches.length, 2); igual(env.fetches[1].body.validation_result, 'passed', 'el evento si reporta passed');
   const tarjeta = env.doc.getElementById('nbgrader-rating-card');
-  afirmar(tarjeta === null, 'tarjeta de rating ofrecida pese a prompt "*" (esperado por la auditoria: no se ofrece)');
-  // y aunque luego llegue el numero, no hay otro disparador que vuelva a evaluar
-  nb.t2.input_prompt_number = 6;
-  afirmar(env.doc.getElementById('nbgrader-rating-card') === null, 'nada la vuelve a evaluar');
+  afirmar(tarjeta !== null, 'la tarjeta debe ofrecerse aunque el prompt de la celda recien ejecutada sea "*"');
+  afirmar(tarjeta.parentNode === nb.t2.element[0], 'insertada en la ultima celda de prueba');
 });
 
 caso('6b. Rating: con input_prompt_number numerico en finished_execute SI se ofrece, y enviar hace fetch cuadernillo_rating', () => {
@@ -392,13 +394,83 @@ caso('10. Cabecera X-XSRFToken vacia si no hay cookie _xsrf (regresion commit 50
   const env = cargarEntorno(nb.celdas);
   env.doc.cookie = 'otra=1';
   ejecutar(env, nb.test1, []);
-  igual(env.fetches[0].options.headers['X-XSRFToken'], '', 'viaja vacia: el puente respondera 403 y custom.js no lo mira');
+  igual(env.fetches[0].options.headers['X-XSRFToken'], '', 'viaja vacia: el puente respondera 403');
+  afirmar(env.consola.some(l => l[0] === 'warn' && /sin cookie _xsrf/.test(l[1])), 'avisa por consola que no hay cookie');
   env.doc.cookie = '_xsrf=2%7Cabc; x=1';
   ejecutar(env, nb.test1, []);
   igual(env.fetches[1].options.headers['X-XSRFToken'], '2|abc', 'se decodifica la cookie');
 });
 
-console.log('custom.js: ' + RUTA_CUSTOM);
-console.log(resultados.join('\n'));
-console.log('\n' + (total - fallos) + '/' + total + ' casos OK' + (fallos ? ', ' + fallos + ' FALLO(S)' : ''));
-process.exit(fallos ? 1 : 0);
+// ---------------------------------------------------------------------------
+// Casos que dependen de la respuesta del fetch (asincrona): se esperan las
+// microtareas antes de mirar el estado.
+// ---------------------------------------------------------------------------
+const tick = () => new Promise(r => setImmediate(r));
+const casosAsync = [];
+function casoAsync(nombre, fn) { casosAsync.push({ nombre, fn }); }
+
+casoAsync('11a. El puente responde 403 -> los errores del intento vuelven al buffer y se avisa por consola', async () => {
+  const doc = crearDocumento(); const nb = notebookBasico(doc);
+  const env = cargarEntorno(nb.celdas, { respuesta: { ok: false, status: 403 } });
+  ejecutar(env, nb.sol1, [{ output_type: 'error', ename: 'NameError', evalue: 'x', traceback: ['t'] }]);
+  ejecutar(env, nb.test1, [{ output_type: 'error', ename: 'AssertionError', evalue: 'mal', traceback: ['t'] }]);
+  igual(env.fetches.length, 1);
+  igual(env.fetches[0].body.errors.length, 2);
+  let st = JSON.parse(env.localStorage.getItem('nbgrader-metrics:semana_01.ipynb'));
+  igual(st.errores.ejercicio_1, [], 'el buffer se vacia al enviar');
+  await tick();
+  st = JSON.parse(env.localStorage.getItem('nbgrader-metrics:semana_01.ipynb'));
+  igual(st.errores.ejercicio_1.map(e => e.error_type), ['NameError', 'AssertionError'], 'tras el 403 los errores vuelven al buffer');
+  afirmar(env.consola.some(l => l[0] === 'warn' && /HTTP 403/.test(l[1])), 'avisa con el codigo HTTP');
+  // y el siguiente intento los lleva de nuevo
+  ejecutar(env, nb.test1, []);
+  igual(env.fetches[1].body.errors.map(e => e.error_type), ['NameError', 'AssertionError'], 'viajan con el siguiente intento');
+});
+
+casoAsync('11b. Error de red -> igual que un rechazo: se reponen los errores', async () => {
+  const doc = crearDocumento(); const nb = notebookBasico(doc);
+  const env = cargarEntorno(nb.celdas, { respuesta: { error: 'Failed to fetch' } });
+  ejecutar(env, nb.sol1, [{ output_type: 'error', ename: 'TypeError', evalue: 'x', traceback: ['t'] }]);
+  ejecutar(env, nb.test1, []);
+  await tick();
+  const st = JSON.parse(env.localStorage.getItem('nbgrader-metrics:semana_01.ipynb'));
+  igual(st.errores.ejercicio_1.map(e => e.error_type), ['TypeError']);
+});
+
+casoAsync('11c. El puente acepta (204) -> el buffer queda vacio y no hay avisos', async () => {
+  const doc = crearDocumento(); const nb = notebookBasico(doc);
+  const env = cargarEntorno(nb.celdas);
+  ejecutar(env, nb.sol1, [{ output_type: 'error', ename: 'TypeError', evalue: 'x', traceback: ['t'] }]);
+  ejecutar(env, nb.test1, []);
+  await tick();
+  const st = JSON.parse(env.localStorage.getItem('nbgrader-metrics:semana_01.ipynb'));
+  igual(st.errores.ejercicio_1, []);
+  afirmar(!env.consola.some(l => l[0] === 'warn'), 'sin avisos');
+});
+
+casoAsync('11d. Rating rechazado por el puente -> se puede volver a enviar', async () => {
+  const doc = crearDocumento(); const nb = notebookDosEjercicios(doc);
+  const env = cargarEntorno(nb.celdas, { respuesta: { ok: false, status: 502 } });
+  ejecutar(env, nb.t1, [], 5); ejecutar(env, nb.t2, [], 6);
+  const tarjeta = env.doc.getElementById('nbgrader-rating-card');
+  afirmar(tarjeta !== null, 'tarjeta ofrecida');
+  tarjeta.querySelectorAll('.nbg-star')[2].dispatch('click');
+  tarjeta.querySelector('#nbg-rating-send').dispatch('click');
+  let st = JSON.parse(env.localStorage.getItem('nbgrader-metrics:semana_01.ipynb'));
+  igual(st.rating_enviado, true, 'se marca como enviado al pulsar');
+  await tick();
+  st = JSON.parse(env.localStorage.getItem('nbgrader-metrics:semana_01.ipynb'));
+  igual(st.rating_enviado, false, 'tras el 502 se desmarca para poder reintentar');
+});
+
+(async () => {
+  for (const c of casosAsync) {
+    total++;
+    try { await c.fn(); resultados.push('OK    ' + c.nombre); }
+    catch (e) { fallos++; resultados.push('FALLO ' + c.nombre + '\n      ' + (e.stack || e).toString().split('\n').slice(0, 3).join('\n      ')); }
+  }
+  console.log('custom.js: ' + RUTA_CUSTOM);
+  console.log(resultados.join('\n'));
+  console.log('\n' + (total - fallos) + '/' + total + ' casos OK' + (fallos ? ', ' + fallos + ' FALLO(S)' : ''));
+  process.exit(fallos ? 1 : 0);
+})();

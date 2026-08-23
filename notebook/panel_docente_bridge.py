@@ -46,7 +46,10 @@ RAIZ = os.environ.get("NBGRADER_BASE", "/srv/nbgrader") + f"/{CURSO}"
 API = (os.environ.get("METRICS_API_BASE")
        or os.environ.get("STUDENT_METRICS_API_BASE")
        or "http://api_go:8080").rstrip("/")
-TOKEN_MAESTRO = os.environ.get("METRICS_API_TOKEN", "")
+# El token de docente, acotado a este curso, que el Hub acuña al arrancar el
+# contenedor. METRICS_API_TOKEN queda como respaldo para un Hub anterior.
+TOKEN_DOCENTE = (os.environ.get("METRICS_DOCENTE_TOKEN")
+                 or os.environ.get("METRICS_API_TOKEN", ""))
 
 AZUL, TINTA, GRIS, BORDE = "#2a78d6", "#10294d", "#52514e", "#dfe3e8"
 VERDE, AMBAR, ROJO = "#0f8a4a", "#b57200", "#c8392b"
@@ -196,13 +199,13 @@ async def _analitica():
     —entregas y estado del ciclo— es lo que el docente necesita para trabajar
     hoy, y no puede depender de que la analitica este viva.
     """
-    if not TOKEN_MAESTRO:
+    if not TOKEN_DOCENTE:
         return None, ("Esta parte no está configurada en el servidor: falta la "
                       "credencial con la que el panel consulta la analítica.")
     try:
         resp = await AsyncHTTPClient().fetch(HTTPRequest(
             f"{API}/internal/curso/{CURSO}/panel",
-            headers={"Authorization": f"Bearer {TOKEN_MAESTRO}"},
+            headers={"Authorization": f"Bearer {TOKEN_DOCENTE}"},
             request_timeout=4, connect_timeout=2))
         return json.loads(resp.body.decode("utf-8")), None
     except Exception as err:
