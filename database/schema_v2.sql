@@ -129,6 +129,30 @@ CREATE TABLE cuadernillo_notas (
 CREATE INDEX idx_notas_estudiante ON cuadernillo_notas (student_id, course_id);
 
 -- ---------------------------------------------------------
+-- 6b. Quién es cada estudiante                           [NUEVA, v3]
+-- ---------------------------------------------------------
+-- Lo registra el Hub en cada ingreso LTI (POST /internal/lti/ingreso). Sin
+-- esto el panel del docente solo podía mostrar el user_id numérico. Guarda
+-- también el sourcedid y la URL del servicio de resultados de Moodle, que solo
+-- viajan en el lanzamiento del alumno y hacen falta para devolverle la nota.
+CREATE TABLE estudiantes (
+    course_id               VARCHAR(255) NOT NULL,   -- context_id de LTI
+    student_id              VARCHAR(255) NOT NULL,   -- user_id de LTI
+    nombre                  VARCHAR(255) NOT NULL DEFAULT '',
+    email                   VARCHAR(255) NOT NULL DEFAULT '',
+    usuario_hub             VARCHAR(255) NOT NULL DEFAULT '',
+    rol                     VARCHAR(20)  NOT NULL DEFAULT 'estudiante',
+    lis_result_sourcedid    TEXT,
+    lis_outcome_service_url TEXT,
+    primer_ingreso          TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    ultimo_ingreso          TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    ingresos                INTEGER      NOT NULL DEFAULT 1,
+    PRIMARY KEY (course_id, student_id)
+);
+
+CREATE INDEX idx_estudiantes_curso ON estudiantes (course_id, ultimo_ingreso DESC);
+
+-- ---------------------------------------------------------
 -- 7. La consulta que justifica todo lo anterior
 -- ---------------------------------------------------------
 -- Responde "¿en qué competencia se está atascando?" sin necesidad de que exista

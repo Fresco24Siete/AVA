@@ -37,6 +37,7 @@ const intentosReales = `
 	WITH t AS (
 	    SELECT a.id, a.student_id, a.cuadernillo_id, a.exercise_id,
 	           a.validation_result, a.attempt_at, a.received_at,
+	           a.orden, a.puntos_maximos,
 	           EXISTS (SELECT 1 FROM attempt_errors e
 	                    WHERE e.attempt_id = a.id
 	                      AND e.error_type = 'NotImplementedError') AS stub
@@ -67,40 +68,69 @@ func (r *PanelDocenteRepository) PorCuadernillo(curso string) ([]ResumenCuaderni
 }
 
 type DificultadEjercicio struct {
-	CuadernilloID string `db:"cuadernillo_id" json:"cuadernillo_id"`
-	EjercicioID   string `db:"exercise_id" json:"exercise_id"`
-	LoIntentaron  int    `db:"lo_intentaron" json:"alumnos_que_lo_intentaron"`
-	LoResolvieron int    `db:"lo_resolvieron" json:"alumnos_que_lo_resolvieron"`
-	Atascados     int    `db:"atascados" json:"alumnos_atascados"`
-	AMedias       int    `db:"a_medias" json:"alumnos_a_medias"`
+	CuadernilloID string   `db:"cuadernillo_id" json:"cuadernillo_id"`
+	EjercicioID   string   `db:"exercise_id" json:"exercise_id"`
+	Orden         *int16   `db:"orden" json:"orden"`
+	PuntosMax     *int16   `db:"puntos_maximos" json:"puntos_maximos"`
+	LoIntentaron  int      `db:"lo_intentaron" json:"alumnos_que_lo_intentaron"`
+	LoResolvieron int      `db:"lo_resolvieron" json:"alumnos_que_lo_resolvieron"`
+	Atascados     int      `db:"atascados" json:"alumnos_atascados"`
+	AMedias       int      `db:"a_medias" json:"alumnos_a_medias"`
+	PrimerIntento int      `db:"primer_intento_ok" json:"alumnos_que_pasaron_al_primer_intento"`
+	MedianaHasta  *float64 `db:"mediana_hasta_pasar" json:"mediana_intentos_hasta_pasar"`
 }
 
-// PorEjercicio: dónde se atasca el grupo.
+// PorEjercicio: dónde se atasca el grupo, y qué tan duro es cada ejercicio.
 //
 // «Atascado» es quien escribió una respuesta, falló, y nunca llegó a pasar. No
 // entra quien solo ejecutó la celda vacía, ni quien acabó resolviéndolo.
+//
+// La dificultad sale de quienes SÍ lo resolvieron: cuántos intentos reales les
+// costó (mediana) y cuántos lo pasaron a la primera. Un ejercicio que todos
+// pasan al primer intento y otro que cuesta cinco intentos se ven iguales en
+// «atascados» y son dos ejercicios muy distintos.
 func (r *PanelDocenteRepository) PorEjercicio(curso string) ([]DificultadEjercicio, error) {
 	// Nunca nil: un slice vacío se serializa como null y obliga a quien lo
 	// consume a distinguir «no hay» de «falló».
 	salida := []DificultadEjercicio{}
 	err := r.db.Select(&salida, intentosReales+`,
+	    reales AS (
+	        SELECT *, row_number() OVER (PARTITION BY cuadernillo_id, exercise_id, student_id
+	                                     ORDER BY received_at) AS n
+	          FROM t WHERE NOT stub AND validation_result <> 'sin_validar'
+	    ),
+	    hasta_pasar AS (
+	        -- el número del primer intento real que pasó, por alumno y ejercicio
+	        SELECT cuadernillo_id, exercise_id, student_id, MIN(n) AS intentos
+	          FROM reales WHERE validation_result = 'passed'
+	         GROUP BY cuadernillo_id, exercise_id, student_id
+	    ),
 	    porAlumno AS (
 	        SELECT cuadernillo_id, exercise_id, student_id,
 	               bool_or(validation_result = 'passed')                  AS paso,
 	               bool_or(validation_result = 'failed' AND NOT stub)     AS intento_real,
-	               bool_or(validation_result = 'sin_validar' AND NOT stub) AS a_medias
+	               bool_or(validation_result = 'sin_validar' AND NOT stub) AS a_medias,
+	               MIN(orden)                                             AS orden,
+	               MAX(puntos_maximos)                                    AS puntos_maximos
 	          FROM t
 	         GROUP BY cuadernillo_id, exercise_id, student_id
 	    )
-		SELECT cuadernillo_id, exercise_id,
-		       COUNT(*) FILTER (WHERE intento_real OR paso)          AS lo_intentaron,
-		       COUNT(*) FILTER (WHERE paso)                          AS lo_resolvieron,
-		       COUNT(*) FILTER (WHERE intento_real AND NOT paso)     AS atascados,
-		       COUNT(*) FILTER (WHERE a_medias AND NOT paso)         AS a_medias
-		  FROM porAlumno
-		 GROUP BY cuadernillo_id, exercise_id
-		HAVING COUNT(*) FILTER (WHERE intento_real OR paso) > 0
-		 ORDER BY atascados DESC, cuadernillo_id, exercise_id`, curso)
+		SELECT p.cuadernillo_id, p.exercise_id,
+		       MIN(p.orden)                                          AS orden,
+		       MAX(p.puntos_maximos)                                 AS puntos_maximos,
+		       COUNT(*) FILTER (WHERE p.intento_real OR p.paso)      AS lo_intentaron,
+		       COUNT(*) FILTER (WHERE p.paso)                        AS lo_resolvieron,
+		       COUNT(*) FILTER (WHERE p.intento_real AND NOT p.paso) AS atascados,
+		       COUNT(*) FILTER (WHERE p.a_medias AND NOT p.paso)     AS a_medias,
+		       COUNT(*) FILTER (WHERE h.intentos = 1)                AS primer_intento_ok,
+		       percentile_cont(0.5) WITHIN GROUP (ORDER BY h.intentos) AS mediana_hasta_pasar
+		  FROM porAlumno p
+		  LEFT JOIN hasta_pasar h ON h.cuadernillo_id = p.cuadernillo_id
+		                         AND h.exercise_id    = p.exercise_id
+		                         AND h.student_id     = p.student_id
+		 GROUP BY p.cuadernillo_id, p.exercise_id
+		HAVING COUNT(*) FILTER (WHERE p.intento_real OR p.paso) > 0
+		 ORDER BY p.cuadernillo_id, MIN(p.orden) NULLS LAST, p.exercise_id`, curso)
 	return salida, err
 }
 

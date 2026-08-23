@@ -177,6 +177,41 @@ async def _mintear_token_estudiante(auth_state, curso_id, cuadernillo_codigo, sp
     return token
 
 
+async def _registrar_ingreso(auth_state, curso_id, es_instructor, spawner):
+    """Le dice al backend quién acaba de entrar.
+
+    Es la única fuente de nombres y correos que tiene la base: la telemetría
+    viaja con el user_id numérico de Moodle y nada más, así que sin esto el
+    panel del docente solo puede enseñar números. De paso guarda el sourcedid
+    y la URL del servicio de resultados, que solo viajan en este lanzamiento y
+    que la devolución de notas a Moodle va a necesitar. Si el backend no
+    responde, se registra en el log y el arranque sigue: un ingreso sin ficha
+    es mejor que un alumno sin contenedor.
+    """
+    url = os.environ.get('METRICS_INGRESO_URL',
+                         'http://api_go:8080/internal/lti/ingreso')
+    master_token = os.environ.get('METRICS_API_TOKEN', '')
+    payload = {
+        'curso_id': curso_id,
+        'estudiante_id': str(auth_state.get('user_id', '')),
+        'nombre': str(auth_state.get('lis_person_name_full', '') or ''),
+        'email': str(auth_state.get('lis_person_contact_email_primary', '') or ''),
+        'usuario_hub': spawner.user.name,
+        'rol': 'instructor' if es_instructor else 'estudiante',
+        'lis_result_sourcedid': str(auth_state.get('lis_result_sourcedid', '') or ''),
+        'lis_outcome_service_url': str(auth_state.get('lis_outcome_service_url', '') or ''),
+    }
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.post(url, json=payload,
+                                     headers={'Authorization': f'Bearer {master_token}'})
+        if resp.status_code != 200:
+            spawner.log.warning('No se pudo registrar el ingreso de %s: %s %s',
+                                spawner.user.name, resp.status_code, resp.text[:120])
+    except Exception as exc:
+        spawner.log.warning('No se pudo registrar el ingreso de %s: %s', spawner.user.name, exc)
+
+
 # --- Variables de entorno + ruteo del contenedor según rol ------------------
 async def auth_state_a_env(spawner, auth_state):
     if not auth_state:
@@ -221,6 +256,10 @@ async def auth_state_a_env(spawner, auth_state):
             'Revisa que la actividad LTI de Moodle tenga calificación activada.',
             spawner.user.name, bool(sourcedid), bool(outcome_url))
     spawner.environment['ENVIAR_AL_BACKEND'] = os.environ.get('ENVIAR_AL_BACKEND', 'false')
+
+    # Quién entró, con nombre: para el listado del docente y para la
+    # devolución de notas. Va antes de acuñar tokens y no bloquea el arranque.
+    await _registrar_ingreso(auth_state, curso_id, es_instructor, spawner)
 
     # --- Tutor IA -----------------------------------------------------------
     # Interruptor de curso y tope de preguntas por cuadernillo. El cuadernillo

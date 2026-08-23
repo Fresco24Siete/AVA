@@ -1,25 +1,29 @@
-"""Panel del docente: cómo va el curso, servido por su propio contenedor.
+"""Panel del docente: quién está en el curso y cómo le va, servido por su propio contenedor.
 
 Formgrader responde a «¿qué actividades tengo?» y a nada más. El docente no
-tiene forma de ver en qué punto del ciclo está cada cuadernillo —generado,
-publicado, con entregas recogidas, calificado— sin recorrer carpetas.
+tiene forma de ver quiénes son sus estudiantes, quién ha empezado, en qué punto
+del ciclo está cada cuadernillo —generado, publicado, traído, entregado,
+recogido, calificado— ni qué ejercicio cuesta, sin recorrer carpetas y bases.
 
-Tres decisiones que gobiernan este archivo:
+Cuatro fuentes, cada una con lo suyo:
 
-**Lee disco, y al servicio de intercambio solo para saber qué está publicado.**
-Lo demás sale de lo que este contenedor ya monta: `source/`, `release/`,
-`submitted/`, `autograded/` y el libro de notas. Lo agregado —cómo va el grupo
-por competencia, qué ejercicio se atasca— va en su propia sección, para que un
-fallo de la analítica no se lleve por delante lo que el docente necesita para
-trabajar hoy. Si el intercambio no responde, la columna «publicado» se marca
-como no disponible y el resto se dibuja igual.
+**El backend** (analítica y registro de estudiantes): quién entró y con qué
+nombre —lo registra el Hub en cada ingreso LTI—, los intentos y errores de la
+telemetría, y las notas subidas. Se pide con un token acotado a este curso.
 
-**El libro de notas se abre en solo lectura.** `nbgrader.api.Gradebook` escribe
-al abrirse —crea el curso si no existe— y compite por el lock con un Autograde
-en marcha. Aquí se abre el sqlite con `mode=ro`, que no puede escribir ni
-bloquear aunque se quiera.
+**El servicio de intercambio** (nbexchange): qué está publicado, quién lo trajo
+y quién lo entregó. Es el único que sabe quién ni siquiera ha abierto el
+cuadernillo.
 
-**Habla el mismo idioma que el panel del alumno.** «Esta semana», «a medias»,
+**El disco del docente**: `source/`, `release/`, `submitted/`, `autograded/` y el
+libro de notas (en solo lectura: `Gradebook` escribe al abrirse y compite por
+el lock con un Autograde en marcha).
+
+Si una fuente no responde, su parte se marca como no disponible y el resto se
+dibuja igual. Lo de disco es lo que el docente necesita para trabajar hoy y no
+puede depender de que la analítica esté viva.
+
+Habla el mismo idioma que el panel del alumno: «Esta semana», «a medias»,
 «aún sin calificar». Si el profesor y el alumno miran cifras con nombres
 distintos, la conversación en clase empieza por traducir.
 """
@@ -29,6 +33,8 @@ import logging
 import os
 import sqlite3
 import time
+import urllib.parse
+from datetime import datetime, timezone
 
 from tornado import web
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
@@ -64,33 +70,6 @@ def _carpetas(ruta):
         return []
 
 
-def _publicados():
-    """Qué está liberado en el servicio de intercambio, con su ventana.
-
-    La ventana y la marca de «activar» viajan dentro de la liberación
-    (release/<tarea>/ava_publicacion.json, que escribe publicar-cuadernillo), y
-    el docente tiene esa carpeta montada: se lee de ahí. Devuelve
-    ({tarea: info}, pudo_consultar).
-    """
-    try:
-        from nbexchange_cliente import ava
-        liberadas, _ = ava.liberados()
-    except Exception as err:
-        log.warning("[panel-docente] no se pudo consultar el intercambio: %s", err)
-        return {}, False
-    publicados = {}
-    for tarea, info in liberadas.items():
-        pub = ava.leer_publicacion(os.path.join(RAIZ, "release", tarea))
-        publicados[tarea] = {
-            "id": tarea,
-            "timestamp": info["timestamp"],
-            "abre": pub.get("abre"),
-            "cierra": pub.get("cierra"),
-            "activar": pub.get("activar", True),
-        }
-    return publicados, True
-
-
 def _entregas():
     """Qué hay en submitted/, leyendo solo nombres y fechas.
 
@@ -111,20 +90,31 @@ def _entregas():
                         tam += st.st_size
                     except OSError:
                         pass
+            # La hora real de entrega la deja nbexchange en timestamp.txt; la
+            # del archivo es la del Collect.
+            entregada = _timestamp_txt(carpeta) or cuando
             salida.append({"alumno": alumno, "tarea": tarea,
-                           "cuando": cuando, "bytes": tam,
+                           "cuando": entregada, "recogida": cuando, "bytes": tam,
                            "calificada": _calificada(alumno, tarea, cuando)})
     salida.sort(key=lambda e: e["cuando"], reverse=True)
     return salida
 
 
-def _calificada(alumno, tarea, entregada_en):
+def _timestamp_txt(carpeta):
+    """La marca de entrega que nbexchange deja junto al notebook, en epoch."""
+    try:
+        with open(os.path.join(carpeta, "timestamp.txt"), encoding="utf-8") as f:
+            return _epoch_exchange(f.read().strip())
+    except OSError:
+        return 0
+
+
+def _calificada(alumno, tarea, recogida_en):
     """(bool calificada, bool reentregada_despues).
 
-    nbgrader no deja fecha de entrega cuando el archivo llega por HTTP en vez de
-    por su buzón, así que «¿la calificación es posterior a la entrega?» se
-    responde comparando fechas de archivo. Es una heurística del sistema de
-    ficheros y la pantalla lo dice.
+    Se compara la fecha del archivo recogido con la del calificado: si se
+    volvió a recoger después de calificar, la nota ya no corresponde a lo
+    último que mandó.
     """
     carpeta = os.path.join(RAIZ, "autograded", alumno, tarea)
     if not os.path.isdir(carpeta):
@@ -136,7 +126,7 @@ def _calificada(alumno, tarea, entregada_en):
                 calificada_en = max(calificada_en, f.stat().st_mtime)
     except OSError:
         pass
-    return (True, bool(calificada_en and entregada_en > calificada_en + 2))
+    return (True, bool(calificada_en and recogida_en > calificada_en + 2))
 
 
 def _libro():
@@ -158,9 +148,7 @@ def _libro():
     try:
         # nbgrader guarda las celdas con herencia de tabla unica: base_cell
         # tiene el notebook, y grade_cells —en plural— solo el puntaje, atada
-        # por el mismo id. Consultar grade_cell.notebook_id no da cero: da un
-        # error de tabla inexistente que se traga el except de abajo y deja la
-        # columna de puntos vacia sin decir por que.
+        # por el mismo id.
         for nombre, maximos in con.execute("""
                 SELECT a.name, COALESCE(SUM(gc.max_score), 0)
                   FROM assignment a
@@ -188,34 +176,109 @@ def _libro():
     return tareas, notas
 
 
-async def _analitica():
-    """Lo agregado del curso. Devuelve (datos, aviso).
+# --- El servicio de intercambio ----------------------------------------------
 
-    Se pide con el cliente asincrono y cuatro segundos de tope. El sincrono
-    bloquearia el IOLoop del servidor del docente, que es el mismo proceso que
-    corre Autograde: una consulta lenta congelaria la calificacion.
+def _publicados():
+    """Qué está liberado, con su ventana. Devuelve ({tarea: info}, pudo)."""
+    try:
+        from nbexchange_cliente import ava
+        liberadas, _ = ava.liberados()
+    except Exception as err:
+        log.warning("[panel-docente] no se pudo consultar el intercambio: %s", err)
+        return {}, False
+    publicados = {}
+    for tarea, info in liberadas.items():
+        pub = ava.leer_publicacion(os.path.join(RAIZ, "release", tarea))
+        publicados[tarea] = {
+            "id": tarea,
+            "timestamp": info["timestamp"],
+            "abre": pub.get("abre"),
+            "cierra": pub.get("cierra"),
+            "activar": pub.get("activar", True),
+        }
+    return publicados, True
 
-    Si no responde, el panel se dibuja igual sin estas secciones. Lo de disco
-    —entregas y estado del ciclo— es lo que el docente necesita para trabajar
-    hoy, y no puede depender de que la analitica este viva.
-    """
+
+def _historial():
+    """Quién trajo y quién entregó cada tarea. {} si el servicio no responde."""
+    try:
+        from nbexchange_cliente import ava
+        return ava.historial(), True
+    except Exception as err:
+        log.warning("[panel-docente] no se pudo leer el historial del intercambio: %s", err)
+        return {}, False
+
+
+# --- El backend ----------------------------------------------------------------
+
+async def _backend(ruta):
+    """GET al backend con el token de docente. Devuelve (json, aviso)."""
     if not TOKEN_DOCENTE:
         return None, ("Esta parte no está configurada en el servidor: falta la "
                       "credencial con la que el panel consulta la analítica.")
     try:
         resp = await AsyncHTTPClient().fetch(HTTPRequest(
-            f"{API}/internal/curso/{CURSO}/panel",
+            f"{API}{ruta}",
             headers={"Authorization": f"Bearer {TOKEN_DOCENTE}"},
             request_timeout=4, connect_timeout=2))
         return json.loads(resp.body.decode("utf-8")), None
     except Exception as err:
-        log.warning("[panel-docente] no se pudo consultar la analítica: %s", err)
-        return None, ("No se pudo consultar la analítica del curso. Lo de "
-                      "arriba —entregas y estado de cada cuadernillo— sale del "
-                      "disco y está al día.")
+        log.warning("[panel-docente] no se pudo consultar %s: %s", ruta, err)
+        return None, ("No se pudo consultar la analítica del curso. Lo que sale "
+                      "del disco y del intercambio está al día.")
 
 
-def _ciclo():
+# --- Tiempo ----------------------------------------------------------------------
+
+def _epoch_exchange(ts):
+    """'2026-08-22 21:10:00.123456 UTC' -> epoch. 0 si no se entiende."""
+    try:
+        base = str(ts).rsplit(" ", 1)[0]
+        return datetime.strptime(base, "%Y-%m-%d %H:%M:%S.%f").replace(
+            tzinfo=timezone.utc).timestamp()
+    except (ValueError, AttributeError):
+        return 0
+
+
+def _epoch_iso(ts):
+    """'2026-08-23T03:57:50.639499Z' -> epoch. 0 si no viene."""
+    if not ts:
+        return 0
+    try:
+        return datetime.fromisoformat(str(ts).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return 0
+
+
+def _hace(marca):
+    """Un solo formato de tiempo relativo para todo el panel."""
+    if not marca:
+        return "—"
+    seg = max(0, int(time.time() - marca))
+    if seg < 90:
+        return "hace un momento"
+    if seg < 3600:
+        return f"hace {seg // 60} min"
+    if seg < 86400:
+        h = seg // 3600
+        return f"hace {h} hora" + ("" if h == 1 else "s")
+    d = seg // 86400
+    if d < 14:
+        return f"hace {d} día" + ("" if d == 1 else "s")
+    return f"hace {d // 7} semanas"
+
+
+def _fecha_corta(marca):
+    """'23/08 16:10' en hora de Colombia."""
+    if not marca:
+        return "—"
+    from datetime import timedelta
+    return datetime.fromtimestamp(marca, timezone(timedelta(hours=-5))).strftime("%d/%m %H:%M")
+
+
+# --- Cruce: el ciclo de cada cuadernillo -------------------------------------------
+
+def _ciclo(datos, historial):
     """En qué punto está cada cuadernillo, juntando las cuatro fuentes."""
     publicados, consulto = _publicados()
     try:
@@ -225,12 +288,17 @@ def _ciclo():
         activo = ""
     tareas_libro, _ = _libro()
 
-    entregas_por_tarea = {}
+    recogidas = {}
     for e in _entregas():
-        d = entregas_por_tarea.setdefault(e["tarea"], {"total": 0, "calificadas": 0})
+        d = recogidas.setdefault(e["tarea"], {"total": 0, "calificadas": 0, "recogida": {}})
         d["total"] += 1
+        d["recogida"][e["alumno"]] = e["cuando"]
         if e["calificada"][0]:
             d["calificadas"] += 1
+
+    # Alumnos con telemetría por cuadernillo: los que están trabajando.
+    trabajando = {c.get("cuadernillo_id"): c.get("alumnos_con_actividad", 0)
+                  for c in (datos or {}).get("cuadernillos", [])}
 
     nombres = sorted(set(_carpetas(os.path.join(RAIZ, "source")))
                      | set(publicados) | set(tareas_libro))
@@ -238,11 +306,17 @@ def _ciclo():
     for n in nombres:
         generada = os.path.isdir(os.path.join(RAIZ, "release", n))
         pub = n in publicados
-        ent = entregas_por_tarea.get(n, {"total": 0, "calificadas": 0})
+        ent = recogidas.get(n, {"total": 0, "calificadas": 0, "recogida": {}})
         entrada = publicados.get(n, {})
-        # Lo que los alumnos entregaron y aún no está en submitted/: el
-        # intercambio lo guarda hasta que el docente pulsa «Collect».
-        sin_recoger = _sin_recoger(n, consulto) if pub else (0 if consulto else None)
+        h = historial.get(n, {"traido": {}, "entregado": {}}) if historial else None
+        traido = len(h["traido"]) if h else None
+        entregado = len(h["entregado"]) if h else None
+        # Entregas en el servicio más nuevas que lo recogido (o sin recoger).
+        sin_recoger = None
+        if h:
+            sin_recoger = sum(
+                1 for alumno, ts in h["entregado"].items()
+                if _epoch_exchange(ts) > ent["recogida"].get(alumno, 0) + 1)
         filas.append({
             "tarea": n,
             "generada": generada,
@@ -251,39 +325,19 @@ def _ciclo():
             "abre": entrada.get("abre"),
             "cierra": entrada.get("cierra"),
             "puntos": tareas_libro.get(n),
-            "entregas": ent["total"],
+            "trabajando": trabajando.get(n, 0),
+            "traido": traido,
+            "entregado": entregado,
+            "recogidas": ent["total"],
             "sin_recoger": sin_recoger,
             "calificadas": ent["calificadas"],
-            "siguiente": _siguiente_paso(generada, pub, ent, sin_recoger),
+            "siguiente": _siguiente_paso(generada, pub, ent, sin_recoger,
+                                         trabajando.get(n, 0), entregado),
         })
     return activo, filas
 
 
-def _sin_recoger(tarea, preguntar):
-    """Cuántos alumnos tienen en el intercambio una entrega más nueva que la
-    que hay en submitted/ (o ninguna en submitted/). None si no se pudo saber."""
-    if not preguntar:
-        return None
-    try:
-        from nbexchange_cliente import ava
-        en_exchange = ava.entregas_en_exchange(tarea)
-    except Exception as err:
-        log.warning("[panel-docente] no se pudo listar entregas de %s: %s", tarea, err)
-        return None
-    pendientes = 0
-    for alumno, ts in en_exchange.items():
-        carpeta = os.path.join(RAIZ, "submitted", alumno, tarea)
-        try:
-            with open(os.path.join(carpeta, "timestamp.txt"), encoding="utf-8") as f:
-                recogida = f.read().strip()
-        except OSError:
-            recogida = ""
-        if ts > recogida:
-            pendientes += 1
-    return pendientes
-
-
-def _siguiente_paso(generada, publicada, ent, sin_recoger=None):
+def _siguiente_paso(generada, publicada, ent, sin_recoger, trabajando, entregado):
     """Qué le toca hacer al docente con este cuadernillo. Uno solo, el primero."""
     if not generada:
         return "Generar"
@@ -295,7 +349,9 @@ def _siguiente_paso(generada, publicada, ent, sin_recoger=None):
         return "Calificar"
     if ent["total"] and ent["calificadas"] == ent["total"]:
         return "Subir notas con registrar-notas"
-    return "Esperando entregas"
+    if trabajando:
+        return f"{trabajando} trabajando, sin entregas"
+    return "Esperando que empiecen"
 
 
 # --- Presentación ------------------------------------------------------------
@@ -308,13 +364,7 @@ def _titulo(codigo):
 
 
 def _nombre(codigo):
-    """Título legible + el identificador real debajo.
-
-    'semana_01' y 'semana_1' se leen los dos como «Semana 1», y en el curso
-    conviven: el segundo es la demo vieja. En el panel del alumno eso da igual
-    porque solo ve lo publicado, pero el docente trabaja con carpetas y necesita
-    saber cuál es cuál antes de borrar o generar.
-    """
+    """Título legible + el identificador real debajo."""
     bonito = _titulo(codigo)
     if bonito == codigo:
         return f'<b>{html.escape(codigo)}</b>'
@@ -322,39 +372,85 @@ def _nombre(codigo):
             f'<div class="mono tenue">{html.escape(codigo)}</div>')
 
 
-def _hace(marca):
-    if not marca:
-        return "—"
-    seg = max(0, int(time.time() - marca))
-    if seg < 90:
-        return "hace un momento"
-    if seg < 3600:
-        return f"hace {seg // 60} min"
-    if seg < 86400:
-        h = seg // 3600
-        return f"hace {h} hora" + ("" if h == 1 else "s")
-    d = seg // 86400
-    return f"hace {d} día" + ("" if d == 1 else "s")
+def _persona(sid, nombres, raiz, con_enlace=True):
+    """Nombre del estudiante (o su id si no se conoce), enlazado a su ficha."""
+    nombre = (nombres or {}).get(sid, "")
+    texto = html.escape(nombre) if nombre else f'<span class="mono">{html.escape(sid)}</span>'
+    if nombre:
+        texto += f'<div class="mono tenue">{html.escape(sid)}</div>'
+    if not con_enlace:
+        return texto
+    return f'<a class="persona" href="{raiz}/panel-docente/estudiante/{urllib.parse.quote(sid, safe="")}">{texto}</a>'
 
 
 def _tamano(b):
     return f"{b / 1024:.0f} KB" if b < 1024 * 1024 else f"{b / 1048576:.1f} MB"
 
 
-def _seccion_entregas(entregas, notas):
-    pendientes = [e for e in entregas if not e["calificada"][0]]
-    reentregadas = [e for e in entregas if e["calificada"][1]]
+def _n(v, vacio="—"):
+    return str(v) if v else f'<span class="tenue">{vacio}</span>'
 
+
+def _seccion_estudiantes(datos, historial, notas, raiz):
+    lista = [e for e in (datos or {}).get("estudiantes", []) if e.get("rol") != "instructor"]
+    docentes = [e for e in (datos or {}).get("estudiantes", []) if e.get("rol") == "instructor"]
+    if datos is None:
+        return ('<div class="caja vacia">El listado sale del backend, que no '
+                'respondió.</div>')
+    if not lista:
+        return ('<div class="caja vacia">Todavía no ha entrado ningún estudiante. '
+                'Aparecen aquí en cuanto entran desde Moodle, con su nombre.</div>')
+
+    # Entregas por alumno según el servicio: {sid: n tareas entregadas}
+    entregadas = {}
+    for tarea, h in (historial or {}).items():
+        for sid in h.get("entregado", {}):
+            entregadas[sid] = entregadas.get(sid, 0) + 1
+    filas = ""
+    for e in lista:
+        sid = e["student_id"]
+        ultimo_intento = _epoch_iso(e.get("ultimo_intento"))
+        ultimo_ingreso = _epoch_iso(e.get("ultimo_ingreso"))
+        ultimo = max(ultimo_intento, ultimo_ingreso)
+        if e.get("ultimo_cuadernillo"):
+            donde = (f'{html.escape(_titulo(e["ultimo_cuadernillo"]))} '
+                     f'<span class="tenue">{_hace(ultimo_intento)}</span>')
+        elif ultimo_ingreso:
+            donde = '<span class="tenue">entró, aún sin intentos</span>'
+        else:
+            donde = '<span class="tenue">nunca ha entrado</span>'
+        notas_alumno = [f"{ob:g}/{mx:g}" for (a, t), (ob, mx) in sorted(notas.items()) if a == sid]
+        filas += (
+            f'<tr><td>{_persona(sid, {sid: e.get("nombre", "")}, raiz)}'
+            f'<div class="tenue chico">{html.escape(e.get("email", ""))}</div></td>'
+            f'<td>{_hace(ultimo)}</td>'
+            f'<td>{donde}</td>'
+            f'<td class="num">{_n(e.get("ejercicios_resueltos"))}</td>'
+            f'<td class="num">{"<b class=mal>%d</b>" % e["ejercicios_atascados"] if e.get("ejercicios_atascados") else _n(0)}</td>'
+            f'<td class="num">{_n(entregadas.get(sid, 0))}</td>'
+            f'<td class="num">{html.escape(" · ".join(notas_alumno)) if notas_alumno else _n(0, "aún sin nota")}</td></tr>')
+    pie = ""
+    if docentes:
+        pie = ('<p class="sub2 chico">Docentes del curso: '
+               + ", ".join(html.escape(d.get("nombre") or d["student_id"]) for d in docentes)
+               + "</p>")
+    return (f'<div class="caja"><table>'
+            '<tr><th>Estudiante</th><th>Última vez</th><th>Va por</th>'
+            '<th class="num">Resueltos</th><th class="num">Atascados</th>'
+            '<th class="num">Entregas</th><th class="num">Notas</th></tr>'
+            f'{filas}</table></div>{pie}')
+
+
+def _seccion_entregas(entregas, notas, nombres, raiz):
     if not entregas:
-        return ('<div class="caja vacia">Todavía no ha entregado nadie. '
-                'Cuando lo hagan aparecerán aquí, con la hora, y sin que tengas '
-                'que pulsar Recoger: el cuadernillo llega directo.</div>')
-
+        return ('<div class="caja vacia">Todavía no has recogido ninguna entrega. '
+                'Las que los alumnos manden aparecen en «Sin recoger» abajo; '
+                'Collect en formgrader las trae aquí.</div>')
     filas = ""
     for e in entregas:
         calificada, reentregada = e["calificada"]
         if reentregada:
-            estado = f'<span class="mal">Reentregado después de calificar</span>'
+            estado = '<span class="mal">Recogida de nuevo después de calificar</span>'
         elif calificada:
             nota = notas.get((e["alumno"], e["tarea"]))
             estado = (f'<span class="bien">Calificado</span> '
@@ -364,31 +460,17 @@ def _seccion_entregas(entregas, notas):
             estado = '<span class="pend">Sin calificar</span>'
         filas += (
             f'<tr><td>{_nombre(e["tarea"])}</td>'
-            f'<td class="mono">{html.escape(e["alumno"])}</td>'
-            f'<td>{_hace(e["cuando"])}</td>'
+            f'<td>{_persona(e["alumno"], nombres, raiz)}</td>'
+            f'<td>{_hace(e["cuando"])}<div class="tenue chico">{_fecha_corta(e["cuando"])}</div></td>'
             f'<td class="num">{_tamano(e["bytes"])}</td>'
             f'<td>{estado}</td></tr>')
-
-    aviso = ""
-    if pendientes:
-        n = len(pendientes)
-        aviso = (f'<div class="banda">Tienes <b>{n}</b> entrega'
-                 f'{"" if n == 1 else "s"} sin calificar. Se califican con '
-                 f'<b>Calificar</b> en formgrader; no hace falta Recoger, '
-                 f'porque el cuadernillo del alumno llega directo.</div>')
-    if reentregadas:
-        aviso += ('<div class="banda">Alguien volvió a entregar después de que '
-                  'calificaras. Vuelve a calificar esa entrega para que la nota '
-                  'corresponda a lo último que mandó. <span class="tenue">'
-                  '(Deducido de las fechas de los archivos.)</span></div>')
-
-    return (aviso + '<div class="caja"><table>'
-            '<tr><th>Cuadernillo</th><th>Estudiante</th><th>Llegó</th>'
+    return ('<div class="caja"><table>'
+            '<tr><th>Cuadernillo</th><th>Estudiante</th><th>Entregado</th>'
             '<th class="num">Tamaño</th><th>Estado</th></tr>'
             f'{filas}</table></div>')
 
 
-def _seccion_ciclo(filas):
+def _seccion_ciclo(filas, hay_historial):
     if not filas:
         return ('<div class="caja vacia">No hay ningún cuadernillo todavía. '
                 'Aparecen aquí en cuanto los siembre el contenedor o los crees '
@@ -405,26 +487,40 @@ def _seccion_ciclo(filas):
         cuerpo += (
             f'<tr><td>{_nombre(f["tarea"])} {marca}</td>'
             f'<td>{_paso(f["generada"])}</td>'
-            f'<td>{_paso(f["publicada"])}</td>'
-            f'<td class="tenue">{ventana}</td>'
+            f'<td>{_paso(f["publicada"])}<div class="tenue chico">{ventana}</div></td>'
             f'<td class="num">{puntos}</td>'
-            f'<td class="num">{f["entregas"] or "—"}</td>'
+            f'<td class="num">{_quiza(f["traido"])}</td>'
+            f'<td class="num">{_n(f["trabajando"])}</td>'
+            f'<td class="num">{_quiza(f["entregado"])}</td>'
             f'<td class="num">{_pendientes(f["sin_recoger"])}</td>'
-            f'<td class="num">{f["calificadas"] or "—"}</td>'
+            f'<td class="num">{_n(f["recogidas"])}</td>'
+            f'<td class="num">{_n(f["calificadas"])}</td>'
             f'<td class="sig">{html.escape(f["siguiente"])}</td></tr>')
-    return ('<div class="caja"><table>'
+    nota = ("" if hay_historial else
+            '<p class="sub2 chico">El servicio de intercambio no respondió: las '
+            'columnas «Lo trajeron» y «Entregaron» no están disponibles.</p>')
+    return (f'<div class="caja"><table>'
             '<tr><th>Cuadernillo</th><th>Generada</th><th>Publicada</th>'
-            '<th>Ventana</th><th class="num">Puntos</th>'
-            '<th class="num">Recogidas</th><th class="num">Sin recoger</th>'
-            '<th class="num">Calificadas</th>'
+            '<th class="num">Puntos</th>'
+            '<th class="num" title="Alumnos que lo recibieron en su carpeta">Lo trajeron</th>'
+            '<th class="num" title="Alumnos con intentos registrados">Trabajando</th>'
+            '<th class="num" title="Alumnos que pulsaron Entregar">Entregaron</th>'
+            '<th class="num" title="Entregas que Collect aún no trajo">Sin recoger</th>'
+            '<th class="num">Recogidas</th><th class="num">Calificadas</th>'
             '<th>Te toca</th></tr>'
-            f'{cuerpo}</table></div>')
+            f'{cuerpo}</table></div>{nota}')
+
+
+def _quiza(n):
+    if n is None:
+        return '<span class="tenue" title="El servicio de intercambio no respondió">?</span>'
+    return _n(n)
 
 
 def _pendientes(n):
     if n is None:
         return '<span class="tenue" title="El servicio de intercambio no respondió">?</span>'
-    return f'<span class="mal">{n}</span>' if n else "—"
+    return f'<span class="mal">{n}</span>' if n else '<span class="tenue">—</span>'
 
 
 def _paso(hecho):
@@ -432,27 +528,44 @@ def _paso(hecho):
             else '<span class="tenue">no</span>')
 
 
-
-def _seccion_atascos(datos):
-    ejercicios = [e for e in (datos or {}).get("ejercicios", [])
-                  if e.get("alumnos_atascados")]
+def _seccion_dificultad(datos):
+    ejercicios = (datos or {}).get("ejercicios", [])
     if not ejercicios:
-        return ('<div class="caja vacia">Nadie está atascado en ningún '
-                'ejercicio ahora mismo. <span class="tenue">Atascado es quien '
-                'escribió una respuesta, no le pasó la prueba, y no ha vuelto a '
-                'conseguirlo — no quien solo ejecutó la celda vacía.</span></div>')
+        return ('<div class="caja vacia">Todavía no hay intentos reales en '
+                'ningún ejercicio. <span class="tenue">Ejecutar la celda vacía '
+                'no cuenta: eso lo hace todo el mundo al recorrer el cuadernillo.'
+                '</span></div>')
     filas = ""
-    for e in ejercicios[:10]:
+    for e in ejercicios:
+        intentaron = e.get("alumnos_que_lo_intentaron", 0)
+        resolvieron = e.get("alumnos_que_lo_resolvieron", 0)
+        primera = e.get("alumnos_que_pasaron_al_primer_intento", 0)
+        mediana = e.get("mediana_intentos_hasta_pasar")
+        atascados = e.get("alumnos_atascados", 0)
+        pct_primera = (f'{100 * primera // resolvieron}%' if resolvieron
+                       else '<span class="tenue">—</span>')
+        if mediana is None:
+            cuesta = '<span class="tenue">—</span>'
+        elif mediana <= 1:
+            cuesta = '1'
+        else:
+            cuesta = f'<b>{mediana:g}</b>'
+        orden = f'<span class="tenue chico">celda {e["orden"]}</span>' if e.get("orden") else ""
         filas += (
             f'<tr><td>{_nombre(e["cuadernillo_id"])}</td>'
-            f'<td class="mono">{html.escape(e["exercise_id"])}</td>'
-            f'<td class="num">{e["alumnos_que_lo_intentaron"]}</td>'
-            f'<td class="num">{e["alumnos_que_lo_resolvieron"]}</td>'
-            f'<td class="num"><b class="mal">{e["alumnos_atascados"]}</b></td>'
-            f'<td class="num">{e["alumnos_a_medias"] or "—"}</td></tr>')
+            f'<td class="mono">{html.escape(e["exercise_id"])} {orden}</td>'
+            f'<td class="num">{_n(e.get("puntos_maximos"))}</td>'
+            f'<td class="num">{intentaron}</td>'
+            f'<td class="num">{_n(resolvieron)}</td>'
+            f'<td class="num">{pct_primera}</td>'
+            f'<td class="num">{cuesta}</td>'
+            f'<td class="num">{"<b class=mal>%d</b>" % atascados if atascados else _n(0)}</td>'
+            f'<td class="num">{_n(e.get("alumnos_a_medias", 0))}</td></tr>')
     return ('<div class="caja"><table>'
-            '<tr><th>Cuadernillo</th><th>Ejercicio</th>'
+            '<tr><th>Cuadernillo</th><th>Ejercicio</th><th class="num">Puntos</th>'
             '<th class="num">Lo intentaron</th><th class="num">Lo resolvieron</th>'
+            '<th class="num" title="De los que lo resolvieron, cuántos a la primera">A la primera</th>'
+            '<th class="num" title="Mediana de intentos reales hasta pasar la prueba">Intentos hasta pasar</th>'
             '<th class="num">Atascados</th><th class="num">A medias</th></tr>'
             f'{filas}</table></div>')
 
@@ -480,36 +593,45 @@ def _seccion_malentendidos(datos):
 def _seccion_competencias(datos):
     comps = (datos or {}).get("competencias", [])
     if not comps:
-        return ('<div class="caja vacia">Sin datos de competencias.</div>')
-    tarjetas = ""
+        return '<div class="caja vacia">Sin datos de competencias.</div>'
+    con_datos, sin_datos, sin_ejercicios = [], [], []
     for c in comps:
+        if not c.get("ejercicios_disenados"):
+            sin_ejercicios.append(c)
+        elif not c.get("alumnos_con_actividad"):
+            sin_datos.append(c)
+        else:
+            con_datos.append(c)
+    tarjetas = ""
+    for c in con_datos:
         disenados = c.get("ejercicios_disenados", 0)
         alumnos = c.get("alumnos_con_actividad", 0)
         resolvieron = c.get("alumnos_que_resolvieron_alguno", 0)
-        if not disenados:
-            estado = ('<span class="tenue">Ningún ejercicio la evalúa todavía'
-                      '</span>')
-            barra = ""
-        elif not alumnos:
-            estado = f'<span class="tenue">Nadie la ha trabajado aún</span>'
-            barra = ""
-        else:
-            pct = int(100 * resolvieron / alumnos)
-            color = VERDE if pct >= 70 else (AMBAR if pct >= 40 else ROJO)
-            estado = (f'<b>{resolvieron}</b> de {alumnos} '
-                      f'{"estudiante" if alumnos == 1 else "estudiantes"} '
-                      f'resolvió alguno')
-            barra = (f'<div class="barra"><div class="relleno" '
-                     f'style="width:{pct}%;background:{color}"></div></div>')
+        pct = int(100 * resolvieron / alumnos)
+        color = VERDE if pct >= 70 else (AMBAR if pct >= 40 else ROJO)
         tarjetas += (
             f'<div class="comp"><div class="comp-id">{html.escape(c["competencia_id"])}'
             f' · {disenados} ejercicio{"" if disenados == 1 else "s"}</div>'
-            f'<div class="comp-e">{estado}</div>{barra}'
+            f'<div class="comp-e"><b>{resolvieron}</b> de {alumnos} '
+            f'{"estudiante" if alumnos == 1 else "estudiantes"} resolvió alguno</div>'
+            f'<div class="barra"><div class="relleno" style="width:{pct}%;background:{color}"></div></div>'
             f'<div class="comp-d">{html.escape(c["descripcion"])}</div></div>')
-    return f'<div class="comps">{tarjetas}</div>'
+    resto = ""
+    if sin_datos:
+        resto += ('<p class="sub2">Con ejercicios pero sin actividad todavía: '
+                  + ", ".join(f'<b title="{html.escape(c["descripcion"])}">{html.escape(c["competencia_id"])}</b>'
+                              f' ({c["ejercicios_disenados"]})' for c in sin_datos)
+                  + '. <span class="tenue">Pasa el ratón para leer cuál es.</span></p>')
+    if sin_ejercicios:
+        resto += ('<p class="sub2">Sin ningún ejercicio que las evalúe: '
+                  + ", ".join(f'<b title="{html.escape(c["descripcion"])}">{html.escape(c["competencia_id"])}</b>'
+                              for c in sin_ejercicios) + '.</p>')
+    if not tarjetas:
+        return f'<div class="caja vacia">Nadie ha trabajado aún ningún ejercicio etiquetado.</div>{resto}'
+    return f'<div class="comps">{tarjetas}</div>{resto}'
 
 
-def _seccion_riesgo(datos):
+def _seccion_riesgo(datos, nombres, raiz):
     lista = (datos or {}).get("en_riesgo", [])
     if not lista:
         return ('<div class="caja vacia">Nadie aparece peleando en vano. '
@@ -519,13 +641,11 @@ def _seccion_riesgo(datos):
     filas = ""
     for a in lista[:8]:
         horas = a.get("horas_desde_ultima_actividad") or 0
-        cuando = (f'hace {int(horas)} h' if horas < 48
-                  else f'hace {int(horas / 24)} días')
-        filas += (f'<tr><td class="mono">{html.escape(a["student_id"])}</td>'
+        filas += (f'<tr><td>{_persona(a["student_id"], nombres, raiz)}</td>'
                   f'<td class="num">{a["ejercicios_resueltos"]}</td>'
                   f'<td class="num"><b class="mal">{a["ejercicios_atascados"]}</b></td>'
-                  f'<td class="num">{a["ejercicios_a_medias"] or "—"}</td>'
-                  f'<td class="tenue">{cuando}</td></tr>')
+                  f'<td class="num">{_n(a.get("ejercicios_a_medias"))}</td>'
+                  f'<td class="tenue">{_hace(time.time() - horas * 3600)}</td></tr>')
     return ('<div class="caja"><table>'
             '<tr><th>Estudiante</th><th class="num">Resueltos</th>'
             '<th class="num">Atascados</th><th class="num">A medias</th>'
@@ -548,37 +668,20 @@ def _seccion_salud(datos):
             f'etiquetados con su competencia{aviso}</p>')
 
 
-def _html_panel(base_url, datos=None, aviso=None):
-    activo, ciclo = _ciclo()
-    entregas = _entregas()
-    _, notas = _libro()
-    ultima = max((e["cuando"] for e in entregas), default=0)
-    raiz = base_url.rstrip("/")
-
-    banda_analitica = (f'<div class="banda">{html.escape(aviso)}</div>'
-                       if aviso else "")
-
-    cabecera = (
-        f'<h1>Tu curso</h1>'
-        f'<p class="sub">Curso {html.escape(CURSO)} · '
-        + (f'esta semana <b>{html.escape(_titulo(activo))}</b>'
-           if activo else 'sin cuadernillo activo')
-        + f' · última entrega {_hace(ultima)} · '
-          f'<a href="{raiz}/formgrader">ir a formgrader</a></p>')
-
-    return f"""<!doctype html><html lang="es"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Tu curso</title><style>
+ESTILO = f"""
  *{{box-sizing:border-box}}
  body{{margin:0;padding:34px 20px;background:#f7f8fa;color:{TINTA};
    font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}}
- .marco{{max-width:1080px;margin:0 auto}}
+ .marco{{max-width:1120px;margin:0 auto}}
  h1{{font-size:27px;margin:0 0 6px}}
  h2{{font-size:19px;margin:34px 0 6px}}
  .sub{{color:{GRIS};margin:0 0 8px;font-size:15px}}
  .sub2{{color:{GRIS};font-size:14.5px;margin:0 0 14px}}
+ .chico{{font-size:12.5px}}
  a{{color:{AZUL};text-decoration:none;font-weight:600}}
  a:hover{{text-decoration:underline}}
+ a.persona{{color:{TINTA}}}
+ a.persona:hover{{color:{AZUL}}}
  .caja{{background:#fff;border:1px solid {BORDE};border-radius:8px;
    overflow-x:auto}}
  .vacia{{padding:16px 18px;color:{GRIS}}}
@@ -600,7 +703,7 @@ def _html_panel(base_url, datos=None, aviso=None):
  .banda{{background:#fdf9ef;border-left:3px solid {AMBAR};padding:12px 16px;
    border-radius:4px;margin-bottom:14px;font-size:14.5px}}
  .mensaje{{font-size:13px;margin-top:3px;max-width:52ch}}
- .comps{{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(270px,1fr))}}
+ .comps{{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));margin-bottom:12px}}
  .comp{{background:#fff;border:1px solid {BORDE};border-radius:8px;padding:14px 16px}}
  .comp-id{{font-size:12px;color:{GRIS};text-transform:uppercase;
    letter-spacing:.04em;margin-bottom:6px}}
@@ -608,26 +711,63 @@ def _html_panel(base_url, datos=None, aviso=None):
  .comp-d{{font-size:13px;color:{GRIS};margin-top:9px;line-height:1.45}}
  .barra{{height:7px;background:#e9ecef;border-radius:4px;overflow:hidden}}
  .relleno{{height:100%;border-radius:4px}}
-</style></head><body><div class="marco">
+ .volver{{display:inline-block;margin-bottom:14px}}
+"""
+
+
+def _pagina(titulo, cuerpo):
+    return f"""<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{html.escape(titulo)}</title><style>{ESTILO}</style></head>
+<body><div class="marco">{cuerpo}</div></body></html>"""
+
+
+def _html_panel(base_url, datos=None, aviso=None):
+    historial, hay_historial = _historial()
+    activo, ciclo = _ciclo(datos, historial)
+    entregas = _entregas()
+    _, notas = _libro()
+    nombres = (datos or {}).get("nombres") or {}
+    ultima = max((e["cuando"] for e in entregas), default=0)
+    raiz = base_url.rstrip("/")
+    n_est = len([e for e in (datos or {}).get("estudiantes", []) if e.get("rol") != "instructor"])
+
+    banda_analitica = (f'<div class="banda">{html.escape(aviso)}</div>'
+                       if aviso else "")
+    cabecera = (
+        f'<h1>Tu curso</h1>'
+        f'<p class="sub">Curso {html.escape(CURSO)} · '
+        + (f'esta semana <b>{html.escape(_titulo(activo))}</b>'
+           if activo else 'sin cuadernillo activo')
+        + (f' · {n_est} estudiante{"" if n_est == 1 else "s"}' if datos else '')
+        + f' · última entrega {_hace(ultima)} · '
+          f'<a href="{raiz}/formgrader">ir a formgrader</a></p>')
+
+    cuerpo = f"""
 {cabecera}
-
-<h2>Lo que te ha llegado</h2>
-<p class="sub2">Entregas de tus estudiantes, la más reciente primero.</p>
-{_seccion_entregas(entregas, notas)}
-
-<h2>En qué punto está cada cuadernillo</h2>
-<p class="sub2">El recorrido completo es Generar → Publicar → (el alumno trabaja
-y entrega) → Calificar → subir notas. La última columna dice cuál es el
-siguiente paso de cada uno.</p>
-{_seccion_ciclo(ciclo)}
-
 {banda_analitica}
 
-<h2>Dónde se atasca el grupo</h2>
-<p class="sub2">Ejercicios donde alguien escribió una respuesta y no le pasa la
-prueba. Ejecutar la celda vacía no cuenta: eso lo hace todo el mundo al recorrer
-el cuadernillo.</p>
-{_seccion_atascos(datos)}
+<h2>Tus estudiantes</h2>
+<p class="sub2">Quien ha entrado desde Moodle, con su nombre. Haz clic en uno para
+ver su recorrido ejercicio por ejercicio.</p>
+{_seccion_estudiantes(datos, historial, notas, raiz)}
+
+<h2>En qué punto está cada cuadernillo</h2>
+<p class="sub2">Generar → Publicar → los alumnos lo traen, trabajan y entregan →
+Recoger → Calificar → subir notas. La última columna dice cuál es el siguiente
+paso de cada uno.</p>
+{_seccion_ciclo(ciclo, hay_historial)}
+
+<h2>Lo que has recogido</h2>
+<p class="sub2">Entregas que Collect ya trajo a tu carpeta, la más reciente primero.</p>
+{_seccion_entregas(entregas, notas, nombres, raiz)}
+
+<h2>Qué cuesta y dónde se atascan</h2>
+<p class="sub2">Por ejercicio: cuántos lo pasaron a la primera y cuántos intentos
+reales les costó a los que lo resolvieron. «Atascado» es quien escribió una
+respuesta, no le pasa la prueba y no ha vuelto a conseguirlo. Ejecutar la celda
+vacía no cuenta.</p>
+{_seccion_dificultad(datos)}
 
 <h2>Lo que se están equivocando igual</h2>
 <p class="sub2">El mismo error en varias personas. Suele ser un tema para
@@ -637,21 +777,111 @@ retomar en clase, no un problema de cada uno.</p>
 <h2>Quién está peleando solo</h2>
 <p class="sub2">Estudiantes con ejercicios donde lo intentaron de verdad y no les
 sale.</p>
-{_seccion_riesgo(datos)}
+{_seccion_riesgo(datos, nombres, raiz)}
 
 <h2>Cómo va el grupo por competencia</h2>
 {_seccion_salud(datos)}
 {_seccion_competencias(datos)}
-</div></body></html>"""
+"""
+    return _pagina("Tu curso", cuerpo)
+
+
+# --- Ficha de un estudiante --------------------------------------------------------
+
+def _html_ficha(base_url, sid, datos_panel, ficha, historial, aviso):
+    raiz = base_url.rstrip("/")
+    persona = next((e for e in (datos_panel or {}).get("estudiantes", [])
+                    if e.get("student_id") == sid), {})
+    nombre = persona.get("nombre") or sid
+    _, notas = _libro()
+    banda = f'<div class="banda">{html.escape(aviso)}</div>' if aviso else ""
+
+    datos_persona = (
+        f'<p class="sub">{html.escape(persona.get("email", "")) or "sin correo"} · '
+        f'id <span class="mono">{html.escape(sid)}</span> · '
+        f'último ingreso {_hace(_epoch_iso(persona.get("ultimo_ingreso")))}'
+        f' ({persona.get("ingresos", 0)} en total)'
+        + (' · <span class="bien">devolución de nota a Moodle posible</span>'
+           if persona.get("devolucion_moodle_posible") else
+           ' · <span class="tenue">Moodle no mandó casilla de nota</span>') + '</p>')
+
+    # Por cuadernillo: traído / entregado / nota
+    filas_c = ""
+    for tarea, h in sorted((historial or {}).items()):
+        traido = h.get("traido", {}).get(sid, "")
+        entregado = h.get("entregado", {}).get(sid, "")
+        nota = notas.get((sid, tarea))
+        filas_c += (f'<tr><td>{_nombre(tarea)}</td>'
+                    f'<td>{_hace(_epoch_exchange(traido)) if traido else "<span class=tenue>no lo ha traído</span>"}</td>'
+                    f'<td>{_hace(_epoch_exchange(entregado)) if entregado else "<span class=tenue>sin entregar</span>"}</td>'
+                    f'<td class="num">{f"{nota[0]:g} / {nota[1]:g}" if nota else "<span class=tenue>aún sin nota</span>"}</td></tr>')
+    cuadernillos = (f'<div class="caja"><table><tr><th>Cuadernillo</th><th>Lo trajo</th>'
+                    f'<th>Entregó</th><th class="num">Nota</th></tr>{filas_c}</table></div>'
+                    if filas_c else '<div class="caja vacia">Sin cuadernillos publicados.</div>')
+
+    ejercicios = (ficha or {}).get("ejercicios", [])
+    filas_e = ""
+    for e in ejercicios:
+        if e.get("resuelto"):
+            estado = '<span class="bien">resuelto</span>'
+        elif e.get("solo_ejecuto_vacio"):
+            estado = '<span class="tenue">solo ejecutó la celda vacía</span>'
+        elif e.get("a_medias"):
+            estado = '<span class="pend">a medias</span>'
+        else:
+            estado = '<span class="mal">atascado</span>'
+        err = ""
+        if e.get("ultimo_error") and not e.get("resuelto"):
+            err = (f'<b>{html.escape(e["ultimo_error"])}</b>'
+                   f'<div class="tenue mensaje">{html.escape(e.get("ultimo_mensaje", ""))}</div>')
+        filas_e += (
+            f'<tr><td>{_nombre(e["cuadernillo_id"])}</td>'
+            f'<td class="mono">{html.escape(e["exercise_id"])}</td>'
+            f'<td>{estado}</td>'
+            f'<td class="num">{_n(e.get("intentos"))}</td>'
+            f'<td>{_hace(_epoch_iso(e.get("ultimo_intento")))}</td>'
+            f'<td>{err}</td></tr>')
+    recorrido = (f'<div class="caja"><table><tr><th>Cuadernillo</th><th>Ejercicio</th>'
+                 f'<th>Estado</th><th class="num">Intentos</th><th>Última vez</th>'
+                 f'<th>Último error</th></tr>{filas_e}</table></div>'
+                 if filas_e else
+                 '<div class="caja vacia">Todavía no ha ejecutado ninguna celda de prueba.</div>')
+
+    cuerpo = f"""
+<a class="volver" href="{raiz}/panel-docente">← Tu curso</a>
+<h1>{html.escape(nombre)}</h1>
+{datos_persona}
+{banda}
+<h2>Sus cuadernillos</h2>
+{cuadernillos}
+<h2>Su recorrido, ejercicio por ejercicio</h2>
+<p class="sub2">Un intento es cada vez que ejecutó una celda de prueba con algo
+escrito. Los errores son los de su último intento fallido.</p>
+{recorrido}
+"""
+    return _pagina(nombre, cuerpo)
 
 
 class PanelDocenteHandler(_BaseHandler):
     @web.authenticated
     async def get(self):
-        datos, aviso = await _analitica()
+        datos, aviso = await _backend(f"/internal/curso/{urllib.parse.quote(CURSO, safe='')}/panel")
         self.set_header("Content-Type", "text/html; charset=utf-8")
-        self.finish(_html_panel(self.settings.get("base_url", "/"),
-                                datos, aviso))
+        self.finish(_html_panel(self.settings.get("base_url", "/"), datos, aviso))
+
+
+class FichaHandler(_BaseHandler):
+    @web.authenticated
+    async def get(self, sid):
+        sid = urllib.parse.unquote(sid)
+        curso = urllib.parse.quote(CURSO, safe="")
+        datos, aviso = await _backend(f"/internal/curso/{curso}/panel")
+        ficha, aviso2 = await _backend(
+            f"/internal/curso/{curso}/estudiante/{urllib.parse.quote(sid, safe='')}")
+        historial, _ = _historial()
+        self.set_header("Content-Type", "text/html; charset=utf-8")
+        self.finish(_html_ficha(self.settings.get("base_url", "/"), sid, datos, ficha,
+                                historial, aviso or aviso2))
 
 
 def load_jupyter_server_extension(nbapp):
@@ -660,8 +890,10 @@ def load_jupyter_server_extension(nbapp):
     if os.environ.get("ALUMNO_ROL", "estudiante") != "instructor":
         return
     raiz = nbapp.web_app.settings.get("base_url", "/").rstrip("/")
-    nbapp.web_app.add_handlers(".*$", [(raiz + "/panel-docente",
-                                        PanelDocenteHandler)])
+    nbapp.web_app.add_handlers(".*$", [
+        (raiz + "/panel-docente", PanelDocenteHandler),
+        (raiz + "/panel-docente/estudiante/([^/]+)", FichaHandler),
+    ])
     log.info("[panel_docente_bridge] listo: panel del curso en %s/panel-docente",
              raiz)
 

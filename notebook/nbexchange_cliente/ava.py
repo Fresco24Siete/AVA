@@ -211,6 +211,44 @@ def entregas_en_exchange(assignment_id, config=None):
     return entregas
 
 
+def historial(config=None):
+    """Quién trajo y quién entregó cada tarea, según el servicio (docente).
+
+    Devuelve {assignment_id: {"traido": {student_id: ts}, "entregado":
+    {student_id: ts}, "recogido": ts|""}}: para cada alumno, la última vez que
+    hizo cada cosa. Es el embudo de entrega que ningún disco tiene: quién ni
+    siquiera ha abierto el cuadernillo. Para un alumno, el servicio solo
+    devuelve lo suyo y las liberaciones.
+    """
+    config = config if config is not None else cargar_config()
+    ex = _exchange(Exchange, config)
+    from urllib.parse import quote_plus
+    r = ex.api_request(f"history?course_id={quote_plus(CURSO)}")
+    try:
+        datos = r.json()
+    except ValueError:
+        raise ExchangeError(f"Respuesta ilegible del servicio: {r.text[:120]}")
+    if not datos.get("success"):
+        raise ExchangeError(datos.get("note") or "El servicio no devolvió historial")
+    salida = {}
+    for curso in datos.get("value") or []:
+        for tarea in curso.get("assignments") or []:
+            aid = str(tarea.get("assignment_code", ""))
+            if not aid:
+                continue
+            e = salida.setdefault(aid, {"traido": {}, "entregado": {}, "recogido": ""})
+            for accion in tarea.get("actions") or []:
+                tipo = str(accion.get("action", "")).replace("AssignmentActions.", "")
+                quien, ts = str(accion.get("user", "")), str(accion.get("timestamp", ""))
+                if tipo == "fetched" and ts > e["traido"].get(quien, ""):
+                    e["traido"][quien] = ts
+                elif tipo == "submitted" and ts > e["entregado"].get(quien, ""):
+                    e["entregado"][quien] = ts
+                elif tipo == "collected" and ts > e["recogido"]:
+                    e["recogido"] = ts
+    return salida
+
+
 def descargar(assignment_id, destino, config=None):
     """Trae la última liberación de `assignment_id` a la carpeta `destino`.
 
@@ -297,7 +335,7 @@ __all__ = [
     "Exchange", "ExchangeList", "ExchangeFetchAssignment", "ExchangeSubmit",
     "ExchangeCollect", "ExchangeReleaseAssignment", "ExchangeReleaseFeedback",
     "ExchangeFetchFeedback",
-    "cargar_config", "liberados", "entregas_en_exchange", "descargar", "liberar",
+    "cargar_config", "liberados", "entregas_en_exchange", "historial", "descargar", "liberar",
     "retirar", "entregar",
     "leer_publicacion", "FICHERO_PUBLICACION", "URL_SERVICIO",
 ]

@@ -202,3 +202,36 @@ Sigue pendiente lo que está en [`PENDIENTES_AVA.md`](PENDIENTES_AVA.md), y dos
 cosas de ahí **bloquean el semestre**, no este plan: las credenciales LTI son las
 de desarrollo y están en un repositorio público, y la VM actual aguanta cinco o
 seis estudiantes. Ninguna de las dos se resuelve construyendo el panel.
+
+---
+
+## Fase 5 — El panel del docente sabe quién es quién (hecha el 2026-08-23)
+
+Hasta aquí el panel del docente mostraba `3135` donde debía decir un nombre: la
+telemetría viaja con el `user_id` numérico de Moodle y nada más, y nadie
+guardaba la persona. Ahora:
+
+- **`estudiantes`** (tabla v3, `database/migracion_v3.sql`): la escribe el Hub
+  en cada ingreso LTI (`POST /internal/lti/ingreso`, solo con el token maestro)
+  con nombre, correo, rol, contador de ingresos, y el `lis_result_sourcedid` y
+  la URL del servicio de resultados de Moodle —lo que la devolución de notas
+  va a necesitar y que solo viaja en el lanzamiento del alumno.
+- **Listado «Tus estudiantes»** en `/panel-docente`: nombre, correo, última
+  vez, en qué cuadernillo va, resueltos, atascados, entregas y notas. Incluye a
+  quien solo existe en la telemetría (sin nombre) para que nadie desaparezca.
+- **Ficha por estudiante** (`/panel-docente/estudiante/<id>`): sus cuadernillos
+  (lo trajo, entregó, nota) y su recorrido ejercicio por ejercicio con el
+  último error. Backend: `GET /internal/curso/:curso/estudiante/:id`.
+- **Embudo de entrega** por cuadernillo con datos del exchange: lo trajeron →
+  trabajando (telemetría) → entregaron → sin recoger → recogidas → calificadas.
+  Es la única fuente que sabe quién ni siquiera ha abierto el cuadernillo.
+- **Dificultad real** por ejercicio: cuántos lo pasaron a la primera y la
+  mediana de intentos hasta pasar entre quienes lo resolvieron (`puntos_maximos`
+  y `orden`, que se guardaban y nadie leía).
+- Nombres en todas las secciones, un solo formato de tiempo, competencias sin
+  actividad en una línea en vez de siete tarjetas vacías, y «N trabajando, sin
+  entregas» en vez de «esperando entregas» cuando hay telemetría.
+
+Lo que sigue sin guardarse y limita lo anterior: el `cuadernillo_id` de cada
+intento es el activo de la sesión, no el notebook abierto (AUDITORIA 6.1), y los
+errores en celdas de exploración no se registran (PENDIENTES 2.3).

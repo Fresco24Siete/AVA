@@ -153,6 +153,7 @@ def contar_ajenos():
         "attempt_errors": int(sql1(f"select count(*) from attempt_errors e join exercise_attempts a on a.id=e.attempt_id where a.course_id not like '{PREFIJO}%'")[0]),
         "cuadernillo_ratings": int(sql1(f"select count(*) from cuadernillo_ratings where course_id not like '{PREFIJO}%'")[0]),
         "cuadernillo_notas": int(sql1(f"select count(*) from cuadernillo_notas where course_id not like '{PREFIJO}%'")[0]),
+        "estudiantes": int(sql1(f"select count(*) from estudiantes where course_id not like '{PREFIJO}%'")[0]),
     }
 
 
@@ -161,6 +162,7 @@ def limpiar():
         delete from exercise_attempts where course_id like '{PREFIJO}%';
         delete from cuadernillo_ratings where course_id like '{PREFIJO}%';
         delete from cuadernillo_notas where course_id like '{PREFIJO}%';
+        delete from estudiantes where course_id like '{PREFIJO}%';
     """)
 
 
@@ -170,6 +172,7 @@ def restantes():
         "attempt_errors": int(sql1(f"select count(*) from attempt_errors e join exercise_attempts a on a.id=e.attempt_id where a.course_id like '{PREFIJO}%'")[0]),
         "cuadernillo_ratings": int(sql1(f"select count(*) from cuadernillo_ratings where course_id like '{PREFIJO}%'")[0]),
         "cuadernillo_notas": int(sql1(f"select count(*) from cuadernillo_notas where course_id like '{PREFIJO}%'")[0]),
+        "estudiantes": int(sql1(f"select count(*) from estudiantes where course_id like '{PREFIJO}%'")[0]),
     }
 
 
@@ -497,12 +500,51 @@ def caso_9_panel_docente():
                  {"estudiante_id": "PRUEBA-DOC", "curso_id": C1, "cuadernillo_codigo": "", "rol": "rector"},
                  token=TOKEN_MAESTRO)
     registrar("9l mint con un rol desconocido -> 400", st == 400, f"status={st} body={r}")
+    return tok_doc
     # relaciones_competencia en salud es global, no por curso
     if isinstance(p1, dict) and isinstance(p2, dict):
         r1, r2 = salud1.get("relaciones_competencia"), salud2.get("relaciones_competencia")
         if r1 == r2 and r1:
             hallazgo(f"salud.relaciones_competencia es igual en C1 y C2 ({r1}): cuenta ejercicio_competencias entero, "
                      "sin filtrar por curso (panelDocenteRepository.go ~:241; la tabla no tiene course_id).")
+
+
+def caso_12_estudiantes(tok_doc):
+    """El Hub registra quien entra; el docente ve nombres; nadie mas registra."""
+    ficha = {"curso_id": C1, "estudiante_id": A, "nombre": "Ana de Prueba",
+             "email": "ana@prueba.test", "usuario_hub": "ana@prueba.test", "rol": "estudiante",
+             "lis_result_sourcedid": "casilla-1", "lis_outcome_service_url": "https://lms/x"}
+    st1, r1 = http("POST", "/internal/lti/ingreso", ficha, token=TOKEN_MAESTRO)
+    st2, r2 = http("POST", "/internal/lti/ingreso", dict(ficha, nombre="", lis_result_sourcedid=""), token=TOKEN_MAESTRO)
+    fila = sql1(f"select nombre, email, rol, ingresos, lis_result_sourcedid from estudiantes where course_id='{C1}' and student_id='{A}'")
+    registrar("12a ingreso x2: ficha creada y actualizada sin perder nombre ni sourcedid",
+              st1 == 200 and st2 == 200 and fila == ["Ana de Prueba", "ana@prueba.test", "estudiante", "2", "casilla-1"],
+              f"status={st1},{st2} fila={fila}")
+    st, r = http("POST", "/internal/lti/ingreso", ficha)
+    registrar("12b ingreso sin token -> 401", st == 401, f"status={st}")
+    if tok_doc:
+        st, r = http("POST", "/internal/lti/ingreso", ficha, token=tok_doc)
+        registrar("12c ingreso con token de docente -> 401 (solo el Hub registra)", st == 401, f"status={st}")
+        st, p = http("GET", f"/internal/curso/{C1}/panel", token=tok_doc)
+        est = {e["student_id"]: e for e in (p.get("estudiantes") or [])} if isinstance(p, dict) else {}
+        nombres = p.get("nombres") if isinstance(p, dict) else None
+        registrar("12d panel C1 lista a A con nombre y a B sin nombre (solo telemetria), nunca a C",
+                  st == 200 and est.get(A, {}).get("nombre") == "Ana de Prueba"
+                  and B in est and est[B].get("nombre") == "" and C not in est
+                  and (nombres or {}).get(A) == "Ana de Prueba",
+                  f"status={st} estudiantes={sorted(est)} nombres={nombres}")
+        st, f = http("GET", f"/internal/curso/{C1}/estudiante/{A}", token=tok_doc)
+        ej = {e["exercise_id"]: e for e in (f.get("ejercicios") or [])} if isinstance(f, dict) else {}
+        registrar("12e ficha de A: ejercicio_3 resuelto en 3 intentos (failed, failed, passed)",
+                  st == 200 and ej.get("ejercicio_3", {}).get("resuelto") is True and ej["ejercicio_3"].get("intentos") == 3,
+                  f"status={st} ejercicio_3={ej.get('ejercicio_3')}")
+        st, f = http("GET", f"/internal/curso/{C2}/estudiante/{C}", token=tok_doc)
+        registrar("12f ficha de un alumno de otro curso -> 403", st == 403, f"status={st}")
+        st, p = http("GET", f"/internal/curso/{C1}/panel", token=tok_doc)
+        e3 = next((e for e in (p.get("ejercicios") or []) if e["exercise_id"] == "ejercicio_3"), {}) if isinstance(p, dict) else {}
+        registrar("12g dificultad: ejercicio_3 mediana 3 intentos hasta pasar, 0 a la primera",
+                  e3.get("mediana_intentos_hasta_pasar") == 3 and e3.get("alumnos_que_pasaron_al_primer_intento") == 0,
+                  f"ejercicio_3={e3}")
 
 
 def caso_10_paralelo():
@@ -566,7 +608,8 @@ def main():
         caso_6_medianoche()
         caso_7_rating()
         caso_8_mi_progreso()
-        caso_9_panel_docente()
+        tok_doc = caso_9_panel_docente()
+        caso_12_estudiantes(tok_doc)
         caso_10_paralelo()
     finally:
         caso_11_limpieza(ajenos_antes)

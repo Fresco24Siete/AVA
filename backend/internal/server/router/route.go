@@ -64,7 +64,11 @@ func ConfigureRouter (db *sqlx.DB) *gin.Engine{
 	// rendimiento de todo el grupo: cualquier ruta de /api es alcanzable desde
 	// una celda del alumno, que hereda su token en el entorno del proceso.
 	panelDocenteRepository := repository.NewPanelDocenteRepository(db)
-	panelDocenteHandler := handler.NewPanelDocenteHandler(panelDocenteRepository)
+	// Quien es cada estudiante: lo registra el Hub en cada ingreso LTI, y el
+	// panel del docente lo usa para listar a su gente por nombre.
+	estudiantesRepository := repository.NewEstudiantesRepository(db)
+	panelDocenteHandler := handler.NewPanelDocenteHandler(panelDocenteRepository, estudiantesRepository)
+	ingresoHandler := handler.NewIngresoHandler(estudiantesRepository)
 
 	// Progreso del alumno: lectura acotada a quien pregunta, por su token.
 	progresoRepository := repository.NewProgresoRepository(db)
@@ -83,12 +87,14 @@ func ConfigureRouter (db *sqlx.DB) *gin.Engine{
 		hub := interno.Group("")
 		hub.Use(middleware.RequireTokenMaestro(tokenMaestro))
 		hub.POST("/lti/mint-metrics-token", metricsTokenHandler.MintHandler)
+		hub.POST("/lti/ingreso", ingresoHandler.RegistrarHandler)
 
 		docente := interno.Group("")
 		docente.Use(middleware.RequireMaestroODocente(secretoMetricas, tokenMaestro))
 		docente.POST("/competencias", competenciasHandler.CargarHandler)
 		docente.POST("/notas", notasHandler.RegistrarHandler)
 		docente.GET("/curso/:curso/panel", panelDocenteHandler.PanelHandler)
+		docente.GET("/curso/:curso/estudiante/:estudiante", panelDocenteHandler.FichaHandler)
 	}
 
 	api := router.Group("/api")

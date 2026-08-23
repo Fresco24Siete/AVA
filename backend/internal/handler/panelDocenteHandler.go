@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 	"regexp"
 
@@ -18,12 +19,16 @@ import (
 // todo el grupo; solo puede pedirla quien tenga el token maestro, que únicamente
 // están el Hub y el contenedor del docente.
 type PanelDocenteHandler struct {
-	repo *repository.PanelDocenteRepository
+	repo        *repository.PanelDocenteRepository
+	estudiantes *repository.EstudiantesRepository
 }
 
-func NewPanelDocenteHandler(r *repository.PanelDocenteRepository) *PanelDocenteHandler {
-	return &PanelDocenteHandler{repo: r}
+func NewPanelDocenteHandler(r *repository.PanelDocenteRepository,
+	e *repository.EstudiantesRepository) *PanelDocenteHandler {
+	return &PanelDocenteHandler{repo: r, estudiantes: e}
 }
+
+var estudianteValido = regexp.MustCompile(`^[A-Za-z0-9_.@-]{1,120}$`)
 
 var cursoValido = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 
@@ -77,9 +82,44 @@ func (h *PanelDocenteHandler) PanelHandler(c *gin.Context) {
 	} else {
 		respuesta["salud"] = v
 	}
+	// Quién es quién: el listado y el mapa id -> nombre con el que el panel
+	// pone nombre en las demás secciones.
+	if v, err := h.estudiantes.Listar(curso); err != nil {
+		fallos = append(fallos, "estudiantes")
+		log.Printf("[panel] estudiantes: %v", err)
+	} else {
+		respuesta["estudiantes"] = v
+	}
+	if v, err := h.estudiantes.Nombres(curso); err != nil {
+		fallos = append(fallos, "nombres")
+	} else {
+		respuesta["nombres"] = v
+	}
 
 	if len(fallos) > 0 {
 		respuesta["no_disponible"] = fallos
 	}
 	c.JSON(http.StatusOK, respuesta)
+}
+
+// FichaHandler responde a GET /internal/curso/:curso/estudiante/:estudiante:
+// el recorrido de una persona, ejercicio por ejercicio.
+func (h *PanelDocenteHandler) FichaHandler(c *gin.Context) {
+	curso, estudiante := c.Param("curso"), c.Param("estudiante")
+	if !cursoValido.MatchString(curso) || !estudianteValido.MatchString(estudiante) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "curso o estudiante no válido"})
+		return
+	}
+	if !middleware.CursoAutorizado(c, curso) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ese curso no es el tuyo"})
+		return
+	}
+	ejercicios, err := h.estudiantes.Ficha(curso, estudiante)
+	if err != nil {
+		log.Printf("[panel] ficha de %s: %v", estudiante, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "no se pudo leer la ficha"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"curso_id": curso, "student_id": estudiante,
+		"ejercicios": ejercicios})
 }
