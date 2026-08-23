@@ -4,7 +4,10 @@
     registrar-notas                 lista qué cuadernillos tienen notas
     registrar-notas semana_02       sube las notas de ese cuadernillo
 
-Se ejecuta DESPUÉS de «Autograde» en formgrader. La nota real la calcula
+Desde formgrader ya no hace falta: al pulsar «Autograde», admin_bridge llama a
+registrar() y la nota llega sola al panel del alumno; y el bloque de ayuda tiene
+un botón «Subir notas» para repetirlo. Este comando queda para el terminal y
+para cuando el backend estuvo caído en ese momento. La nota real la calcula
 nbgrader ejecutando también las pruebas ocultas; este comando solo la lee de su
 libro de calificaciones y la lleva a la base, que es donde el panel y el análisis
 por competencia pueden usarla.
@@ -74,30 +77,35 @@ def _listar():
     return 0
 
 
-def main(argv):
-    if not argv:
-        return _listar()
+def registrar(cuadernillo):
+    """Sube las notas de un cuadernillo. Devuelve un dict con el resultado, para
+    que lo usen igual el comando de terminal y el botón de formgrader:
 
-    cuadernillo = argv[0]
+        {"ok": bool, "guardadas": int, "notas": [(estudiante, obtenidos, maximos)],
+         "avisos": [str], "error": str | None}
+    """
+    salida = {"ok": False, "guardadas": 0, "notas": [], "avisos": [], "error": None}
     if not TOKEN:
-        print("[ERROR] Falta METRICS_DOCENTE_TOKEN: es el que autoriza a subir notas.")
-        return 2
+        salida["error"] = "Falta METRICS_DOCENTE_TOKEN: es el que autoriza a subir notas."
+        return salida
 
     try:
         notas = _notas(cuadernillo)
     except Exception as err:
-        print(f"[ERROR] No pude leer las notas de '{cuadernillo}': {err}")
-        return 2
+        salida["error"] = f"No pude leer las notas de '{cuadernillo}': {err}"
+        return salida
+    salida["notas"] = notas
 
     if not notas:
-        print(f"[AVISO] '{cuadernillo}' no tiene entregas calificadas.")
-        print("        Primero 'Collect' y luego 'Autograde' en formgrader.")
-        return 1
+        salida["error"] = (f"'{cuadernillo}' no tiene entregas calificadas. "
+                           "Primero «Collect» y luego «Autograde» en formgrader.")
+        return salida
 
     sin_puntos = [e for e, _, mx in notas if mx == 0]
     if sin_puntos:
-        print(f"[AVISO] {len(sin_puntos)} entrega(s) con puntaje máximo 0. "
-              "Suele indicar que se recogieron pero no se calificaron.")
+        salida["avisos"].append(
+            f"{len(sin_puntos)} entrega(s) con puntaje máximo 0. "
+            "Suele indicar que se recogieron pero no se calificaron.")
 
     payload = {
         "course_id": CURSO,
@@ -106,13 +114,6 @@ def main(argv):
         "notas": [{"student_id": e, "puntos_obtenidos": ob, "puntos_maximos": mx}
                   for e, ob, mx in notas],
     }
-
-    print(f"Enviando {len(notas)} nota(s) de '{cuadernillo}':")
-    for estudiante, obtenidos, maximos in sorted(notas)[:5]:
-        print(f"  {estudiante:28s} {obtenidos:g} / {maximos:g}")
-    if len(notas) > 5:
-        print(f"  … y {len(notas) - 5} más")
-
     peticion = urllib.request.Request(
         BASE.rstrip("/") + "/internal/notas",
         data=json.dumps(payload).encode("utf-8"),
@@ -124,14 +125,38 @@ def main(argv):
         with urllib.request.urlopen(peticion, timeout=15) as resp:
             cuerpo = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as err:
-        print(f"[ERROR] El backend respondió {err.code}: "
-              f"{err.read()[:200].decode('utf-8', 'replace')}")
-        return 3
+        salida["error"] = (f"El backend respondió {err.code}: "
+                           f"{err.read()[:200].decode('utf-8', 'replace')}")
+        return salida
     except Exception as err:
-        print(f"[ERROR] No se pudo contactar al backend en {BASE}: {err}")
-        return 3
+        salida["error"] = f"No se pudo contactar al backend en {BASE}: {err}"
+        return salida
 
-    print(f"\n[OK] {cuerpo.get('message')}: {cuerpo.get('guardadas')} nota(s).")
+    salida["ok"] = True
+    salida["guardadas"] = int(cuerpo.get("guardadas") or 0)
+    salida["mensaje"] = cuerpo.get("message", "")
+    return salida
+
+
+def main(argv):
+    if not argv:
+        return _listar()
+
+    cuadernillo = argv[0]
+    resultado = registrar(cuadernillo)
+
+    for estudiante, obtenidos, maximos in sorted(resultado["notas"])[:5]:
+        print(f"  {estudiante:28s} {obtenidos:g} / {maximos:g}")
+    if len(resultado["notas"]) > 5:
+        print(f"  … y {len(resultado['notas']) - 5} más")
+    for aviso in resultado["avisos"]:
+        print(f"[AVISO] {aviso}")
+
+    if not resultado["ok"]:
+        print(f"[ERROR] {resultado['error']}")
+        return 1 if "no tiene entregas" in (resultado["error"] or "") else 3
+
+    print(f"\n[OK] {resultado.get('mensaje')}: {resultado['guardadas']} nota(s).")
     return 0
 
 

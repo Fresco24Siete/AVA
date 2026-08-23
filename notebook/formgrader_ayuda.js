@@ -66,8 +66,10 @@
             boton: 'Autograde',
             titulo: '4. Calificar',
             texto: 'Ejecuta las pruebas de cada entrega y pone la nota ' +
-                   'automática. Después puedes revisar a mano lo que quieras y ' +
-                   'ajustar la calificación.'
+                   'automática, <b>y la sube al panel del alumno</b> en ese ' +
+                   'momento. Después puedes revisar a mano lo que quieras y ' +
+                   'ajustar la calificación; si la cambias, vuelve a subirla ' +
+                   'con el botón «Subir notas» de abajo.'
         }
     ];
 
@@ -77,7 +79,8 @@
         'está el bloque de abajo, añadido por este AVA. ' +
         'El recorrido completo es: <b>editas el cuadernillo → Generar → ' +
         'Previsualizar → Liberar (o publicar-cuadernillo) → (los alumnos ' +
-        'trabajan y entregan) → Recoger → Calificar → registrar-notas</b>. ' +
+        'trabajan y entregan) → Recoger → Calificar</b> (que ya sube la nota ' +
+        'al panel). ' +
         'La nota sale solo de las celdas de prueba; los puntos de experiencia y ' +
         'las insignias que ve el alumno no cuentan para nada.';
 
@@ -131,6 +134,7 @@
             '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #dfe3e8">' +
             RESUMEN + '</div></div>';
 
+        cuerpo_notas(caja.querySelector('#ava-ayuda-cuerpo'));
         cuerpo_borrado(caja.querySelector('#ava-ayuda-cuerpo'));
 
         var cuerpo = caja.querySelector('#ava-ayuda-cuerpo');
@@ -157,6 +161,109 @@
         return caja;
     }
 
+    // --- Subir notas al panel -----------------------------------------------
+    // Autograde ya las sube solo (admin_bridge envuelve su handler). Este botón
+    // es para repetirlo: cuando el docente ajustó una nota a mano, o cuando el
+    // backend no estaba disponible en el momento de calificar.
+    function cuerpo_notas(destino) {
+        if (!destino) return;
+        var raiz = (window.location.pathname.split('/formgrader')[0]) || '';
+        var caja = document.createElement('div');
+        caja.id = 'ava-notas';
+        caja.style.cssText =
+            'margin-top:12px;padding-top:12px;border-top:1px solid #dfe3e8';
+        caja.innerHTML =
+            '<div style="font-weight:650;color:#10294d;margin-bottom:4px">' +
+            'Subir notas al panel del alumno</div>' +
+            '<div style="font-size:14px;color:#4a5768;margin-bottom:8px">' +
+            'La nota de Calificar se sube sola. Úsalo si la corregiste a mano ' +
+            'en formgrader, o si el alumno sigue viendo «aún sin calificar». ' +
+            'Se puede repetir: la última subida manda.</div>' +
+            '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+            '<select id="ava-notas-cual" style="padding:5px 8px;font:14px ' +
+            'system-ui,sans-serif;min-width:190px"></select>' +
+            '<button id="ava-notas-btn" style="padding:6px 12px;font:14px ' +
+            'system-ui,sans-serif;background:#2a78d6;color:#fff;border:none;' +
+            'border-radius:3px;cursor:pointer">Subir notas</button></div>' +
+            '<div id="ava-notas-msg" style="font-size:14px;margin-top:8px"></div>';
+        destino.appendChild(caja);
+
+        var sel = caja.querySelector('#ava-notas-cual');
+        var btn = caja.querySelector('#ava-notas-btn');
+        var msg = caja.querySelector('#ava-notas-msg');
+
+        function decir(texto, color) {
+            msg.innerHTML = texto;
+            msg.style.color = color || '#1c1c1c';
+        }
+
+        fetch(raiz + '/ava-admin/actividades', {
+            credentials: 'same-origin',
+            headers: { 'X-XSRFToken': cookie_xsrf() }
+        })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) {
+                if (!d || !d.actividades) { caja.style.display = 'none'; return; }
+                var con_notas = d.actividades.filter(function (a) { return a.calificadas; });
+                if (!con_notas.length) {
+                    sel.style.display = 'none';
+                    btn.style.display = 'none';
+                    decir('Ninguna actividad tiene entregas calificadas todavía.',
+                          '#4a5768');
+                    return;
+                }
+                con_notas.forEach(function (a) {
+                    var o = document.createElement('option');
+                    o.value = a.id;
+                    o.textContent = a.id + '  (' + a.calificadas + ' calificada' +
+                        (a.calificadas === 1 ? '' : 's') + ')';
+                    sel.appendChild(o);
+                });
+            })
+            .catch(function () { caja.style.display = 'none'; });
+
+        btn.onclick = function () {
+            var tarea = sel.value;
+            if (!tarea) return;
+            btn.disabled = true;
+            decir('Subiendo…', '#4a5768');
+            fetch(raiz + '/ava-admin/registrar-notas', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json',
+                           'X-XSRFToken': cookie_xsrf() },
+                body: JSON.stringify({ tarea: tarea })
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                btn.disabled = false;
+                var avisos = (d.avisos || []).map(function (a) {
+                    return '<div style="color:' + COLOR_AVISO + '">' + a + '</div>';
+                }).join('');
+                if (d.ok) {
+                    var filas = (d.notas || []).slice(0, 8).map(function (n) {
+                        return '<div>' + n.student_id + ': ' + n.obtenidos +
+                               ' / ' + n.maximos + '</div>';
+                    }).join('');
+                    if ((d.notas || []).length > 8) {
+                        filas += '<div>… y ' + (d.notas.length - 8) + ' más</div>';
+                    }
+                    decir('<b style="color:#0f8a4a">Subidas ' + d.guardadas +
+                          ' nota(s) de ' + tarea + '.</b>' + avisos +
+                          '<div style="margin-top:4px;color:#4a5768">' + filas +
+                          '</div>', '#1c1c1c');
+                } else {
+                    decir('<b style="color:#c8392b">No se subieron.</b> ' +
+                          (d.error || '') + avisos, '#1c1c1c');
+                }
+            })
+            .catch(function (e) {
+                btn.disabled = false;
+                decir('<b style="color:#c8392b">Error:</b> ' + e, '#1c1c1c');
+            });
+        };
+    }
+
     // --- Eliminar una actividad ---------------------------------------------
     // Formgrader no tiene botón para esto y hasta ahora había que borrar
     // carpetas a mano en el servidor. Se ofrece aquí, con el nombre de la
@@ -173,14 +280,19 @@
             '<div style="font-weight:600;color:#10294d;margin-bottom:6px">' +
             'Eliminar una actividad</div>' +
             '<div style="font-size:14px;color:#4a5768;margin-bottom:8px">' +
-            'Borra la actividad y lo publicado de ella. <b>Siempre guarda una ' +
-            'copia con fecha antes de borrar.</b> Si tiene entregas de ' +
-            'estudiantes, se niega salvo que insistas.</div>' +
+            'Borra la actividad entera: sus carpetas, su ficha en el libro de ' +
+            'notas y, si estaba publicada, su liberación. Sirve también para ' +
+            'las que se crearon con el nombre mal escrito y quedaron vacías. ' +
+            '<b>Siempre guarda una copia con fecha antes de borrar.</b> Si está ' +
+            'publicada o tiene entregas, se niega salvo que marques «forzar».</div>' +
             '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
             '<select id="ava-borrar-cual" style="padding:5px 8px;font:14px ' +
             'system-ui,sans-serif;min-width:190px"></select>' +
             '<input id="ava-borrar-conf" placeholder="escribe el nombre para confirmar" ' +
             'style="padding:5px 8px;font:14px system-ui,sans-serif;min-width:230px">' +
+            '<label style="font-size:13.5px;color:#4a5768;display:flex;gap:5px;align-items:center">' +
+            '<input type="checkbox" id="ava-borrar-forzar"> forzar (aunque esté ' +
+            'publicada o tenga entregas)</label>' +
             '<button id="ava-borrar-btn" style="padding:6px 12px;font:14px ' +
             'system-ui,sans-serif;background:#c8392b;color:#fff;border:none;' +
             'border-radius:3px;cursor:pointer">Eliminar</button></div>' +
@@ -189,6 +301,7 @@
 
         var sel = caja.querySelector('#ava-borrar-cual');
         var conf = caja.querySelector('#ava-borrar-conf');
+        var forzar = caja.querySelector('#ava-borrar-forzar');
         var btn = caja.querySelector('#ava-borrar-btn');
         var msg = caja.querySelector('#ava-borrar-msg');
 
@@ -212,8 +325,11 @@
                 d.actividades.forEach(function (a) {
                     var o = document.createElement('option');
                     o.value = a.id;
-                    o.textContent = a.id + (a.envios
-                        ? '  (' + a.envios + ' con entregas)' : '');
+                    var notas = [];
+                    if (a.publicada) notas.push('publicada');
+                    if (a.envios) notas.push(a.envios + ' con entregas');
+                    if (a.vacia) notas.push('sin notebook');
+                    o.textContent = a.id + (notas.length ? '  (' + notas.join(', ') + ')' : '');
                     sel.appendChild(o);
                 });
                 if (!d.actividades.length) caja.style.display = 'none';
@@ -238,7 +354,7 @@
                     'Content-Type': 'application/json',
                     'X-XSRFToken': cookie_xsrf(),
                 },
-                body: JSON.stringify({ tarea: tarea, forzar: false })
+                body: JSON.stringify({ tarea: tarea, forzar: !!(forzar && forzar.checked) })
             })
             .then(function (r) { return r.json(); })
             .then(function (d) {
@@ -248,8 +364,12 @@
                 }).join('');
                 if (d.ok) {
                     decir('<b style="color:#0f8a4a">Eliminada.</b>' + lista +
-                          '<div style="margin-top:4px">Recarga la página para ' +
-                          'actualizar la lista.</div>', '#4a5768');
+                          '<div style="margin-top:4px">Actualizando la lista…</div>',
+                          '#4a5768');
+                    // La tabla de formgrader no se entera sola: la fila seguía
+                    // ahí y el lápiz de esa fila muerta volvía a crear la
+                    // actividad, vacía. Se recarga la página.
+                    setTimeout(function () { window.location.reload(); }, 2500);
                 } else {
                     decir('<b style="color:#c8392b">No se eliminó.</b>' + lista,
                           '#4a5768');

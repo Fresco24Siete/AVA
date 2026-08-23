@@ -70,6 +70,8 @@ COPY admin_bridge.py /etc/jupyter/admin_bridge.py
 COPY panel_bridge.py /etc/jupyter/panel_bridge.py
 COPY panel_docente_bridge.py /etc/jupyter/panel_docente_bridge.py
 COPY borrar_cuadernillo.py /etc/jupyter/borrar_cuadernillo.py
+# Tambien importable: admin_bridge lo llama tras Autograde y desde "Subir notas".
+COPY registrar_notas.py /etc/jupyter/registrar_notas.py
 # Importable, no solo ejecutable: el panel lo llama en caliente para entregar lo
 # que se haya publicado despues de que arrancara el contenedor.
 COPY entregar_cuadernillo.py /etc/jupyter/entregar_cuadernillo.py

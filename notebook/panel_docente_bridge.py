@@ -348,7 +348,7 @@ def _siguiente_paso(generada, publicada, ent, sin_recoger, trabajando, entregado
     if ent["total"] and ent["calificadas"] < ent["total"]:
         return "Calificar"
     if ent["total"] and ent["calificadas"] == ent["total"]:
-        return "Subir notas con registrar-notas"
+        return "Subir notas (botón «Subir notas» en formgrader, o registrar-notas)"
     if trabajando:
         return f"{trabajando} trabajando, sin entregas"
     return "Esperando que empiecen"

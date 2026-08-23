@@ -75,7 +75,7 @@ configuración la lee de la misma variable.
 5. **Collect** en formgrader → `submitted/<user_id>/<tarea>/`. Se puede repetir:
    trae solo lo nuevo. El panel del docente (`/panel-docente`) dice cuántas
    entregas hay sin recoger.
-6. **Autograde**, y `registrar-notas <tarea>` para subir las notas al backend.
+6. **Autograde**: califica y sube las notas al backend (el bloque de ayuda tiene «Subir notas» para repetirlo; `registrar-notas <tarea>` hace lo mismo desde el terminal).
 
 «Activo» (la marca «Esta semana», la etiqueta de la telemetría y el cupo del
 tutor) es **la liberación más reciente que esté en ventana**, salvo las hechas
