@@ -1,3 +1,4 @@
+import asyncio
 import os
 import json
 import sys
@@ -102,7 +103,23 @@ class LTIRoleAuthenticator(LTI11Authenticator):
                 try:
                     if usuario.running:
                         await usuario.stop()
-                    await spawner.remove_object()
+                    # stop() ya borra el contenedor (remove=True), pero Docker
+                    # lo hace en segundo plano: el spawn que viene justo después
+                    # llegaba a crear el nuevo con el mismo nombre antes de que
+                    # el viejo desapareciera y fallaba con 409 «name already in
+                    # use». Se espera a que de verdad no esté.
+                    for _ in range(30):
+                        if await spawner.get_object() is None:
+                            break
+                        try:
+                            await spawner.remove_object()
+                        except Exception:     # todavía se está borrando
+                            pass
+                        await asyncio.sleep(1)
+                    else:
+                        self.log.error(
+                            "El contenedor anterior de %s sigue existiendo tras "
+                            "30 s; el spawn puede fallar con 409.", auth_model['name'])
                 except Exception as err:      # no impedir el ingreso por esto
                     self.log.error("No se pudo descartar el contenedor: %s", err)
 
