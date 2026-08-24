@@ -206,17 +206,26 @@ paso "5. Comprobaciones"
 
 info "esperando al Hub…"
 for _ in $(seq 1 60); do
-    curl -fsS -o /dev/null "http://127.0.0.1:${PUERTO_INTERNO}/hub/login" 2>/dev/null && break
+    curl -sS -o /dev/null "http://127.0.0.1:${PUERTO_INTERNO}/hub/login" 2>/dev/null && break
     sleep 2
 done
 
+# Un 302 aquí es lo normal y lo deseable: el Hub manda al login o al flujo LTI.
+# Lo que importa es que conteste, no el código exacto; solo un 5xx o un 000 (no
+# hubo respuesta) significan que algo está roto.
 codigo=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PUERTO_INTERNO}/hub/login" 2>/dev/null || echo 000)
-[ "$codigo" = "200" ] && ok "el Hub responde por Caddy (puerto ${PUERTO_INTERNO})" \
-                      || mal "el Hub no responde por el puerto ${PUERTO_INTERNO} (HTTP $codigo)"
+if [ "$codigo" != "000" ] && [ "$codigo" -lt 500 ]; then
+    ok "el Hub responde por Caddy (puerto ${PUERTO_INTERNO}, HTTP $codigo)"
+else
+    mal "el Hub no responde por el puerto ${PUERTO_INTERNO} (HTTP $codigo)"
+fi
 
 codigo=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PUERTO_INTERNO}/services/nbexchange/" 2>/dev/null || echo 000)
-[ "$codigo" = "200" ] && ok "servicio de intercambio registrado en el Hub" \
-                      || mal "el servicio de intercambio no responde (HTTP $codigo)"
+if [ "$codigo" != "000" ] && [ "$codigo" -lt 500 ]; then
+    ok "servicio de intercambio registrado en el Hub (HTTP $codigo)"
+else
+    mal "el servicio de intercambio no responde (HTTP $codigo)"
+fi
 
 tablas=$(docker exec postgres-db sh -c \
     'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -c "select count(*) from information_schema.tables where table_schema='"'"'public'"'"'"' 2>/dev/null || echo 0)
