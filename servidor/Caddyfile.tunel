@@ -10,7 +10,14 @@
 # declarar quién puede embeber el AVA. Sin esta cabecera el navegador bloquea
 # el iframe y en Moodle se ve una página en blanco.
 :8081 {
-	reverse_proxy jupyterhub:8000
+	# El túnel termina el TLS y le pasa a Caddy tráfico HTTP plano. Sin corregir
+	# esto, Caddy anuncia X-Forwarded-Proto: http, el Hub reconstruye la URL del
+	# lanzamiento como http://… y la firma OAuth de Moodle —calculada sobre
+	# https://…— deja de cuadrar: "401 Invalid oauth_signature", que es lo que
+	# el docente ve como una actividad en blanco. El de fuera siempre es https.
+	reverse_proxy jupyterhub:8000 {
+		header_up X-Forwarded-Proto https
+	}
 
 	header {
 		-X-Frame-Options
