@@ -31,6 +31,7 @@ import html
 import json
 import logging
 import os
+import re
 import sqlite3
 import time
 import urllib.parse
@@ -460,33 +461,97 @@ def _seccion_estudiantes(datos, historial, notas, raiz):
             f'{filas}</table></div>{pie}')
 
 
-def _seccion_entregas(entregas, notas, nombres, raiz):
+def _activo_actual():
+    """Cuál es el cuadernillo de esta semana. "" si el intercambio no responde."""
+    try:
+        import entregar_cuadernillo
+        publicados, consulto = _publicados()
+        return entregar_cuadernillo.activo_de(publicados) if consulto else ""
+    except Exception:
+        return ""
+
+
+def _grupos_por_cuadernillo(items, clave, activo):
+    """Agrupa por cuadernillo y ordena: el de esta semana primero, y detrás los
+    demás del más reciente al más antiguo.
+
+    Con 16 semanas publicadas, repetir el nombre del cuadernillo en cada fila
+    convierte estas tablas en un muro: el docente busca «cómo va la semana en
+    curso» y tiene que leerlas enteras. Agrupadas, cada cuadernillo es un
+    desplegable y solo el activo se abre solo.
+    """
+    grupos = {}
+    for it in items:
+        grupos.setdefault(str(it.get(clave, "") or ""), []).append(it)
+    def orden(codigo):
+        return (0, "") if codigo == activo else (1, _clave_descendente(codigo))
+    return [(c, grupos[c]) for c in sorted(grupos, key=orden)]
+
+
+def _clave_descendente(codigo):
+    """Para ordenar semana_10 antes que semana_02 (y no al revés)."""
+    numeros = re.findall(r"\d+", codigo)
+    return (-int(numeros[-1]) if numeros else 0, codigo)
+
+
+def _desplegables(grupos, activo, cabecera, cuerpo_de, resumen_de):
+    """Un <details> por cuadernillo. `cuerpo_de` y `resumen_de` reciben la lista."""
+    if not grupos:
+        return ""
+    bloques = ""
+    for codigo, items in grupos:
+        abierto = " open" if (codigo == activo or len(grupos) == 1) else ""
+        marca = '<span class="marca">Esta semana</span>' if codigo == activo else ""
+        bloques += (
+            f'<details class="grupo"{abierto}>'
+            f'<summary><span class="gtit">{html.escape(_titulo(codigo))}</span>'
+            f'<span class="mono tenue gcod">{html.escape(codigo)}</span>{marca}'
+            f'<span class="gres">{resumen_de(items)}</span></summary>'
+            f'<div class="gtabla"><table>{cabecera}{cuerpo_de(items)}</table></div>'
+            f'</details>')
+    return f'<div class="caja grupos">{bloques}</div>'
+
+
+def _seccion_entregas(entregas, notas, nombres, raiz, activo=""):
     if not entregas:
         return ('<div class="caja vacia">Todavía no has recogido ninguna entrega. '
                 'Las que los alumnos manden aparecen en «Sin recoger» abajo; '
                 'Collect en formgrader las trae aquí.</div>')
-    filas = ""
-    for e in entregas:
-        calificada, reentregada = e["calificada"]
-        if reentregada:
-            estado = '<span class="mal">Recogida de nuevo después de calificar</span>'
-        elif calificada:
-            nota = notas.get((e["alumno"], e["tarea"]))
-            estado = (f'<span class="bien">Calificado</span> '
-                      f'<span class="tenue">{nota[0]:g} / {nota[1]:g}</span>'
-                      if nota else '<span class="bien">Calificado</span>')
-        else:
-            estado = '<span class="pend">Sin calificar</span>'
-        filas += (
-            f'<tr><td>{_nombre(e["tarea"])}</td>'
-            f'<td>{_persona(e["alumno"], nombres, raiz)}</td>'
-            f'<td>{_hace(e["cuando"])}<div class="tenue chico">{_fecha_corta(e["cuando"])}</div></td>'
-            f'<td class="num">{_tamano(e["bytes"])}</td>'
-            f'<td>{estado}</td></tr>')
-    return ('<div class="caja"><table>'
-            '<tr><th>Cuadernillo</th><th>Estudiante</th><th>Entregado</th>'
-            '<th class="num">Tamaño</th><th>Estado</th></tr>'
-            f'{filas}</table></div>')
+
+    def cuerpo(items):
+        filas = ""
+        for e in items:
+            calificada, reentregada = e["calificada"]
+            if reentregada:
+                estado = '<span class="mal">Recogida de nuevo después de calificar</span>'
+            elif calificada:
+                nota = notas.get((e["alumno"], e["tarea"]))
+                estado = (f'<span class="bien">Calificado</span> '
+                          f'<span class="tenue">{nota[0]:g} / {nota[1]:g}</span>'
+                          if nota else '<span class="bien">Calificado</span>')
+            else:
+                estado = '<span class="pend">Sin calificar</span>'
+            filas += (
+                f'<tr><td>{_persona(e["alumno"], nombres, raiz)}</td>'
+                f'<td>{_hace(e["cuando"])}'
+                f'<div class="tenue chico">{_fecha_corta(e["cuando"])}</div></td>'
+                f'<td class="num">{_tamano(e["bytes"])}</td>'
+                f'<td>{estado}</td></tr>')
+        return filas
+
+    def resumen(items):
+        pendientes = sum(1 for e in items
+                         if not e["calificada"][0] or e["calificada"][1])
+        texto = f'{len(items)} entrega{"" if len(items) == 1 else "s"}'
+        if pendientes:
+            texto += f' · <b class="pend">{pendientes} por calificar</b>'
+        return texto
+
+    return _desplegables(
+        _grupos_por_cuadernillo(entregas, "tarea", activo), activo,
+        '<tr><th>Estudiante</th><th>Entregado</th>'
+        '<th class="num">Tamaño</th><th>Estado</th></tr>',
+        cuerpo, resumen)
 
 
 def _seccion_ciclo(filas, hay_historial):
@@ -547,66 +612,86 @@ def _paso(hecho):
             else '<span class="tenue">no</span>')
 
 
-def _seccion_dificultad(datos):
+def _seccion_dificultad(datos, activo=""):
     ejercicios = (datos or {}).get("ejercicios", [])
     if not ejercicios:
         return ('<div class="caja vacia">Todavía no hay intentos reales en '
                 'ningún ejercicio. <span class="tenue">Ejecutar la celda vacía '
                 'no cuenta: eso lo hace todo el mundo al recorrer el cuadernillo.'
                 '</span></div>')
-    filas = ""
-    for e in ejercicios:
-        intentaron = e.get("alumnos_que_lo_intentaron", 0)
-        resolvieron = e.get("alumnos_que_lo_resolvieron", 0)
-        primera = e.get("alumnos_que_pasaron_al_primer_intento", 0)
-        mediana = e.get("mediana_intentos_hasta_pasar")
-        atascados = e.get("alumnos_atascados", 0)
-        pct_primera = (f'{100 * primera // resolvieron}%' if resolvieron
-                       else '<span class="tenue">—</span>')
-        if mediana is None:
-            cuesta = '<span class="tenue">—</span>'
-        elif mediana <= 1:
-            cuesta = '1'
-        else:
-            cuesta = f'<b>{mediana:g}</b>'
-        orden = f'<span class="tenue chico">celda {e["orden"]}</span>' if e.get("orden") else ""
-        filas += (
-            f'<tr><td>{_nombre(e["cuadernillo_id"])}</td>'
-            f'<td class="mono">{html.escape(e["exercise_id"])} {orden}</td>'
-            f'<td class="num">{_n(e.get("puntos_maximos"))}</td>'
-            f'<td class="num">{intentaron}</td>'
-            f'<td class="num">{_n(resolvieron)}</td>'
-            f'<td class="num">{pct_primera}</td>'
-            f'<td class="num">{cuesta}</td>'
-            f'<td class="num">{"<b class=mal>%d</b>" % atascados if atascados else _n(0)}</td>'
-            f'<td class="num">{_n(e.get("alumnos_a_medias", 0))}</td></tr>')
-    return ('<div class="caja"><table>'
-            '<tr><th>Cuadernillo</th><th>Ejercicio</th><th class="num">Puntos</th>'
-            '<th class="num">Lo intentaron</th><th class="num">Lo resolvieron</th>'
-            '<th class="num" title="De los que lo resolvieron, cuántos a la primera">A la primera</th>'
-            '<th class="num" title="Mediana de intentos reales hasta pasar la prueba">Intentos hasta pasar</th>'
-            '<th class="num">Atascados</th><th class="num">A medias</th></tr>'
-            f'{filas}</table></div>')
+
+    def cuerpo(items):
+        filas = ""
+        for e in items:
+            intentaron = e.get("alumnos_que_lo_intentaron", 0)
+            resolvieron = e.get("alumnos_que_lo_resolvieron", 0)
+            primera = e.get("alumnos_que_pasaron_al_primer_intento", 0)
+            mediana = e.get("mediana_intentos_hasta_pasar")
+            atascados = e.get("alumnos_atascados", 0)
+            pct_primera = (f'{100 * primera // resolvieron}%' if resolvieron
+                           else '<span class="tenue">—</span>')
+            if mediana is None:
+                cuesta = '<span class="tenue">—</span>'
+            elif mediana <= 1:
+                cuesta = '1'
+            else:
+                cuesta = f'<b>{mediana:g}</b>'
+            orden = (f'<span class="tenue chico">celda {e["orden"]}</span>'
+                     if e.get("orden") else "")
+            filas += (
+                f'<tr><td class="mono">{html.escape(e["exercise_id"])} {orden}</td>'
+                f'<td class="num">{_n(e.get("puntos_maximos"))}</td>'
+                f'<td class="num">{intentaron}</td>'
+                f'<td class="num">{_n(resolvieron)}</td>'
+                f'<td class="num">{pct_primera}</td>'
+                f'<td class="num">{cuesta}</td>'
+                f'<td class="num">{"<b class=mal>%d</b>" % atascados if atascados else _n(0)}</td>'
+                f'<td class="num">{_n(e.get("alumnos_a_medias", 0))}</td></tr>')
+        return filas
+
+    def resumen(items):
+        atascados = sum(e.get("alumnos_atascados", 0) for e in items)
+        texto = f'{len(items)} ejercicio{"" if len(items) == 1 else "s"}'
+        if atascados:
+            texto += f' · <b class="mal">{atascados} atascado{"" if atascados == 1 else "s"}</b>'
+        return texto
+
+    return _desplegables(
+        _grupos_por_cuadernillo(ejercicios, "cuadernillo_id", activo), activo,
+        '<tr><th>Ejercicio</th><th class="num">Puntos</th>'
+        '<th class="num">Lo intentaron</th><th class="num">Lo resolvieron</th>'
+        '<th class="num" title="De los que lo resolvieron, cuántos a la primera">A la primera</th>'
+        '<th class="num" title="Mediana de intentos reales hasta pasar la prueba">Intentos hasta pasar</th>'
+        '<th class="num">Atascados</th><th class="num">A medias</th></tr>',
+        cuerpo, resumen)
 
 
-def _seccion_malentendidos(datos):
+def _seccion_malentendidos(datos, activo=""):
     lista = [m for m in (datos or {}).get("malentendidos", [])
              if m.get("alumnos", 0) >= 1]
     if not lista:
         return ('<div class="caja vacia">Todavía no hay ningún error que se '
                 'repita entre varias personas.</div>')
-    filas = ""
-    for m in lista[:8]:
-        filas += (
-            f'<tr><td class="num"><b>{m["alumnos"]}</b></td>'
-            f'<td>{_nombre(m["cuadernillo_id"])}</td>'
-            f'<td class="mono">{html.escape(m["exercise_id"])}</td>'
-            f'<td><b>{html.escape(m["error_type"])}</b>'
-            f'<div class="tenue mensaje">{html.escape(m["mensaje"])}</div></td></tr>')
-    return ('<div class="caja"><table>'
-            '<tr><th class="num">Personas</th><th>Cuadernillo</th>'
-            '<th>Ejercicio</th><th>Qué les sale</th></tr>'
-            f'{filas}</table></div>')
+
+    def cuerpo(items):
+        filas = ""
+        for m in items[:8]:
+            filas += (
+                f'<tr><td class="num"><b>{m["alumnos"]}</b></td>'
+                f'<td class="mono">{html.escape(m["exercise_id"])}</td>'
+                f'<td><b>{html.escape(m["error_type"])}</b>'
+                f'<div class="tenue mensaje">{html.escape(m["mensaje"])}</div></td></tr>')
+        return filas
+
+    def resumen(items):
+        n = min(len(items), 8)
+        return f'{n} error{"" if n == 1 else "es"} que se repite{"" if n == 1 else "n"}'
+
+    return _desplegables(
+        _grupos_por_cuadernillo(lista, "cuadernillo_id", activo), activo,
+        '<tr><th class="num">Personas</th><th>Ejercicio</th>'
+        '<th>Qué les sale</th></tr>',
+        cuerpo, resumen)
 
 
 def _seccion_competencias(datos):
@@ -722,6 +807,20 @@ ESTILO = f"""
  .banda{{background:#fdf9ef;border-left:3px solid {AMBAR};padding:12px 16px;
    border-radius:4px;margin-bottom:14px;font-size:14.5px}}
  .mensaje{{font-size:13px;margin-top:3px;max-width:52ch}}
+ .grupos{{overflow:visible}}
+ .grupo{{border-bottom:1px solid {BORDE}}}
+ .grupo:last-child{{border-bottom:none}}
+ .grupo>summary{{cursor:pointer;padding:12px 16px;display:flex;align-items:center;
+   gap:8px;flex-wrap:wrap;list-style:none;user-select:none}}
+ .grupo>summary::-webkit-details-marker{{display:none}}
+ .grupo>summary::before{{content:"▸";color:{GRIS};font-size:12px;width:10px}}
+ .grupo[open]>summary::before{{content:"▾"}}
+ .grupo>summary:hover{{background:#f7f8fa}}
+ .grupo[open]>summary{{border-bottom:1px solid {BORDE}}}
+ .gtit{{font-weight:650;color:{TINTA}}}
+ .gcod{{font-size:12.5px}}
+ .gres{{margin-left:auto;font-size:13.5px;color:{GRIS};white-space:nowrap}}
+ .gtabla{{overflow-x:auto}}
  .comps{{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));margin-bottom:12px}}
  .comp{{background:#fff;border:1px solid {BORDE};border-radius:8px;padding:14px 16px}}
  .comp-id{{font-size:12px;color:{GRIS};text-transform:uppercase;
@@ -779,19 +878,19 @@ paso de cada uno.</p>
 
 <h2>Lo que has recogido</h2>
 <p class="sub2">Entregas que Collect ya trajo a tu carpeta, la más reciente primero.</p>
-{_seccion_entregas(entregas, notas, nombres, raiz)}
+{_seccion_entregas(entregas, notas, nombres, raiz, activo)}
 
 <h2>Qué cuesta y dónde se atascan</h2>
 <p class="sub2">Por ejercicio: cuántos lo pasaron a la primera y cuántos intentos
 reales les costó a los que lo resolvieron. «Atascado» es quien escribió una
 respuesta, no le pasa la prueba y no ha vuelto a conseguirlo. Ejecutar la celda
 vacía no cuenta.</p>
-{_seccion_dificultad(datos)}
+{_seccion_dificultad(datos, activo)}
 
 <h2>Lo que se están equivocando igual</h2>
 <p class="sub2">El mismo error en varias personas. Suele ser un tema para
 retomar en clase, no un problema de cada uno.</p>
-{_seccion_malentendidos(datos)}
+{_seccion_malentendidos(datos, activo)}
 
 <h2>Quién está peleando solo</h2>
 <p class="sub2">Estudiantes con ejercicios donde lo intentaron de verdad y no les
@@ -839,32 +938,49 @@ def _html_ficha(base_url, sid, datos_panel, ficha, historial, aviso):
                     if filas_c else '<div class="caja vacia">Sin cuadernillos publicados.</div>')
 
     ejercicios = (ficha or {}).get("ejercicios", [])
-    filas_e = ""
-    for e in ejercicios:
-        if e.get("resuelto"):
-            estado = '<span class="bien">resuelto</span>'
-        elif e.get("solo_ejecuto_vacio"):
-            estado = '<span class="tenue">solo ejecutó la celda vacía</span>'
-        elif e.get("a_medias"):
-            estado = '<span class="pend">a medias</span>'
-        else:
-            estado = '<span class="mal">atascado</span>'
-        err = ""
-        if e.get("ultimo_error") and not e.get("resuelto"):
-            err = (f'<b>{html.escape(e["ultimo_error"])}</b>'
-                   f'<div class="tenue mensaje">{html.escape(e.get("ultimo_mensaje", ""))}</div>')
-        filas_e += (
-            f'<tr><td>{_nombre(e["cuadernillo_id"])}</td>'
-            f'<td class="mono">{html.escape(e["exercise_id"])}</td>'
-            f'<td>{estado}</td>'
-            f'<td class="num">{_n(e.get("intentos"))}</td>'
-            f'<td>{_hace(_epoch_iso(e.get("ultimo_intento")))}</td>'
-            f'<td>{err}</td></tr>')
-    recorrido = (f'<div class="caja"><table><tr><th>Cuadernillo</th><th>Ejercicio</th>'
-                 f'<th>Estado</th><th class="num">Intentos</th><th>Última vez</th>'
-                 f'<th>Último error</th></tr>{filas_e}</table></div>'
-                 if filas_e else
-                 '<div class="caja vacia">Todavía no ha ejecutado ninguna celda de prueba.</div>')
+    activo = _activo_actual()
+
+    def cuerpo_recorrido(items):
+        filas = ""
+        for e in items:
+            if e.get("resuelto"):
+                estado = '<span class="bien">resuelto</span>'
+            elif e.get("solo_ejecuto_vacio"):
+                estado = '<span class="tenue">solo ejecutó la celda vacía</span>'
+            elif e.get("a_medias"):
+                estado = '<span class="pend">a medias</span>'
+            else:
+                estado = '<span class="mal">atascado</span>'
+            err = ""
+            if e.get("ultimo_error") and not e.get("resuelto"):
+                err = (f'<b>{html.escape(e["ultimo_error"])}</b>'
+                       f'<div class="tenue mensaje">'
+                       f'{html.escape(e.get("ultimo_mensaje", ""))}</div>')
+            filas += (
+                f'<tr><td class="mono">{html.escape(e["exercise_id"])}</td>'
+                f'<td>{estado}</td>'
+                f'<td class="num">{_n(e.get("intentos"))}</td>'
+                f'<td>{_hace(_epoch_iso(e.get("ultimo_intento")))}</td>'
+                f'<td>{err}</td></tr>')
+        return filas
+
+    def resumen_recorrido(items):
+        resueltos = sum(1 for e in items if e.get("resuelto"))
+        atascados = sum(1 for e in items
+                        if not e.get("resuelto") and not e.get("solo_ejecuto_vacio")
+                        and not e.get("a_medias"))
+        texto = f'{resueltos} de {len(items)} resuelto{"" if len(items) == 1 else "s"}'
+        if atascados:
+            texto += f' · <b class="mal">{atascados} atascado{"" if atascados == 1 else "s"}</b>'
+        return texto
+
+    recorrido = (_desplegables(
+        _grupos_por_cuadernillo(ejercicios, "cuadernillo_id", activo), activo,
+        '<tr><th>Ejercicio</th><th>Estado</th><th class="num">Intentos</th>'
+        '<th>Última vez</th><th>Último error</th></tr>',
+        cuerpo_recorrido, resumen_recorrido)
+        if ejercicios else
+        '<div class="caja vacia">Todavía no ha ejecutado ninguna celda de prueba.</div>')
 
     cuerpo = f"""
 <a class="volver" href="{raiz}/panel-docente">← Tu curso</a>
