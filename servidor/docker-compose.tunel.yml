@@ -1,0 +1,22 @@
+# Ajustes para cuando el AVA corre en una máquina detrás de un túnel, no en la
+# VM con dominio propio. Se aplica ENCIMA del docker-compose.yml de la raíz:
+#
+#   docker compose -f docker-compose.yml -f servidor/docker-compose.tunel.yml up -d
+#
+# (El instalador ya lo hace; esto está aquí para poder repetirlo a mano.)
+services:
+  caddy:
+    # El túnel entrega el tráfico en un puerto local, así que Caddy no necesita
+    # el 80 ni el 443 —que en un equipo de escritorio suelen estar ocupados— ni
+    # el volumen de certificados: el TLS lo pone el borde del túnel.
+    ports:
+      - "127.0.0.1:8081:8081"
+    volumes:
+      - ./servidor/Caddyfile.tunel:/etc/caddy/Caddyfile:ro
+
+  api_go:
+    # En la VM este puerto lo tapaba el firewall de GCP. En una casa o una
+    # oficina no hay tal firewall: publicado en 0.0.0.0 quedaría accesible para
+    # cualquiera de la red local, y el backend acuña tokens. Se ata al loopback.
+    ports:
+      - "127.0.0.1:8080:8080"
