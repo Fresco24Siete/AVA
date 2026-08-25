@@ -18,6 +18,7 @@ Lo que falta se marca como no disponible y la lista sigue ahí.
 no coincide con la de nbgrader —que ejecuta también las pruebas ocultas— y
 enseñarla antes de tiempo genera el reclamo de «el panel decía otra cosa».
 """
+import hmac
 import html
 import json
 import logging
@@ -735,6 +736,53 @@ class ValorarHandler(_BaseHandler):
     (metrics_bridge), así que la identidad la pone el token del contenedor y no
     el navegador: un alumno no puede valorar por otro aunque manipule el envío.
     """
+
+    def check_xsrf_cookie(self):
+        """El token del formulario viaja en el cuerpo, y ahí JupyterHub no lo ve.
+
+        Este es el único POST del AVA que sale de un <form> normal en vez de una
+        llamada de custom.js, y por eso solo aquí aparecía el fallo. JupyterHub
+        comprueba el XSRF dos veces: la de Tornado, que sí lee el cuerpo, y otra
+        al resolver la identidad de la cookie (HubOAuth._get_user_cookie), que
+        solo mira la query y las cabeceras. Esa segunda no encontraba el token,
+        se tragaba el error —lo deja en debug— y devolvía «sin usuario»; entonces
+        @web.authenticated respondía un 403 pelado: página de error sin motivo y
+        ni una línea en el log. De ahí lo difícil que fue verlo.
+
+        Hacemos la misma comprobación que haría JupyterHub, pero leyendo el token
+        también del cuerpo crudo, que sí está siempre disponible. No se rebaja la
+        protección: sigue exigiendo el token que corresponde a esta sesión. (Lo
+        contrario que metrics_bridge y tutor_bridge, que la desactivan porque son
+        endpoints internos; este guarda lo que escribe el alumno.)
+        """
+        recibido = (self.get_argument("_xsrf", None)
+                    or self.request.headers.get("X-Xsrftoken")
+                    or self.request.headers.get("X-Csrftoken")
+                    or self._xsrf_del_cuerpo())
+        if not recibido:
+            raise web.HTTPError(
+                403, f"'_xsrf' argument missing from {self.request.method}")
+        esperado = self.xsrf_token
+        if isinstance(esperado, str):
+            esperado = esperado.encode("utf8")
+        if not hmac.compare_digest(recibido.encode("utf8"), esperado):
+            raise web.HTTPError(
+                403,
+                f"XSRF cookie does not match {self.request.method} argument")
+
+    def _xsrf_del_cuerpo(self):
+        """El _xsrf del cuerpo del POST, parseado a mano.
+
+        `self.request.body` está montado antes de que corra nada del handler, así
+        que esto funciona sin depender de cuándo Tornado rellena los argumentos.
+        """
+        try:
+            campos = urllib.parse.parse_qs(
+                self.request.body.decode("utf8", "replace"))
+        except Exception:
+            return None
+        valores = campos.get("_xsrf") or []
+        return valores[0] if valores else None
 
     def _valoracion_previa(self, codigo):
         """Lo que ya respondió, si respondió. Sale del backend, que es la verdad."""
