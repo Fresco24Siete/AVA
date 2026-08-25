@@ -307,7 +307,12 @@ async def auth_state_a_env(spawner, auth_state):
             'lis_result_sourcedid (%s) ni lis_outcome_service_url (%s). '
             'Revisa que la actividad LTI de Moodle tenga calificación activada.',
             spawner.user.name, bool(sourcedid), bool(outcome_url))
-    spawner.environment['ENVIAR_AL_BACKEND'] = os.environ.get('ENVIAR_AL_BACKEND', 'false')
+    # Última línea de defensa del interruptor de telemetría, y por eso el valor
+    # por defecto es 'true'. Si el Hub arranca sin la variable, lo que NO puede
+    # pasar es que el curso entero trabaje y no se guarde nada: el puente
+    # responde 200 «simulado», el alumno no ve ningún error y el aviso se queda
+    # en el log del contenedor. El modo simulación hay que pedirlo a propósito.
+    spawner.environment['ENVIAR_AL_BACKEND'] = os.environ.get('ENVIAR_AL_BACKEND', 'true')
 
     # Quién entró, con nombre: para el listado del docente y para la
     # devolución de notas. Va antes de acuñar tokens y no bloquea el arranque.
