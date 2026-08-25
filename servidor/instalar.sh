@@ -202,6 +202,18 @@ EOF
     ok "telemetría activada (el .env venía sin ENVIAR_AL_BACKEND)"
 fi
 
+# Si alguien la dejó en "false" a propósito, no se le pisa la decisión: se le
+# dice. Apagada, el AVA funciona entero y no guarda absolutamente nada —ni
+# valoraciones ni intentos de ejercicio—, y no hay ninguna otra señal.
+if [ -f .env ] && grep -qiE '^ENVIAR_AL_BACKEND=[[:space:]]*"?(false|0|no)"?[[:space:]]*$' .env 2>/dev/null; then
+    aviso "LA TELEMETRÍA ESTÁ APAGADA (ENVIAR_AL_BACKEND=false en .env)"
+    info "El curso puede trabajar un semestre entero sin que se guarde nada:"
+    info "no habrá intentos de ejercicio ni valoraciones, y el alumno no ve"
+    info "ningún error. Solo déjalo así si estás depurando. Para encenderla:"
+    info "    sed -i 's/^ENVIAR_AL_BACKEND=.*/ENVIAR_AL_BACKEND=true/' .env"
+    info "    bash servidor/instalar.sh"
+fi
+
 if grep -q '^GOOGLE_API_KEY_1=.\+' .env 2>/dev/null; then
     ok "el Tutor IA tiene clave de Gemini"
 else
@@ -236,6 +248,41 @@ info "hub, servicio de intercambio y backend…"
 "${COMPOSE[@]}" build >/dev/null
 ok "imágenes de compose"
 
+# Los contenedores de alumno y docente NO los levanta compose: los crea el Hub
+# al entrar cada persona. Así que reconstruir la imagen no basta: quien tenga uno
+# vivo sigue ejecutando el código viejo, y el arreglo que se acaba de instalar
+# parece no funcionar. Es la misma clase de fallo mudo que ya nos costó caro.
+#
+# Se pueden tirar sin miedo: el trabajo del alumno vive en su volumen
+# (ava-trabajo-<usuario>), no en el contenedor, y el Hub los da por desechables
+# (DockerSpawner.remove = True). Los apagados se borran aquí mismo, porque si no
+# reviven con la imagen vieja. Los que están en uso NO se tocan —puede haber
+# alguien en mitad de un ejercicio—, pero se avisa en vez de callar.
+viejos_parados=0
+viejos_vivos=""
+for c in $(docker ps -a --filter "name=^/jupyter-" --format '{{.Names}}'); do
+    img_c=$(docker inspect --format '{{.Image}}' "$c" 2>/dev/null)
+    caduco=true
+    for img in mi_imagen_jupyterlab:latest mi_imagen_jupyterlab_docente:latest; do
+        [ "$img_c" = "$(docker inspect --format '{{.Id}}' "$img" 2>/dev/null)" ] && caduco=false
+    done
+    $caduco || continue
+    if [ -n "$(docker ps -q --filter "name=^/${c}$")" ]; then
+        viejos_vivos="$viejos_vivos $c"
+    else
+        docker rm -f "$c" >/dev/null 2>&1 && viejos_parados=$((viejos_parados + 1))
+    fi
+done
+[ "$viejos_parados" -gt 0 ] && \
+    ok "$viejos_parados contenedor(es) con la imagen vieja retirados (renacen al entrar)"
+if [ -n "$viejos_vivos" ]; then
+    aviso "hay sesiones abiertas con la imagen ANTERIOR:$viejos_vivos"
+    info "Siguen con el código viejo hasta que esa persona salga y vuelva a"
+    info "entrar desde Moodle. Su trabajo está a salvo (vive en su volumen)."
+    info "Si quieres forzarlo ahora mismo:"
+    info "    docker rm -f$viejos_vivos"
+fi
+
 # --- 4. arranque -------------------------------------------------------------
 paso "4. Levantando el stack"
 
@@ -267,24 +314,39 @@ done
 # --- 5. ¿quedó funcionando? --------------------------------------------------
 paso "5. Comprobaciones"
 
-info "esperando al Hub…"
-for _ in $(seq 1 60); do
-    curl -sS -o /dev/null "http://127.0.0.1:${PUERTO_INTERNO}/hub/login" 2>/dev/null && break
-    sleep 2
-done
-
 # Un 302 aquí es lo normal y lo deseable: el Hub manda al login o al flujo LTI.
 # Lo que importa es que conteste, no el código exacto; solo un 5xx o un 000 (no
 # hubo respuesta) significan que algo está roto.
-codigo=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PUERTO_INTERNO}/hub/login" 2>/dev/null || echo 000)
-if [ "$codigo" != "000" ] && [ "$codigo" -lt 500 ]; then
+#
+# El bucle de espera comprobaba solo que curl saliera bien, y curl sale bien
+# aunque la respuesta sea un 502: Caddy se levanta muchísimo antes que el Hub,
+# así que el bucle terminaba en el primer intento y la comprobación cazaba ese
+# 502 pasajero. El instalador declaraba rota una instalación que estaba
+# perfecta, y el profesor se quedaba sin saber si tenía un AVA o no. Hay que
+# esperar a una respuesta que NO sea de servidor caído.
+esperar_http() {          # $1 = ruta · $2 = intentos (cada uno son 2 s)
+    local ruta="$1" intentos="${2:-60}" codigo=000
+    for _ in $(seq 1 "$intentos"); do
+        codigo=$(curl -s -o /dev/null -w '%{http_code}' \
+                 "http://127.0.0.1:${PUERTO_INTERNO}${ruta}" 2>/dev/null || echo 000)
+        if [ "$codigo" != "000" ] && [ "$codigo" -lt 500 ]; then
+            echo "$codigo"; return 0
+        fi
+        sleep 2
+    done
+    echo "$codigo"; return 1
+}
+
+info "esperando al Hub…"
+if codigo=$(esperar_http /hub/login 60); then
     ok "el Hub responde por Caddy (puerto ${PUERTO_INTERNO}, HTTP $codigo)"
 else
     mal "el Hub no responde por el puerto ${PUERTO_INTERNO} (HTTP $codigo)"
 fi
 
-codigo=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PUERTO_INTERNO}/services/nbexchange/" 2>/dev/null || echo 000)
-if [ "$codigo" != "000" ] && [ "$codigo" -lt 500 ]; then
+# El intercambio se registra en el Hub al arrancar, así que puede tardar un poco
+# más que él. Con el Hub ya en pie, 30 intentos son de sobra.
+if codigo=$(esperar_http /services/nbexchange/ 30); then
     ok "servicio de intercambio registrado en el Hub (HTTP $codigo)"
 else
     mal "el servicio de intercambio no responde (HTTP $codigo)"
