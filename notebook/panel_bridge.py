@@ -507,13 +507,18 @@ conserva siempre.</p>
 </body></html>"""
 
 
-def _html_valorar(codigo, entregado, previa, base_url, aviso=""):
+def _html_valorar(codigo, entregado, previa, base_url, xsrf="", aviso=""):
     """La página donde el alumno valora un cuadernillo.
 
     Sin una línea de JavaScript, como el resto de este archivo: son radios
     estilados como fichas con `input:checked + label`. Un toque marca, el botón
     envía. Así funciona igual en cualquier navegador y no depende de que cargue
     nada más.
+
+    `xsrf` es el campo oculto que exige Tornado en todo POST. Sin él, el
+    servidor del alumno responde «403: '_xsrf' argument missing from POST» y la
+    valoración se pierde; lo construye el handler, que es quien tiene la
+    petición y puede firmarlo.
 
     El orden importa: la única pregunta obligatoria va primera y sola, para que
     quien conteste y se vaya deje ya el dato más valioso.
@@ -599,6 +604,7 @@ def _html_valorar(codigo, entregado, previa, base_url, aviso=""):
 tu calificación: le sirve para armar mejor el cuadernillo de la otra semana.</div>
 {banda}
 <form method="post" action="{raiz}/panel/valorar/{urllib.parse.quote(codigo)}">
+  {xsrf}
   <div class="grupo">
     <div class="preg">¿Qué tanto sientes que aprendiste?</div>
     <div class="ayuda">Toca una estrella.</div>
@@ -752,7 +758,8 @@ class ValorarHandler(_BaseHandler):
         self.set_header("Content-Type", "text/html; charset=utf-8")
         self.finish(_html_valorar(codigo, bool(_entregas().get(codigo)),
                                   self._valoracion_previa(codigo),
-                                  self.settings.get("base_url", "/")))
+                                  self.settings.get("base_url", "/"),
+                                  xsrf=self.xsrf_form_html()))
 
     @web.authenticated
     def post(self, codigo):
@@ -773,6 +780,7 @@ class ValorarHandler(_BaseHandler):
             self.set_header("Content-Type", "text/html; charset=utf-8")
             self.finish(_html_valorar(codigo, entregado, self._valoracion_previa(codigo),
                                       self.settings.get("base_url", "/"),
+                                      xsrf=self.xsrf_form_html(),
                                       aviso="Toca una estrella para poder enviar."))
             return
 
@@ -801,7 +809,7 @@ class ValorarHandler(_BaseHandler):
             self.set_header("Content-Type", "text/html; charset=utf-8")
             self.finish(_html_valorar(
                 codigo, entregado, self._valoracion_previa(codigo),
-                self.settings.get("base_url", "/"),
+                self.settings.get("base_url", "/"), xsrf=self.xsrf_form_html(),
                 aviso="No se pudo guardar ahora mismo. Inténtalo otra vez en un momento."))
             return
 
