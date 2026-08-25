@@ -144,8 +144,15 @@ DB_PORT=5432
 JUPYTERHUB_CRYPT_KEY=$(openssl rand -hex 32)
 
 # --- LTI (deben coincidir con la actividad configurada en Moodle) ---
-LTI_CLIENT_KEY=moodle-llave-publica
-LTI_CLIENT_SECRET=secreto-super-seguro-000000
+# Se generan aquí, como todo lo demás. Antes eran dos valores fijos escritos en
+# el script, que vive en un repositorio PÚBLICO. Con el AVA publicado en
+# internet por el túnel, eso significa que cualquiera que leyera el repositorio
+# podía firmar un lanzamiento LTI contra /hub/lti/launch y entrar como quien
+# quisiera —el rol viaja en el propio lanzamiento—, incluso como docente: leer y
+# modificar el trabajo de toda la clase y las notas.
+# El instalador los muestra al final; hay que copiarlos en la actividad de Moodle.
+LTI_CLIENT_KEY=ava-$(openssl rand -hex 6)
+LTI_CLIENT_SECRET=$(openssl rand -hex 32)
 
 # --- Telemetría ---
 ENVIAR_AL_BACKEND=true
@@ -211,6 +218,22 @@ if [ -f .env ] && grep -qiE '^ENVIAR_AL_BACKEND=[[:space:]]*"?(false|0|no)"?[[:s
     info "no habrá intentos de ejercicio ni valoraciones, y el alumno no ve"
     info "ningún error. Solo déjalo así si estás depurando. Para encenderla:"
     info "    sed -i 's/^ENVIAR_AL_BACKEND=.*/ENVIAR_AL_BACKEND=true/' .env"
+    info "    bash servidor/instalar.sh"
+fi
+
+# Las credenciales LTI de ejemplo están publicadas en el repositorio. Con el AVA
+# expuesto por el túnel, quien las conozca puede firmar un lanzamiento y entrar
+# como cualquier persona del curso, docente incluido. No se rotan solas porque
+# hay que cambiarlas también en Moodle, y hacerlo por sorpresa dejaría la
+# actividad sin funcionar en mitad de una clase. Pero se avisa cada vez.
+if [ -f .env ] && grep -qE '^LTI_CLIENT_SECRET=(secreto-super-seguro-000000|cambia-este-secreto)$' .env 2>/dev/null; then
+    aviso "LAS CREDENCIALES DE MOODLE SON LAS DE EJEMPLO DEL REPOSITORIO PÚBLICO"
+    info "Cualquiera que lea el repositorio puede entrar al AVA como docente."
+    info "Cámbialas aquí y luego pega los valores nuevos en la actividad de"
+    info "Moodle (herramienta externa → clave y secreto de consumidor):"
+    info ""
+    info "    sed -i \"s|^LTI_CLIENT_KEY=.*|LTI_CLIENT_KEY=ava-\$(openssl rand -hex 6)|\" .env"
+    info "    sed -i \"s|^LTI_CLIENT_SECRET=.*|LTI_CLIENT_SECRET=\$(openssl rand -hex 32)|\" .env"
     info "    bash servidor/instalar.sh"
 fi
 
@@ -453,6 +476,27 @@ if command -v tailscale >/dev/null 2>&1; then
     fi
 else
     aviso "Tailscale no está instalado; el AVA solo es accesible en esta máquina"
+fi
+
+# --- 8. lo que hay que escribir en Moodle ------------------------------------
+# El secreto se genera en esta máquina y no existe en ningún otro sitio: si no
+# se muestra aquí, la actividad de Moodle no se puede configurar. Sí, queda en
+# el historial de la terminal; la alternativa era dejar un secreto conocido.
+if [ -f .env ]; then
+    paso "8. Datos para la actividad de Moodle"
+    lti_k=$(grep -m1 '^LTI_CLIENT_KEY=' .env | cut -d= -f2-)
+    lti_s=$(grep -m1 '^LTI_CLIENT_SECRET=' .env | cut -d= -f2-)
+    maquina=$(tailscale status --json 2>/dev/null \
+              | python3 -c "import json,sys; print(json.load(sys.stdin)['Self']['DNSName'].rstrip('.'))" \
+              2>/dev/null || echo "")
+    info "En Moodle, «Herramienta externa» del curso:"
+    info ""
+    info "  URL de lanzamiento    https://${maquina:-<nombre-de-esta-maquina>.ts.net}/hub/lti/launch"
+    info "  Clave de consumidor   ${lti_k:-?}"
+    info "  Secreto compartido    ${lti_s:-?}"
+    info ""
+    info "Y en «Privacidad», comparte el nombre y el correo del alumno: sin eso"
+    info "el AVA no sabe quién entra y no puede devolver la nota."
 fi
 
 paso "Resumen"
