@@ -20,6 +20,12 @@ type ResumenCuadernillo struct {
 	PuntosObtenidos  *float64 `db:"puntos_obtenidos" json:"puntos_obtenidos,omitempty"`
 	PuntosMaximos    *float64 `db:"puntos_maximos" json:"puntos_maximos,omitempty"`
 	Origen           *string  `db:"origen" json:"origen_nota,omitempty"`
+
+	// Lo que este alumno ya respondió al valorar el cuadernillo. Sirve para que
+	// el panel le muestre su respuesta en vez de volver a preguntársela.
+	ValRating *int16  `db:"val_rating" json:"valoracion_rating,omitempty"`
+	ValTiempo *int16  `db:"val_tiempo" json:"valoracion_tiempo,omitempty"`
+	ValFreno  *string `db:"val_freno" json:"valoracion_freno,omitempty"`
 }
 
 // ResumenCompetencia agrupa el desempeño por indicador de aprendizaje.
@@ -67,7 +73,8 @@ func (r *ProgresoRepository) PorCuadernillo(estudiante, curso string) ([]Resumen
 		                    AND p.cuadernillo_id = a.cuadernillo_id
 		                    AND p.exercise_id    = a.exercise_id
 		                    AND p.validation_result = 'passed'))    AS abandonos,
-		       n.puntos_obtenidos, n.puntos_maximos, n.origen
+		       n.puntos_obtenidos, n.puntos_maximos, n.origen,
+		       v.rating AS val_rating, v.tiempo AS val_tiempo, v.freno AS val_freno
 		FROM suyos s
 		LEFT JOIN exercise_attempts a
 		       ON a.cuadernillo_id = s.cuadernillo_id
@@ -75,7 +82,11 @@ func (r *ProgresoRepository) PorCuadernillo(estudiante, curso string) ([]Resumen
 		LEFT JOIN cuadernillo_notas n
 		       ON n.cuadernillo_id = s.cuadernillo_id
 		      AND n.student_id     = $1 AND n.course_id = $2
-		GROUP BY s.cuadernillo_id, n.puntos_obtenidos, n.puntos_maximos, n.origen
+		LEFT JOIN cuadernillo_ratings v
+		       ON v.cuadernillo_id = s.cuadernillo_id
+		      AND v.student_id     = $1 AND v.course_id = $2
+		GROUP BY s.cuadernillo_id, n.puntos_obtenidos, n.puntos_maximos, n.origen,
+		         v.rating, v.tiempo, v.freno
 		ORDER BY s.cuadernillo_id`, estudiante, curso)
 	return salida, err
 }

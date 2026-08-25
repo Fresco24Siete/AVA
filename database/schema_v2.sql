@@ -70,8 +70,17 @@ CREATE TABLE cuadernillo_ratings (
     cuadernillo_id VARCHAR(255) NOT NULL,
     student_id     VARCHAR(255) NOT NULL,
     submitted_at   TIMESTAMPTZ  NOT NULL,
+    -- Cuánto siente el ESTUDIANTE que aprendió. No es una nota.
     rating         SMALLINT     NOT NULL CHECK (rating BETWEEN 1 AND 5),
     comment        TEXT,
+    -- Lo que la telemetría no puede saber: cuánto tiempo le dedicó de verdad
+    -- (incluido fuera de Jupyter) y por qué se frenó. Ver migracion_v4.sql.
+    tiempo         SMALLINT     CHECK (tiempo BETWEEN 1 AND 4),
+    freno          VARCHAR(24)  CHECK (freno IN
+        ('enunciado', 'concepto', 'sintaxis', 'error', 'tiempo', 'nada')),
+    -- Las pone el servidor, no el alumno.
+    entregado      BOOLEAN,
+    origen         VARCHAR(16),
     UNIQUE (course_id, cuadernillo_id, student_id)
 );
 
@@ -223,7 +232,21 @@ CREATE OR REPLACE VIEW cuadernillo_rating_summary AS
 SELECT
     course_id,
     cuadernillo_id,
-    COUNT(*)         AS total_ratings,
-    ROUND(AVG(rating), 2) AS avg_rating
+    COUNT(*)                                   AS total_ratings,
+    ROUND(AVG(rating), 2)                      AS avg_rating,
+    ROUND(AVG(tiempo), 2)                      AS avg_tiempo,
+    COUNT(tiempo)                              AS con_tiempo,
+    COUNT(comment)                             AS con_comentario,
+    COUNT(*) FILTER (WHERE entregado)          AS de_entregas,
+    COUNT(*) FILTER (WHERE entregado IS FALSE) AS de_no_entregas
 FROM cuadernillo_ratings
 GROUP BY course_id, cuadernillo_id;
+
+-- Cuántas personas señalaron cada freno: es lo que le dice al docente QUÉ
+-- reescribir. No es lo mismo que no se entienda el enunciado a que no sepan
+-- traducir la idea a Python.
+CREATE OR REPLACE VIEW cuadernillo_rating_frenos AS
+SELECT course_id, cuadernillo_id, freno, COUNT(*) AS personas
+FROM cuadernillo_ratings
+WHERE freno IS NOT NULL
+GROUP BY course_id, cuadernillo_id, freno;

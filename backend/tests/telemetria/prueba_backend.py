@@ -341,12 +341,32 @@ def caso_7_rating():
             "submitted_at": "2026-08-22T21:40:00.000Z", "rating": 3, "comment": "primero",
             "student_name": "Alumno de Prueba", "student_email": "prueba@ejemplo.test"}
     st1, r1 = http("POST", "/api/cuadernillos/ratings", base, token=tokens[A])
+    # El alumno puede contestar en dos pasos o volver a cambiar la estrella sin
+    # reenviar lo demas: lo que llega ausente NO borra lo que ya habia dicho.
     base2 = dict(base, rating=5, comment=None, submitted_at="2026-08-22T21:41:00.000Z")
     st2, r2 = http("POST", "/api/cuadernillos/ratings", base2, token=tokens[A])
-    filas = sql(f"select rating, comment is null, to_char(submitted_at at time zone 'UTC','HH24:MI:SS') from cuadernillo_ratings where student_id='{A}' and course_id='{C1}' and cuadernillo_id='{CUAD}'")
-    registrar("7a rating upsert: dos POST mismo alumno/cuadernillo -> 1 fila con el ultimo",
-              st1 == 201 and st2 == 201 and filas == [["5", "t", "21:41:00"]],
+    filas = sql(f"select rating, comment, to_char(submitted_at at time zone 'UTC','HH24:MI:SS') from cuadernillo_ratings where student_id='{A}' and course_id='{C1}' and cuadernillo_id='{CUAD}'")
+    registrar("7a rating upsert parcial: cambia la estrella y conserva el comentario",
+              st1 == 201 and st2 == 201 and filas == [["5", "primero", "21:41:00"]],
               f"status={st1},{st2} body={r1},{r2}\nfilas={filas}")
+
+    # Y si de verdad lo quiere borrar, manda el campo vacio (no ausente).
+    base3 = dict(base, rating=5, comment="", submitted_at="2026-08-22T21:42:00.000Z")
+    st3, r3 = http("POST", "/api/cuadernillos/ratings", base3, token=tokens[A])
+    borrado = sql(f"select comment is null from cuadernillo_ratings where student_id='{A}' and course_id='{C1}' and cuadernillo_id='{CUAD}'")
+    registrar("7a-bis rating: comentario vacio SI borra el anterior",
+              st3 == 201 and borrado == [["t"]],
+              f"status={st3} body={r3}\nfilas={borrado}")
+
+    # Las dos preguntas nuevas: rango de tiempo y lista cerrada de frenos.
+    st4, r4 = http("POST", "/api/cuadernillos/ratings",
+                   dict(base, rating=4, tiempo=9, submitted_at="2026-08-22T21:43:00.000Z"),
+                   token=tokens[A])
+    registrar("7a-ter rating: tiempo fuera de 1..4 -> 400", st4 == 400, f"status={st4} body={r4}")
+    st5, r5 = http("POST", "/api/cuadernillos/ratings",
+                   dict(base, rating=4, freno="loquesea", submitted_at="2026-08-22T21:43:00.000Z"),
+                   token=tokens[A])
+    registrar("7a-quater rating: freno fuera de la lista -> 400", st5 == 400, f"status={st5} body={r5}")
 
     # NEGATIVO: token de A, student_id=B en el cuerpo
     falso = dict(base, student_id=B, rating=1, comment="suplantado")

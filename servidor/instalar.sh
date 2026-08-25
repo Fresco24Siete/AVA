@@ -207,13 +207,14 @@ docker inspect --format '{{.State.Health.Status}}' postgres-db 2>/dev/null | gre
 # (database/schema_v2.sql va montado en docker-entrypoint-initdb.d), pero la
 # migración v3 —la tabla de estudiantes— es posterior y hay que aplicarla
 # aparte. Es idempotente: se puede correr siempre.
-info "aplicando la migración v3…"
-if docker exec -i postgres-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -q -v ON_ERROR_STOP=1' \
-        < database/migracion_v3.sql >/dev/null 2>&1; then
-    ok "esquema al día"
-else
-    mal "la migración v3 falló"
-fi
+info "aplicando las migraciones…"
+fallo_migracion=0
+for m in database/migracion_v3.sql database/migracion_v4.sql; do
+    [ -f "$m" ] || continue
+    docker exec -i postgres-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -q -v ON_ERROR_STOP=1' \
+        < "$m" >/dev/null 2>&1 || { mal "falló $m"; fallo_migracion=1; }
+done
+[ "$fallo_migracion" -eq 0 ] && ok "esquema al día (v3 y v4)"
 
 # --- 5. ¿quedó funcionando? --------------------------------------------------
 paso "5. Comprobaciones"

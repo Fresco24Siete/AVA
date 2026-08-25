@@ -302,54 +302,24 @@ function notebookDosEjercicios(doc) {
   return { s1, t1, s2, t2, celdas: [s1, t1, s2, t2] };
 }
 
-caso('6a. Rating (AUDITORIA 6.6, corregido): ultima prueba pasa con input_prompt_number="*" en finished_execute -> SI se ofrece la tarjeta', () => {
-  const doc = crearDocumento(); const nb = notebookDosEjercicios(doc);
-  const env = cargarEntorno(nb.celdas);
-  ejecutar(env, nb.t1, [], 5);           // ya tiene numero (reply llego antes)
-  igual(env.fetches.length, 1); igual(env.fetches[0].body.validation_result, 'passed');
-  afirmar(env.doc.getElementById('nbgrader-rating-card') === null, 'con una prueba pendiente no se ofrece');
-  ejecutar(env, nb.t2, [], '*');         // como en nbclassic: finished_iopub antes que execute_reply
-  igual(env.fetches.length, 2); igual(env.fetches[1].body.validation_result, 'passed', 'el evento si reporta passed');
-  const tarjeta = env.doc.getElementById('nbgrader-rating-card');
-  afirmar(tarjeta !== null, 'la tarjeta debe ofrecerse aunque el prompt de la celda recien ejecutada sea "*"');
-  afirmar(tarjeta.parentNode === nb.t2.element[0], 'insertada en la ultima celda de prueba');
-});
-
-caso('6b. Rating: con input_prompt_number numerico en finished_execute SI se ofrece, y enviar hace fetch cuadernillo_rating', () => {
+caso('6. La valoracion YA NO se ofrece dentro del cuadernillo (se pide en el panel)', () => {
+  // Estaba condicionada a aprobar TODOS los ejercicios, asi que el que se
+  // atascaba y entregaba a medias -- el que mas tiene que contar -- no la veia
+  // nunca; y al que la veia le aparecia enterrada en la ultima celda de prueba.
+  // Ahora se pide en el panel del alumno, donde vuelve despues de entregar y
+  // desde donde ademas puede cambiarla.
   const doc = crearDocumento(); const nb = notebookDosEjercicios(doc);
   const env = cargarEntorno(nb.celdas);
   ejecutar(env, nb.t1, [], 5);
   ejecutar(env, nb.t2, [], 6);
-  const tarjeta = env.doc.getElementById('nbgrader-rating-card');
-  afirmar(tarjeta !== null, 'tarjeta ofrecida');
-  afirmar(tarjeta.parentNode === nb.t2.element[0], 'insertada en la ultima celda de prueba');
-  const btn = tarjeta.querySelector('#nbg-rating-send');
-  afirmar(btn.disabled === true, 'boton deshabilitado al inicio');
-  btn.dispatch('click');
-  igual(env.fetches.length, 2, 'click sin estrella no envia');
-  const stars = tarjeta.querySelectorAll('.nbg-star'); igual(stars.length, 5);
-  stars[3].dispatch('click');
-  afirmar(btn.disabled === false, 'boton habilitado tras elegir estrella');
-  tarjeta.querySelector('#nbg-comment').value = '  muy bueno  ';
-  btn.dispatch('click');
-  igual(env.fetches.length, 3);
-  const b = env.fetches[2].body;
-  igual(b.tipo_evento, 'cuadernillo_rating'); igual(b.rating, 4); igual(b.comment, 'muy bueno');
-  afirmar(ISO.test(b.submitted_at), 'submitted_at ISO');
-  igual(Object.keys(b).sort(), ['comment', 'cuadernillo', 'rating', 'submitted_at', 'tipo_evento']);
-  igual(env.fetches[2].options.headers['X-XSRFToken'], 'abc');
-  btn.dispatch('click');
-  igual(env.fetches.length, 3, 'no se reenvia el rating');
-  const st = JSON.parse(env.localStorage.getItem('nbgrader-metrics:semana_01.ipynb'));
-  igual(st.rating_enviado, true);
+  igual(env.fetches.length, 2, 'los dos intentos si se reportan');
+  igual(env.fetches[1].body.validation_result, 'passed');
+  afirmar(env.doc.getElementById('nbgrader-rating-card') === null,
+          'aprobar todo ya no debe pintar ninguna tarjeta de valoracion');
+  const ratings = env.fetches.filter(f => f.body.tipo_evento === 'cuadernillo_rating');
+  igual(ratings.length, 0, 'y no se manda ningun evento de valoracion desde el notebook');
 });
 
-caso('6c. Rating: la tarjeta tampoco aparece si otra prueba nunca se ejecuto (prompt null) aunque la ultima pase', () => {
-  const doc = crearDocumento(); const nb = notebookDosEjercicios(doc);
-  const env = cargarEntorno(nb.celdas);
-  ejecutar(env, nb.t2, [], 6);
-  afirmar(env.doc.getElementById('nbgrader-rating-card') === null);
-});
 
 caso('7. Limitacion: prueba VACIA o sin asserts (sin outputs de error) -> passed', () => {
   const doc = crearDocumento(); const nb = notebookBasico(doc);
@@ -448,21 +418,6 @@ casoAsync('11c. El puente acepta (204) -> el buffer queda vacio y no hay avisos'
   const st = JSON.parse(env.localStorage.getItem('nbgrader-metrics:semana_01.ipynb'));
   igual(st.errores.ejercicio_1, []);
   afirmar(!env.consola.some(l => l[0] === 'warn'), 'sin avisos');
-});
-
-casoAsync('11d. Rating rechazado por el puente -> se puede volver a enviar', async () => {
-  const doc = crearDocumento(); const nb = notebookDosEjercicios(doc);
-  const env = cargarEntorno(nb.celdas, { respuesta: { ok: false, status: 502 } });
-  ejecutar(env, nb.t1, [], 5); ejecutar(env, nb.t2, [], 6);
-  const tarjeta = env.doc.getElementById('nbgrader-rating-card');
-  afirmar(tarjeta !== null, 'tarjeta ofrecida');
-  tarjeta.querySelectorAll('.nbg-star')[2].dispatch('click');
-  tarjeta.querySelector('#nbg-rating-send').dispatch('click');
-  let st = JSON.parse(env.localStorage.getItem('nbgrader-metrics:semana_01.ipynb'));
-  igual(st.rating_enviado, true, 'se marca como enviado al pulsar');
-  await tick();
-  st = JSON.parse(env.localStorage.getItem('nbgrader-metrics:semana_01.ipynb'));
-  igual(st.rating_enviado, false, 'tras el 502 se desmarca para poder reintentar');
 });
 
 (async () => {

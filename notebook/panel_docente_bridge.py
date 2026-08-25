@@ -612,6 +612,117 @@ def _paso(hecho):
             else '<span class="tenue">no</span>')
 
 
+# Cómo se leen las respuestas del alumno. El orden de FRENOS_TEXTO es el mismo
+# que ve el estudiante, para que el docente reconozca lo que le preguntaron.
+TIEMPOS_TEXTO = {1: "menos de 1 h", 2: "1 a 2 h", 3: "2 a 4 h", 4: "más de 4 h"}
+FRENOS_TEXTO = {
+    "enunciado": "No entendían qué se pedía",
+    "concepto": "No les quedó claro el tema de la clase",
+    "sintaxis": "Sabían qué hacer, no cómo escribirlo",
+    "error": "No entendían el error del corrector",
+    "tiempo": "No les alcanzó el tiempo",
+    "nada": "Les fluyó",
+}
+# Qué hacer con cada freno. Es la razón de que la lista sea cerrada: cada
+# respuesta apunta a una acción distinta sobre el cuadernillo siguiente.
+FRENOS_ACCION = {
+    "enunciado": "reescribir el enunciado",
+    "concepto": "retomarlo en clase",
+    "sintaxis": "más ejemplos de código",
+    "error": "mensajes de error más claros",
+    "tiempo": "acortar el cuadernillo",
+    "nada": "—",
+}
+
+
+def _seccion_valoraciones(datos, activo=""):
+    """Lo que los alumnos dijeron de cada cuadernillo.
+
+    Es la contraparte de «Qué cuesta y dónde se atascan»: allí está lo que el
+    sistema midió, aquí lo que solo se puede saber preguntando. Juntos separan
+    dos casos que en la telemetría se ven idénticos: un cuadernillo LARGO
+    (mucho tiempo, pocos intentos) de uno DIFÍCIL (mucho tiempo, muchos
+    intentos).
+    """
+    valoraciones = (datos or {}).get("valoraciones", [])
+    if not valoraciones:
+        return ('<div class="caja vacia">Todavía nadie ha valorado un cuadernillo. '
+                '<span class="tenue">Al alumno se le pide en su panel, justo '
+                'después de entregar.</span></div>')
+
+    frenos = {}
+    for f in (datos or {}).get("frenos", []):
+        frenos.setdefault(f["cuadernillo_id"], []).append(f)
+    comentarios = {}
+    for c in (datos or {}).get("comentarios", []):
+        comentarios.setdefault(c["cuadernillo_id"], []).append(c)
+
+    def cuerpo(items):
+        v = items[0]
+        n = v.get("respuestas", 0)
+        aprendizaje = v.get("aprendizaje")
+        tiempo = v.get("tiempo_medio")
+
+        estrellas = ""
+        if aprendizaje is not None:
+            llenas = int(round(float(aprendizaje)))
+            estrellas = (f'<span class="estrellas">{"★" * llenas}{"☆" * (5 - llenas)}</span> '
+                         f'<b>{float(aprendizaje):.1f}</b>')
+        else:
+            estrellas = '<span class="tenue">—</span>'
+
+        if tiempo is not None:
+            cerca = min(TIEMPOS_TEXTO, key=lambda k: abs(k - float(tiempo)))
+            reloj = (f'<b>{TIEMPOS_TEXTO[cerca]}</b> '
+                     f'<span class="tenue">({v.get("con_tiempo", 0)} de {n} contestaron)</span>')
+        else:
+            reloj = '<span class="tenue">nadie contestó</span>'
+
+        quienes = []
+        if v.get("de_entregas"):
+            quienes.append(f'{v["de_entregas"]} que entregaron')
+        if v.get("de_abandonos"):
+            quienes.append(f'<b class="mal">{v["de_abandonos"]} que no entregaron</b>')
+
+        filas = (
+            f'<tr><td>Cuánto sienten que aprendieron</td>'
+            f'<td class="num">{estrellas}</td></tr>'
+            f'<tr><td>Tiempo que le dedicaron</td><td class="num">{reloj}</td></tr>'
+            f'<tr><td>Quién respondió</td>'
+            f'<td class="num">{" · ".join(quienes) or "—"}</td></tr>')
+
+        for f in frenos.get(v["cuadernillo_id"], []):
+            etiqueta = FRENOS_TEXTO.get(f["freno"], f["freno"])
+            accion = FRENOS_ACCION.get(f["freno"], "")
+            marca = "" if f["freno"] == "nada" else ' class="mal"'
+            filas += (
+                f'<tr><td>{html.escape(etiqueta)} '
+                f'<div class="tenue chico">{html.escape(accion)}</div></td>'
+                f'<td class="num"><b{marca}>{f["personas"]}</b> '
+                f'<span class="tenue">de {n}</span></td></tr>')
+
+        for c in comentarios.get(v["cuadernillo_id"], []):
+            quien = ("" if c.get("entregado") is not False
+                     else ' <span class="tenue">· no entregó</span>')
+            filas += (
+                f'<tr><td colspan="2"><div class="tenue chico">Comentario{quien}'
+                f'</div>{html.escape(c["comentario"])}</td></tr>')
+        return filas
+
+    def resumen(items):
+        v = items[0]
+        n = v.get("respuestas", 0)
+        texto = f'{n} respuesta{"" if n == 1 else "s"}'
+        if v.get("aprendizaje") is not None:
+            texto += f' · aprendizaje {float(v["aprendizaje"]):.1f}/5'
+        return texto
+
+    return _desplegables(
+        _grupos_por_cuadernillo(valoraciones, "cuadernillo_id", activo), activo,
+        '<tr><th>Qué dijeron</th><th class="num">Cuántos</th></tr>',
+        cuerpo, resumen)
+
+
 def _seccion_dificultad(datos, activo=""):
     ejercicios = (datos or {}).get("ejercicios", [])
     if not ejercicios:
@@ -821,6 +932,7 @@ ESTILO = f"""
  .gcod{{font-size:12.5px}}
  .gres{{margin-left:auto;font-size:13.5px;color:{GRIS};white-space:nowrap}}
  .gtabla{{overflow-x:auto}}
+ .estrellas{{color:{AMBAR};letter-spacing:1px}}
  .comps{{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));margin-bottom:12px}}
  .comp{{background:#fff;border:1px solid {BORDE};border-radius:8px;padding:14px 16px}}
  .comp-id{{font-size:12px;color:{GRIS};text-transform:uppercase;
@@ -886,6 +998,14 @@ reales les costó a los que lo resolvieron. «Atascado» es quien escribió una
 respuesta, no le pasa la prueba y no ha vuelto a conseguirlo. Ejecutar la celda
 vacía no cuenta.</p>
 {_seccion_dificultad(datos, activo)}
+
+<h2>Qué dicen ellos del cuadernillo</h2>
+<p class="sub2">Lo que solo se puede saber preguntando: cuánto sienten que
+aprendieron, cuánto tiempo les tomó de verdad —incluido el que trabajaron fuera
+de Jupyter— y qué los frenó. Cruzado con la tabla de arriba distingue un
+cuadernillo <b>largo</b> (mucho tiempo, pocos intentos) de uno <b>difícil</b>
+(mucho tiempo y muchos intentos).</p>
+{_seccion_valoraciones(datos, activo)}
 
 <h2>Lo que se están equivocando igual</h2>
 <p class="sub2">El mismo error en varias personas. Suele ser un tema para

@@ -283,6 +283,78 @@ type SaludDato struct {
 // Salud: si el panel muestra ceros, esto dice si es que nadie ha trabajado o es
 // que el dato no está llegando. Sin esta sección, un fallo de la telemetría se
 // lee como «mis estudiantes no hacen nada».
+// ValoracionCuadernillo: lo que los alumnos dijeron de un cuadernillo.
+//
+// Hasta ahora esto no se leía en ninguna parte: el alumno valoraba y el dato
+// caía en un pozo. La vista cuadernillo_rating_summary llevaba meses creada sin
+// que nadie la consultara.
+type ValoracionCuadernillo struct {
+	CuadernilloID string   `db:"cuadernillo_id" json:"cuadernillo_id"`
+	Respuestas    int      `db:"respuestas" json:"respuestas"`
+	Aprendizaje   *float64 `db:"aprendizaje" json:"aprendizaje"`
+	TiempoMedio   *float64 `db:"tiempo_medio" json:"tiempo_medio"`
+	ConTiempo     int      `db:"con_tiempo" json:"con_tiempo"`
+	DeEntregas    int      `db:"de_entregas" json:"de_entregas"`
+	DeAbandonos   int      `db:"de_abandonos" json:"de_abandonos"`
+}
+
+// PorValoracion: el resumen por cuadernillo. Ordenado por cuadernillo para que
+// el panel lo pueda agrupar como el resto.
+func (r *PanelDocenteRepository) PorValoracion(curso string) ([]ValoracionCuadernillo, error) {
+	salida := []ValoracionCuadernillo{}
+	err := r.db.Select(&salida, `
+		SELECT cuadernillo_id,
+		       total_ratings                     AS respuestas,
+		       avg_rating                        AS aprendizaje,
+		       avg_tiempo                        AS tiempo_medio,
+		       con_tiempo,
+		       de_entregas,
+		       COALESCE(de_no_entregas, 0)       AS de_abandonos
+		  FROM cuadernillo_rating_summary
+		 WHERE course_id = $1
+		 ORDER BY cuadernillo_id`, curso)
+	return salida, err
+}
+
+// FrenoCuadernillo: cuántas personas señalaron cada freno. Es lo que le dice al
+// docente QUÉ reescribir, que el número de estrellas por sí solo no dice.
+type FrenoCuadernillo struct {
+	CuadernilloID string `db:"cuadernillo_id" json:"cuadernillo_id"`
+	Freno         string `db:"freno" json:"freno"`
+	Personas      int    `db:"personas" json:"personas"`
+}
+
+func (r *PanelDocenteRepository) PorFreno(curso string) ([]FrenoCuadernillo, error) {
+	salida := []FrenoCuadernillo{}
+	err := r.db.Select(&salida, `
+		SELECT cuadernillo_id, freno, personas
+		  FROM cuadernillo_rating_frenos
+		 WHERE course_id = $1
+		 ORDER BY cuadernillo_id, personas DESC`, curso)
+	return salida, err
+}
+
+// ComentarioCuadernillo: lo que escribieron a mano, sin nombre.
+//
+// Va sin student_id a propósito: si el docente puede ver quién escribió cada
+// comentario, el alumno deja de escribir lo que piensa. Y lo que se busca aquí
+// es justamente lo que no se atrevería a decir en clase.
+type ComentarioCuadernillo struct {
+	CuadernilloID string `db:"cuadernillo_id" json:"cuadernillo_id"`
+	Comentario    string `db:"comentario" json:"comentario"`
+	Entregado     *bool  `db:"entregado" json:"entregado"`
+}
+
+func (r *PanelDocenteRepository) PorComentario(curso string) ([]ComentarioCuadernillo, error) {
+	salida := []ComentarioCuadernillo{}
+	err := r.db.Select(&salida, `
+		SELECT cuadernillo_id, comment AS comentario, entregado
+		  FROM cuadernillo_ratings
+		 WHERE course_id = $1 AND comment IS NOT NULL AND btrim(comment) <> ''
+		 ORDER BY cuadernillo_id, submitted_at DESC`, curso)
+	return salida, err
+}
+
 func (r *PanelDocenteRepository) Salud(curso string) (SaludDato, error) {
 	var s SaludDato
 	err := r.db.Get(&s, `

@@ -286,122 +286,16 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
     // (ver evaluar_celda), así que sin esta salvedad la última prueba del
     // cuadernillo siempre contaba como no ejecutada y la tarjeta de valoración
     // no aparecía nunca: cuadernillo_ratings se quedaba vacía.
-    function verificar_finalizacion_cuadernillo(celda_recien_ejecutada) {
-        if (!Jupyter || !Jupyter.notebook) return;
-        var cells = Jupyter.notebook.get_cells();
-        var evalCells = cells.filter(es_celda_de_prueba);
-
-        if (evalCells.length === 0) return;
-
-        var puntajeObtenido = 0;
-        var puntajeMaximo = 0;
-        var todosAprobados = true;
-
-        for (var i = 0; i < evalCells.length; i++) {
-            var cell = evalCells[i];
-            var pMax = cell.metadata.nbgrader.points || 1;
-            puntajeMaximo += pMax;
-
-            if (evaluar_celda(cell, cell === celda_recien_ejecutada).exito) {
-                puntajeObtenido += pMax;
-            } else {
-                todosAprobados = false;
-            }
-        }
-
-        if (!todosAprobados) return;
-
-        // Cuadernillo completo. En vez de auto-enviar una nota, se le pide al
-        // alumno que CALIFIQUE el cuadernillo (retroalimentación 1-5 + comentario,
-        // sección 4/5.2). El evento de rating se envía una sola vez por alumno /
-        // cuadernillo (flag rating_enviado). Si ya lo calificó o ya se mostró el
-        // formulario, no hacemos nada.
-        if (estado.rating_enviado) return;
-        mostrar_rating_ui();
-    }
-
-    // --- UI de calificación del cuadernillo (sección 5.2) ---------------------
-    function enviar_rating(rating, comment) {
-        if (estado.rating_enviado) return;
-        estado.rating_enviado = true;
-        guardar_estado(estado);
-        enviar_evento({
-            tipo_evento: "cuadernillo_rating",
-            cuadernillo: codigo_cuadernillo(),
-            submitted_at: new Date().toISOString(),
-            rating: rating,
-            comment: comment || null
-        }, function () {
-            // No llegó: que se pueda volver a ofrecer en vez de darlo por hecho.
-            estado.rating_enviado = false;
-            guardar_estado(estado);
-        });
-        console.log('[nbgrader-metrics] rating del cuadernillo enviado:', rating);
-    }
-
-    function mostrar_rating_ui() {
-        if (!Jupyter || !Jupyter.notebook) return;
-        if (document.getElementById('nbgrader-rating-card')) return; // ya visible
-
-        var cont = document.createElement('div');
-        cont.id = 'nbgrader-rating-card';
-        cont.style.cssText = 'margin:16px 0;padding:18px;border-radius:10px;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border:1px solid rgba(56,189,248,0.25);color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;box-shadow:0 6px 18px rgba(0,0,0,0.25);';
-
-        var estrellas = '';
-        for (var s = 1; s <= 5; s++) {
-            estrellas += '<span class="nbg-star" data-v="' + s + '" style="cursor:pointer;font-size:30px;color:#475569;transition:color .15s;">★</span>';
-        }
-
-        cont.innerHTML =
-            '<div style="font-size:16px;font-weight:700;color:#6ee7b7;margin-bottom:4px;">✅ ¡Completaste el cuadernillo!</div>' +
-            '<div style="font-size:13px;color:#94a3b8;margin-bottom:12px;">Antes de terminar, calíficalo para ayudarnos a mejorarlo.</div>' +
-            '<div id="nbg-stars" style="display:flex;gap:6px;margin-bottom:12px;">' + estrellas + '</div>' +
-            '<textarea id="nbg-comment" rows="2" placeholder="Comentario (opcional)" style="width:100%;box-sizing:border-box;background:#020617;color:#e2e8f0;border:1px solid rgba(148,163,184,0.3);border-radius:6px;padding:8px;font-size:13px;resize:vertical;"></textarea>' +
-            '<div style="margin-top:10px;display:flex;align-items:center;gap:10px;">' +
-                '<button id="nbg-rating-send" disabled style="background:#38bdf8;color:#04263a;border:none;border-radius:6px;padding:8px 16px;font-weight:700;font-size:13px;cursor:not-allowed;opacity:.5;">Enviar calificación</button>' +
-                '<span id="nbg-rating-msg" style="font-size:12px;color:#94a3b8;"></span>' +
-            '</div>';
-
-        // Insertar al final de la última celda evaluable
-        var cells = Jupyter.notebook.get_cells();
-        var last = null;
-        for (var i = 0; i < cells.length; i++) {
-            if (es_celda_de_prueba(cells[i])) last = cells[i];
-        }
-        var host = last && last.element && last.element[0] ? last.element[0] : document.body;
-        host.appendChild(cont);
-
-        var seleccion = 0;
-        var stars = cont.querySelectorAll('.nbg-star');
-        var btn = cont.querySelector('#nbg-rating-send');
-        function pintar(n) {
-            for (var k = 0; k < stars.length; k++) {
-                stars[k].style.color = (k < n) ? '#fbbf24' : '#475569';
-            }
-        }
-        for (var j = 0; j < stars.length; j++) {
-            (function (star) {
-                star.addEventListener('mouseenter', function () { pintar(parseInt(star.dataset.v, 10)); });
-                star.addEventListener('mouseleave', function () { pintar(seleccion); });
-                star.addEventListener('click', function () {
-                    seleccion = parseInt(star.dataset.v, 10);
-                    pintar(seleccion);
-                    btn.disabled = false;
-                    btn.style.cursor = 'pointer';
-                    btn.style.opacity = '1';
-                });
-            })(stars[j]);
-        }
-        btn.addEventListener('click', function () {
-            if (seleccion < 1) return;
-            var comment = cont.querySelector('#nbg-comment').value.trim();
-            enviar_rating(seleccion, comment);
-            btn.disabled = true;
-            btn.style.cursor = 'default';
-            btn.style.opacity = '.5';
-            cont.querySelector('#nbg-rating-msg').textContent = '¡Gracias por tu calificación!';
-        });
-    }
+    // La valoración del cuadernillo YA NO VIVE AQUÍ.
+    //
+    // Estaba condicionada a aprobar TODOS los ejercicios y se insertaba dentro
+    // de la última celda de prueba. Dos problemas: quien se atascó y entregó a
+    // medias —el que más tiene que contar— no la veía nunca, y quien sí la veía
+    // se la encontraba enterrada a mitad del notebook.
+    //
+    // Ahora se pide en el panel del alumno (panel_bridge.py), que es donde
+    // vuelve después de entregar, y desde ahí puede además cambiarla. La barra
+    // de abajo lo invita en el momento de máxima atención: justo al entregar.
 
     function on_execute(evt, data) {
         var cell = data.cell;
@@ -495,7 +389,6 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
             estado.errores[cod] = errores_acumulados.concat(estado.errores[cod] || []);
             guardar_estado(estado);
         });
-        verificar_finalizacion_cuadernillo(cell);
     }
 
     // Al cerrar/recargar la pestaña, si quedaron errores en buffer de ejercicios
@@ -646,7 +539,14 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
                     btn.disabled = false;
                     if (d && d.ok) {
                         msg.style.color = '#0f8a4a';
-                        msg.textContent = 'Entregado. Tu profesor ya lo tiene.';
+                        // Es el instante de máxima atención: acaba de entregar y
+                        // está mirando la barra. Se le invita a valorar aquí, pero
+                        // el formulario vive en el panel, no duplicado en dos sitios.
+                        msg.innerHTML = 'Entregado. Tu profesor ya lo tiene. ' +
+                            '<a href="' + base_url + 'panel/valorar/' +
+                            encodeURIComponent(codigo) + '" style="color:#2a78d6">' +
+                            'Cuéntanos cómo te fue</a> ' +
+                            '<span style="color:#8b94a1">(30 s)</span>';
                         btn.textContent = 'Entregar de nuevo';
                     } else {
                         msg.style.color = '#c8392b';

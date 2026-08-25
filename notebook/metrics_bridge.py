@@ -171,6 +171,57 @@ class MetricsEventoHandler(_BaseHandler):
         self.finish()
 
 
+def enviar_evento_sincrono(evento):
+    """Manda un evento al backend desde el servidor, sin pasar por el navegador.
+
+    Existe para la valoración del cuadernillo, que se envía desde el panel del
+    alumno (panel_bridge) y no desde una celda. Comparte con el handler lo que
+    importa: la identidad la pone el servidor con lo que dejó el Hub, y el token
+    sale del entorno del contenedor. Así una valoración no se puede falsificar
+    desde una celda de código ni desde la consola del navegador.
+
+    Devuelve True si el backend la aceptó. Es síncrona a propósito: quien la
+    llama es un handler que responde con una redirección y necesita saber si
+    guardó antes de decirle al alumno que quedó registrada.
+    """
+    import urllib.request as _req
+
+    evento = dict(evento or {})
+    cuadernillo = str(evento.pop("cuadernillo", "") or "").strip()
+    if not _NOMBRE_SEGURO.match(cuadernillo):
+        cuadernillo = ""
+    evento.update(IDENTIDAD)
+    evento["cuadernillo_id"] = cuadernillo or IDENTIDAD.get("cuadernillo_id") or ""
+
+    tipo_evento = evento.pop("tipo_evento", None)
+    api_url = _url_backend(tipo_evento)
+    if api_url is None:
+        log.error("[metrics_bridge] tipo de evento desconocido '%s'.", tipo_evento)
+        return False
+
+    if os.environ.get("ENVIAR_AL_BACKEND", "false").lower() not in ("true", "1", "yes"):
+        log.info("[metrics_bridge] simulación: '%s' no se envió:\n%s",
+                 tipo_evento, json.dumps(evento, indent=2, ensure_ascii=False))
+        return True
+
+    token = os.environ.get("STUDENT_METRICS_TOKEN")
+    if not token:
+        log.error("[metrics_bridge] sin STUDENT_METRICS_TOKEN: evento descartado.")
+        return False
+
+    try:
+        peticion = _req.Request(
+            api_url, data=json.dumps(evento).encode("utf-8"),
+            headers={"Authorization": f"Bearer {token}",
+                     "Content-Type": "application/json"},
+            method="POST")
+        with _req.urlopen(peticion, timeout=8) as resp:
+            return resp.status < 300
+    except Exception as err:
+        log.error("[metrics_bridge] no se pudo enviar '%s': %s", tipo_evento, err)
+        return False
+
+
 def _add_route(web_app):
     base_url = web_app.settings.get("base_url", "/")
     route = base_url.rstrip("/") + "/nbgrader-metrics/evento"

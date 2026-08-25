@@ -72,6 +72,23 @@ func (h *PanelDocenteHandler) PanelHandler(c *gin.Context) {
 	} else {
 		respuesta["malentendidos"] = v
 	}
+	// Lo que los alumnos dijeron del cuadernillo. Iba a la base desde hacía
+	// meses y no se leía en ninguna parte.
+	if v, err := h.repo.PorValoracion(curso); err != nil {
+		fallos = append(fallos, "valoraciones")
+	} else {
+		respuesta["valoraciones"] = v
+	}
+	if v, err := h.repo.PorFreno(curso); err != nil {
+		fallos = append(fallos, "frenos")
+	} else {
+		respuesta["frenos"] = v
+	}
+	if v, err := h.repo.PorComentario(curso); err != nil {
+		fallos = append(fallos, "comentarios")
+	} else {
+		respuesta["comentarios"] = v
+	}
 	if v, err := h.repo.EnRiesgo(curso); err != nil {
 		fallos = append(fallos, "en_riesgo")
 	} else {

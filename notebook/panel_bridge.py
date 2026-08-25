@@ -127,6 +127,31 @@ def _barra(hechos, total):
 
 
 ENTREGAS = os.path.join(CARPETA, ".ava_entregas.json")
+
+# Las dos preguntas de un toque que acompañan a las estrellas. Se eligieron con
+# una regla: no preguntar lo que la telemetría ya sabe. El sistema ya mide
+# cuántos intentos costó cada ejercicio y quién se atascó; lo que no puede saber
+# es cuánto tiempo le dedicó de verdad —incluido el que trabajó fuera de
+# Jupyter— ni POR QUÉ se frenó.
+TIEMPOS = [
+    (1, "Menos de 1 hora"),
+    (2, "Entre 1 y 2 horas"),
+    (3, "Entre 2 y 4 horas"),
+    (4, "Más de 4 horas"),
+]
+
+# Lista cerrada, no texto libre: cada opción es una acción distinta del docente
+# (reescribir el enunciado, repasar el concepto, dar más ejemplos de sintaxis,
+# explicar los errores del corrector, acortar el cuadernillo). En texto libre
+# esto no se podría agrupar.
+FRENOS = [
+    ("enunciado", "No entendí qué me pedían"),
+    ("concepto", "No me quedó claro el tema de la clase"),
+    ("sintaxis", "Sabía qué hacer, pero no cómo escribirlo en Python"),
+    ("error", "No entendí el error rojo que salía"),
+    ("tiempo", "No me alcanzó el tiempo"),
+    ("nada", "Nada, me fluyó"),
+]
 # Donde se guarda la corrección que el docente publicó con «Release Feedback».
 # El alumno no tiene otra vía para verla: assignment_list —la extensión de
 # nbgrader que la traería— está deshabilitada en su imagen a propósito.
@@ -329,6 +354,35 @@ def _tarjeta(nb, d, activo, entregado, base_url, correccion=False):
                    '<span class="tenue">sin entregar · el botón está dentro '
                    'del cuadernillo</span></div>')
 
+    # La valoración solo se ofrece cuando ya hay algo que valorar: o entregó, o
+    # el cuadernillo dejó de ser el de esta semana y no lo entregó. El segundo
+    # caso es a propósito: quien abandonó es quien más tiene que contar, y hasta
+    # ahora era justo el que no podía decir nada.
+    ya_valoro = d.get("valoracion_rating")
+    destino = base_url.rstrip("/") + "/panel/valorar/" + urllib.parse.quote(nb["id"])
+    if ya_valoro:
+        estrellas = "★" * int(ya_valoro) + "☆" * (5 - int(ya_valoro))
+        detalle = dict(TIEMPOS).get(d.get("valoracion_tiempo"))
+        valoracion = (
+            f'<div class="dato"><span class="et">Tu valoración</span>'
+            f'<span class="estrellas-mini">{estrellas}</span>'
+            + (f' <span class="tenue">· {html.escape(detalle)}</span>' if detalle else "")
+            + f' <a class="correccion" href="{html.escape(destino)}">cambiar</a></div>')
+    elif entregado:
+        valoracion = (
+            f'<div class="dato"><span class="et">Tu valoración</span>'
+            f'<a class="correccion" href="{html.escape(destino)}">'
+            f'Cuéntanos cómo te fue</a> '
+            f'<span class="tenue">· 30 segundos, no es una nota</span></div>')
+    elif activo and nb["id"] != activo:
+        valoracion = (
+            f'<div class="dato"><span class="et">Tu valoración</span>'
+            f'<a class="correccion" href="{html.escape(destino)}">'
+            f'¿Qué pasó con este?</a> '
+            f'<span class="tenue">· saber por qué no salió también ayuda</span></div>')
+    else:
+        valoracion = ""
+
     abandonos = d.get("abandonos", 0)
     plural = "ejercicio" if abandonos == 1 else "ejercicios"
     pendiente = (f'<div class="aviso-fila">Dejaste {abandonos} {plural} a '
@@ -339,7 +393,7 @@ def _tarjeta(nb, d, activo, entregado, base_url, correccion=False):
             f'{pendiente}</div>'
             f'<a class="abrir" href="{html.escape(_enlace(nb["archivo"], base_url))}">'
             f'Abrir cuadernillo</a></div>'
-            f'<div class="datos">{progreso}{nota}{entrega}</div></div>')
+            f'<div class="datos">{progreso}{nota}{entrega}{valoracion}</div></div>')
 
 
 def _html(datos, aviso, base_url="/"):
@@ -415,6 +469,7 @@ def _html(datos, aviso, base_url="/"):
    font-size:14px;font-weight:600;text-decoration:none;white-space:nowrap}}
  .abrir:hover{{filter:brightness(1.08);text-decoration:none}}
  .correccion{{margin-left:8px;font-size:13.5px;color:{AZUL};text-decoration:underline}}
+ .estrellas-mini{{color:{AMBAR};letter-spacing:1px}}
  .datos{{display:flex;gap:28px;flex-wrap:wrap;margin-top:14px;
    padding-top:14px;border-top:1px solid {BORDE}}}
  .dato{{font-size:14.5px;color:{TINTA}}}
@@ -450,6 +505,133 @@ conserva siempre.</p>
 {bloque_comp}
 </div>
 </body></html>"""
+
+
+def _html_valorar(codigo, entregado, previa, base_url, aviso=""):
+    """La página donde el alumno valora un cuadernillo.
+
+    Sin una línea de JavaScript, como el resto de este archivo: son radios
+    estilados como fichas con `input:checked + label`. Un toque marca, el botón
+    envía. Así funciona igual en cualquier navegador y no depende de que cargue
+    nada más.
+
+    El orden importa: la única pregunta obligatoria va primera y sola, para que
+    quien conteste y se vaya deje ya el dato más valioso.
+    """
+    raiz = base_url.rstrip("/")
+    titulo = html.escape(_titulo(codigo))
+    prev_rating = (previa or {}).get("rating")
+    prev_tiempo = (previa or {}).get("tiempo")
+    prev_freno = (previa or {}).get("freno")
+
+    # Las estrellas van en orden inverso en el HTML para poder pintar de dorado
+    # la marcada y todas las de su izquierda solo con CSS (~ selecciona hermanos
+    # posteriores, así que el 5 se escribe primero).
+    estrellas = ""
+    for n in (5, 4, 3, 2, 1):
+        marcado = " checked" if prev_rating == n else ""
+        estrellas += (
+            f'<input type="radio" id="e{n}" name="rating" value="{n}" required{marcado}>'
+            f'<label for="e{n}" title="{n} de 5">★</label>')
+
+    def fichas(nombre, opciones, previo):
+        salida = ""
+        for valor, texto in opciones:
+            marcado = " checked" if str(previo) == str(valor) else ""
+            ident = f"{nombre}_{valor}"
+            salida += (
+                f'<input type="radio" id="{ident}" name="{nombre}" value="{valor}"{marcado}>'
+                f'<label for="{ident}">{html.escape(texto)}</label>')
+        return salida
+
+    contexto = ("Ya lo entregaste." if entregado else
+                "No alcanzaste a entregarlo, y justo por eso queremos saber qué pasó.")
+    banda = f'<div class="banda">{html.escape(aviso)}</div>' if aviso else ""
+
+    return f"""<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Valorar {titulo}</title>
+<style>
+ *{{box-sizing:border-box}}
+ body{{margin:0;padding:28px 20px 60px;background:#f6f7f9;color:{TINTA};
+   font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.5}}
+ .caja{{max-width:640px;margin:0 auto}}
+ a.volver{{color:{AZUL};text-decoration:none;font-size:14.5px}}
+ h1{{font-size:25px;margin:10px 0 4px}}
+ .sub{{color:{GRIS};margin:0 0 8px}}
+ .aclara{{background:#eef4fd;border-left:3px solid {AZUL};padding:10px 14px;
+   border-radius:4px;font-size:14.5px;margin:0 0 22px}}
+ .banda{{background:#fdf9ef;border-left:3px solid {AMBAR};padding:10px 14px;
+   border-radius:4px;margin-bottom:16px;font-size:14.5px}}
+ .grupo{{background:#fff;border:1px solid {BORDE};border-radius:8px;
+   padding:18px 20px;margin-bottom:14px}}
+ .preg{{font-weight:650;font-size:16px;margin-bottom:2px}}
+ .ayuda{{color:{GRIS};font-size:14px;margin-bottom:12px}}
+ .opcional{{color:{GRIS};font-weight:400;font-size:14px}}
+ /* Estrellas: el input se oculta y la etiqueta es lo que se ve y se toca. */
+ .estrellas{{display:flex;flex-direction:row-reverse;justify-content:flex-end;gap:4px}}
+ .estrellas input{{position:absolute;opacity:0;width:0;height:0}}
+ .estrellas label{{font-size:40px;line-height:1;color:#d8dde3;cursor:pointer;
+   transition:color .12s}}
+ .estrellas label:hover, .estrellas label:hover ~ label,
+ .estrellas input:checked ~ label{{color:{AMBAR}}}
+ .estrellas input:focus-visible + label{{outline:2px solid {AZUL};border-radius:4px}}
+ .extremos{{display:flex;justify-content:space-between;color:{GRIS};
+   font-size:13px;margin-top:2px;max-width:236px}}
+ .fichas{{display:flex;flex-wrap:wrap;gap:8px}}
+ .fichas input{{position:absolute;opacity:0;width:0;height:0}}
+ .fichas label{{border:1px solid {BORDE};background:#fff;border-radius:20px;
+   padding:8px 15px;font-size:14.5px;cursor:pointer;transition:all .12s}}
+ .fichas label:hover{{border-color:{AZUL};color:{AZUL}}}
+ .fichas input:checked + label{{background:{AZUL};border-color:{AZUL};color:#fff}}
+ .fichas input:focus-visible + label{{outline:2px solid {AZUL};outline-offset:2px}}
+ textarea{{width:100%;min-height:80px;border:1px solid {BORDE};border-radius:6px;
+   padding:10px 12px;font:inherit;font-size:14.5px;resize:vertical}}
+ .enviar{{background:{AZUL};color:#fff;border:none;border-radius:6px;
+   padding:12px 26px;font:inherit;font-size:15.5px;font-weight:600;cursor:pointer}}
+ .enviar:hover{{filter:brightness(1.08)}}
+ .pie{{color:{GRIS};font-size:13.5px;margin-top:10px}}
+</style></head><body><div class="caja">
+<a class="volver" href="{raiz}/panel">← Mis cuadernillos</a>
+<h1>¿Cómo te fue con {titulo}?</h1>
+<p class="sub">{contexto}</p>
+<div class="aclara"><b>Esto lo lee tu profesor.</b> No es una nota y no afecta
+tu calificación: le sirve para armar mejor el cuadernillo de la otra semana.</div>
+{banda}
+<form method="post" action="{raiz}/panel/valorar/{urllib.parse.quote(codigo)}">
+  <div class="grupo">
+    <div class="preg">¿Qué tanto sientes que aprendiste?</div>
+    <div class="ayuda">Toca una estrella.</div>
+    <div class="estrellas">{estrellas}</div>
+    <div class="extremos"><span>1 · casi nada</span><span>5 · bastante</span></div>
+  </div>
+
+  <div class="grupo">
+    <div class="preg">¿Cuánto tiempo le metiste en total?
+      <span class="opcional">— opcional</span></div>
+    <div class="ayuda">Cuenta también lo que hiciste por fuera de Jupyter.</div>
+    <div class="fichas">{fichas("tiempo", TIEMPOS, prev_tiempo)}</div>
+  </div>
+
+  <div class="grupo">
+    <div class="preg">¿Qué fue lo que más te frenó?
+      <span class="opcional">— opcional</span></div>
+    <div class="ayuda">Escoge lo que más pesó.</div>
+    <div class="fichas">{fichas("freno", FRENOS, prev_freno)}</div>
+  </div>
+
+  <div class="grupo">
+    <div class="preg">¿Algo más que quieras decirle?
+      <span class="opcional">— opcional</span></div>
+    <div class="ayuda">Lo que te sirvió, lo que te sobró, lo que no se entendía.</div>
+    <textarea name="comment" maxlength="1000"
+      placeholder="Escribe aquí si quieres">{html.escape((previa or {}).get("comment") or "")}</textarea>
+  </div>
+
+  <button class="enviar" type="submit">Enviar</button>
+  <div class="pie">Puedes volver y cambiar tu respuesta cuando quieras.</div>
+</form>
+</div></body></html>"""
 
 
 class PanelHandler(_BaseHandler):
@@ -540,6 +722,109 @@ class CorreccionHandler(_BaseHandler):
         self.finish(cuerpo)
 
 
+class ValorarHandler(_BaseHandler):
+    """GET muestra el formulario, POST lo guarda y vuelve al panel.
+
+    La valoración viaja al backend por el mismo camino que la telemetría
+    (metrics_bridge), así que la identidad la pone el token del contenedor y no
+    el navegador: un alumno no puede valorar por otro aunque manipule el envío.
+    """
+
+    def _valoracion_previa(self, codigo):
+        """Lo que ya respondió, si respondió. Sale del backend, que es la verdad."""
+        datos, _ = _progreso()
+        for c in (datos or {}).get("cuadernillos", []):
+            if c.get("cuadernillo_id") == codigo and c.get("valoracion_rating"):
+                return {"rating": c.get("valoracion_rating"),
+                        "tiempo": c.get("valoracion_tiempo"),
+                        "freno": c.get("valoracion_freno"),
+                        "comment": None}
+        return None
+
+    @web.authenticated
+    def get(self, codigo):
+        codigo = urllib.parse.unquote(codigo or "").strip()
+        if codigo not in {c["id"] for c in _cuadernillos_en_disco()}:
+            self.set_status(404)
+            self.set_header("Content-Type", "text/html; charset=utf-8")
+            self.finish("<p>No encontré ese cuadernillo.</p>")
+            return
+        self.set_header("Content-Type", "text/html; charset=utf-8")
+        self.finish(_html_valorar(codigo, bool(_entregas().get(codigo)),
+                                  self._valoracion_previa(codigo),
+                                  self.settings.get("base_url", "/")))
+
+    @web.authenticated
+    def post(self, codigo):
+        codigo = urllib.parse.unquote(codigo or "").strip()
+        base = self.settings.get("base_url", "/").rstrip("/")
+        if codigo not in {c["id"] for c in _cuadernillos_en_disco()}:
+            self.set_status(404)
+            self.finish("<p>No encontré ese cuadernillo.</p>")
+            return
+
+        entregado = bool(_entregas().get(codigo))
+
+        try:
+            rating = int(self.get_body_argument("rating"))
+        except Exception:
+            rating = 0
+        if rating < 1 or rating > 5:
+            self.set_header("Content-Type", "text/html; charset=utf-8")
+            self.finish(_html_valorar(codigo, entregado, self._valoracion_previa(codigo),
+                                      self.settings.get("base_url", "/"),
+                                      aviso="Toca una estrella para poder enviar."))
+            return
+
+        # Los opcionales: vacío es «no contestó», que no es lo mismo que cero.
+        tiempo = self.get_body_argument("tiempo", "")
+        freno = self.get_body_argument("freno", "")
+        comentario = (self.get_body_argument("comment", "") or "").strip()[:1000]
+
+        evento = {
+            "tipo_evento": "cuadernillo_rating",
+            "cuadernillo": codigo,
+            "rating": rating,
+            # Se manda siempre, aunque esté vacío: así el alumno puede borrar
+            # lo que escribió antes. Ausente significaría «no lo toqué».
+            "comment": comentario,
+            "entregado": entregado,
+            "origen": "panel",
+        }
+        if tiempo.isdigit() and 1 <= int(tiempo) <= 4:
+            evento["tiempo"] = int(tiempo)
+        if freno in {f[0] for f in FRENOS}:
+            evento["freno"] = freno
+
+        ok = _enviar_valoracion(evento)
+        if not ok:
+            self.set_header("Content-Type", "text/html; charset=utf-8")
+            self.finish(_html_valorar(
+                codigo, entregado, self._valoracion_previa(codigo),
+                self.settings.get("base_url", "/"),
+                aviso="No se pudo guardar ahora mismo. Inténtalo otra vez en un momento."))
+            return
+
+        self.redirect(base + "/panel")
+
+
+def _enviar_valoracion(evento):
+    """Manda la valoración al backend reutilizando el puente de métricas.
+
+    No se hace una petición HTTP al propio servidor —tendría que autenticarse
+    contra sí mismo— sino que se llama a la función del puente, que es quien
+    sabe poner la identidad del alumno y el token del contenedor. Con eso, la
+    valoración no se puede falsificar desde una celda ni desde el navegador.
+    """
+    try:
+        import metrics_bridge
+        return metrics_bridge.enviar_evento_sincrono(evento)
+    except Exception as err:
+        log.warning("[panel] no se pudo guardar la valoración de %s: %s",
+                    evento.get("cuadernillo"), err)
+        return False
+
+
 def load_jupyter_server_extension(nbapp):
     if getattr(nbapp, "log", None) is not None:
         globals()["log"] = nbapp.log
@@ -551,6 +836,7 @@ def load_jupyter_server_extension(nbapp):
         (raiz + "/panel", PanelHandler),
         (raiz + "/panel/entregar", EntregarHandler),
         (raiz + r"/panel/correccion/([^/]+)", CorreccionHandler),
+        (raiz + r"/panel/valorar/([^/]+)", ValorarHandler),
     ])
     log.info("[panel_bridge] listo: panel de progreso en %s/panel", raiz)
 
