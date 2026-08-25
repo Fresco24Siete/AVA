@@ -369,8 +369,73 @@ done
 vivos=$("${COMPOSE[@]}" ps --services --filter status=running 2>/dev/null | wc -l)
 ok "$vivos servicios en marcha"
 
-# --- 6. lo que queda por hacer con permisos de administrador -----------------
-paso "6. Para publicarlo en internet"
+# --- 6. el indicador de la barra ---------------------------------------------
+# Vivía solo en instalar-servidor.sh, el script del enlace de instalación. Eso
+# dejaba fuera el camino de actualizar —que es este script— y el resultado era
+# que, tras una actualización, el icono seguía con el código viejo o
+# directamente no estaba, sin que nada lo dijera. Aquí se refresca siempre.
+paso "6. El indicador de la barra"
+
+INDICADOR="$HOME/.local/share/ava"
+if [ ! -f servidor/indicador/ava_indicador.py ]; then
+    aviso "no encuentro el indicador en el repositorio; me lo salto"
+elif $solo_verificar; then
+    if pgrep -f "ava_indicador.py" >/dev/null 2>&1; then
+        ok "el indicador está corriendo"
+    else
+        aviso "el indicador NO está corriendo (no verás el icono en la barra)"
+    fi
+else
+    mkdir -p "$INDICADOR" "$HOME/.config/autostart"
+    cp servidor/indicador/ava_indicador.py "$INDICADOR/"
+    rm -rf "$INDICADOR/iconos"
+    cp -r servidor/indicador/iconos "$INDICADOR/"
+    chmod +x "$INDICADOR/ava_indicador.py"
+
+    # Sin X-GNOME-Autostart-Delay: desde GNOME 49 el arranque de sesión lo
+    # gestiona systemd, que ignora esa clave. Esperar a que la barra esté lista
+    # es trabajo del propio programa, que vigila el bus.
+    cat > "$HOME/.config/autostart/ava-indicador.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Estado del AVA
+Comment=Indica en la barra superior si el servidor del curso está funcionando
+Exec=python3 $INDICADOR/ava_indicador.py
+Icon=$INDICADOR/iconos/ava-verde.svg
+Terminal=false
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+EOF
+    chmod 644 "$HOME/.config/autostart/ava-indicador.desktop"
+
+    # El icono lo pinta una extensión de GNOME. Si está instalada pero apagada,
+    # el programa corre y no se ve nada: el fallo más confuso de todos.
+    for ext in ubuntu-appindicators@ubuntu.com appindicatorsupport@rgcjonas.gmail.com; do
+        gnome-extensions enable "$ext" >/dev/null 2>&1 && break
+    done
+
+    if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+        pkill -f "ava_indicador.py" >/dev/null 2>&1 || true
+        (setsid python3 "$INDICADOR/ava_indicador.py" >/dev/null 2>&1 &) || true
+        sleep 2
+        if pgrep -f "ava_indicador.py" >/dev/null 2>&1; then
+            ok "icono encendido en la barra de arriba"
+        else
+            aviso "el indicador no arrancó. Para ver por qué:"
+            info "    python3 $INDICADOR/ava_indicador.py"
+        fi
+    else
+        # Pasa siempre que se instala por SSH. Decirlo evita la conclusión
+        # equivocada de que el indicador está roto.
+        aviso "sin sesión gráfica aquí: el icono aparecerá al entrar al escritorio"
+        info "Si ya estás en el escritorio y no lo ves, ejecútalo a mano:"
+        info "    python3 $INDICADOR/ava_indicador.py"
+    fi
+fi
+
+# --- 7. lo que queda por hacer con permisos de administrador -----------------
+paso "7. Para publicarlo en internet"
 
 if command -v tailscale >/dev/null 2>&1; then
     if tailscale serve status 2>/dev/null | grep -q "${PUERTO_INTERNO}"; then

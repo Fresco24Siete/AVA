@@ -261,40 +261,12 @@ else
 fi
 
 # ----------------------------------------------------------------- 6. indicador
-paso "Poniendo el indicador en la barra de arriba"
-
+# El indicador lo instala, lo enciende y lo refresca servidor/instalar.sh (su
+# paso 6), que ya corrió arriba. Antes se hacía aquí, y eso dejaba fuera el
+# camino de ACTUALIZAR —que usa instalar.sh a secas— con el resultado de que el
+# icono se quedaba con el código viejo, o muerto, sin que nada lo dijera.
+# Aquí solo queda la ruta, que la usa la comprobación de más abajo.
 DESTINO="$HOME/.local/share/ava"
-mkdir -p "$DESTINO" "$HOME/.config/autostart"
-cp servidor/indicador/ava_indicador.py "$DESTINO/"
-cp -r servidor/indicador/iconos "$DESTINO/"
-chmod +x "$DESTINO/ava_indicador.py"
-
-# Nada de X-GNOME-Autostart-Delay: desde GNOME 49 el arranque de sesión lo
-# gestiona systemd, que ignora esa clave. Esperar a que la barra esté lista es
-# trabajo del propio programa, y lo hace vigilando el bus.
-cat > "$HOME/.config/autostart/ava-indicador.desktop" <<EOF
-[Desktop Entry]
-Type=Application
-Version=1.0
-Name=Estado del AVA
-Comment=Indica en la barra superior si el servidor del curso está funcionando
-Exec=python3 $DESTINO/ava_indicador.py
-Icon=$DESTINO/iconos/ava-verde.svg
-Terminal=false
-StartupNotify=false
-X-GNOME-Autostart-enabled=true
-EOF
-chmod 644 "$HOME/.config/autostart/ava-indicador.desktop"
-ok "se encenderá solo con la sesión"
-
-# Y se lanza ya, para que el profesor lo vea sin reiniciar.
-if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
-    pkill -f "ava_indicador.py" 2>/dev/null || true
-    (setsid python3 "$DESTINO/ava_indicador.py" >/dev/null 2>&1 &) || true
-    ok "icono encendido"
-else
-    info "el icono aparecerá la próxima vez que entres a tu sesión"
-fi
 
 # ------------------------------------------------------- 7. arranque automático
 paso "Dejando que arranque solo al encender el computador"
