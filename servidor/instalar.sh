@@ -74,6 +74,39 @@ if $solo_verificar; then
     paso "Solo verificación: no se instala nada"
 fi
 
+# --- 1b. ¿ya hay otro AVA en esta máquina? -----------------------------------
+#
+# Los contenedores llevan el nombre de la carpeta que los creó. Si ya existe un
+# AVA instalado en OTRA carpeta, seguir sería destructivo: este instalador
+# generaría un .env nuevo, con otra contraseña de base de datos, y al levantar
+# el mismo proyecto de compose los contenedores apuntarían al volumen de datos
+# de la instalación anterior, cuya contraseña es la vieja. El resultado es un
+# AVA que no arranca y unos datos que parecen perdidos.
+#
+# Además los contenedores tienen nombre fijo (jupyterhub, postgres-db…), así que
+# dos AVA no pueden convivir en la misma máquina de ninguna forma.
+OTRA=$(docker ps -a --filter "label=com.docker.compose.project=ava" --format '{{.ID}}' 2>/dev/null | head -1)
+if [ -n "$OTRA" ]; then
+    CARPETA_ORIGEN=$(docker inspect --format \
+        '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' "$OTRA" 2>/dev/null)
+    if [ -n "$CARPETA_ORIGEN" ] && [ "$CARPETA_ORIGEN" != "$RAIZ" ]; then
+        paso "Ya hay un AVA en este computador"
+        mal "está instalado en otra carpeta: $CARPETA_ORIGEN"
+        echo
+        info "No voy a tocarlo: si siguiera, esa instalación dejaría de funcionar"
+        info "y sus cuadernillos, entregas y notas quedarían inaccesibles."
+        echo
+        info "Para administrar el que ya existe:"
+        info "    cd $CARPETA_ORIGEN && bash servidor/instalar.sh"
+        echo
+        info "Si de verdad quieres empezar de cero y BORRAR lo que hay:"
+        info "    cd $CARPETA_ORIGEN && docker compose down -v"
+        info "    (eso borra los cuadernillos, las entregas y las notas)"
+        echo
+        exit 1
+    fi
+fi
+
 # --- 2. secretos y configuración --------------------------------------------
 paso "2. Configuración (.env)"
 
