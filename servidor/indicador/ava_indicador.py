@@ -84,6 +84,113 @@ def _alumnos_trabajando():
     return len([n for n in salida.split("\n") if n.strip()])
 
 
+# El uso de procesador se saca comparando dos lecturas de /proc/stat. Se guarda
+# la anterior aquí para no tener que dormir medio segundo en cada medición: el
+# porcentaje que sale es el del rato transcurrido entre dos refrescos, que es
+# más representativo que un pantallazo instantáneo.
+_cpu_previo = {}
+
+
+def _leer_cpu():
+    """Porcentaje de procesador usado desde la última vez que se preguntó."""
+    try:
+        with open("/proc/stat") as f:
+            campos = [float(x) for x in f.readline().split()[1:]]
+    except Exception:
+        return None
+    ocupado = sum(campos) - campos[3] - (campos[4] if len(campos) > 4 else 0)
+    total = sum(campos)
+    antes = _cpu_previo.get("valor")
+    _cpu_previo["valor"] = (ocupado, total)
+    if not antes:
+        return None                      # la primera lectura no tiene con qué comparar
+    d_ocupado, d_total = ocupado - antes[0], total - antes[1]
+    if d_total <= 0:
+        return None
+    return max(0, min(100, round(100 * d_ocupado / d_total)))
+
+
+def _leer_memoria():
+    """(usada_gb, total_gb, porcentaje) de la memoria del computador."""
+    try:
+        datos = {}
+        with open("/proc/meminfo") as f:
+            for linea in f:
+                partes = linea.split()
+                if partes[0].rstrip(":") in ("MemTotal", "MemAvailable"):
+                    datos[partes[0].rstrip(":")] = int(partes[1])  # en kB
+        total = datos["MemTotal"] / 1048576
+        libre = datos["MemAvailable"] / 1048576
+        usada = total - libre
+        return (usada, total, round(100 * usada / total))
+    except Exception:
+        return None
+
+
+def _memoria_del_ava():
+    """Cuánta memoria están usando los contenedores del AVA, en GB.
+
+    docker stats tarda un par de segundos, y por eso todo el sondeo va en un
+    hilo aparte: aquí bloquearía el menú.
+    """
+    salida = _correr(["docker", "stats", "--no-stream", "--format", "{{.MemUsage}}"],
+                     timeout=25)
+    if not salida:
+        return None
+    total = 0.0
+    for linea in salida.split("\n"):
+        cifra = linea.split("/")[0].strip()           # "1.2GiB / 4GiB"
+        try:
+            if cifra.endswith("GiB"):
+                total += float(cifra[:-3])
+            elif cifra.endswith("MiB"):
+                total += float(cifra[:-3]) / 1024
+            elif cifra.endswith("KiB"):
+                total += float(cifra[:-3]) / 1048576
+        except ValueError:
+            continue
+    return total
+
+
+def _disco_libre():
+    """GB libres donde vive el AVA."""
+    try:
+        st = os.statvfs(CARPETA if os.path.isdir(CARPETA) else os.path.expanduser("~"))
+        return st.f_bavail * st.f_frsize / 1073741824
+    except Exception:
+        return None
+
+
+def recursos():
+    """Lo que está consumiendo el computador ahora mismo, ya redactado."""
+    lineas = []
+
+    mem = _leer_memoria()
+    if mem:
+        usada, total, pct = mem
+        lineas.append(("Memoria", f"{usada:.1f} de {total:.0f} GB   ({pct}%)"))
+
+    cpu = _leer_cpu()
+    if cpu is not None:
+        lineas.append(("Procesador", f"{cpu}%"))
+
+    ava = _memoria_del_ava()
+    alumnos = _alumnos_trabajando()
+    if ava is not None:
+        detalle = f"{ava:.1f} GB"
+        if alumnos:
+            detalle += f"   ({alumnos} alumno{'' if alumnos == 1 else 's'} conectado"
+            detalle += "" if alumnos == 1 else "s"
+            detalle += ")"
+        lineas.append(("El AVA usa", detalle))
+
+    disco = _disco_libre()
+    if disco is not None:
+        lineas.append(("Disco libre", f"{disco:.0f} GB"))
+
+    return lineas
+
+
 def estado():
     """Mira el servidor y devuelve (color, titular, detalle, url)."""
     if not _correr(["docker", "info", "--format", "{{.ServerVersion}}"], timeout=20):
@@ -141,6 +248,11 @@ def _avisar(titulo, cuerpo, urgencia="normal"):
 def main_texto():
     color, titular, detalle, _ = estado()
     print(f"[{color}] {titular}\n{detalle}")
+    _leer_cpu()                       # primera lectura: la siguiente ya compara
+    import time
+    time.sleep(1)
+    for etiqueta, valor in recursos():
+        print(f"  {etiqueta:<12} {valor}")
     return 0 if color == VERDE else 1
 
 
@@ -170,15 +282,24 @@ def main_grafico():
     menu = Gtk.Menu()
     it_estado = Gtk.MenuItem(label="Comprobando…"); it_estado.set_sensitive(False)
     it_detalle = Gtk.MenuItem(label=""); it_detalle.set_sensitive(False)
+    # Una línea por medida. Se crean fijas y se rellenan en cada refresco: crear
+    # y destruir items haría parpadear el menú si está abierto.
+    items_recursos = []
+    for _ in range(4):
+        it = Gtk.MenuItem(label="")
+        it.set_sensitive(False)
+        items_recursos.append(it)
+
     it_copiar = Gtk.MenuItem(label="Copiar la dirección para mis alumnos")
     it_abrir = Gtk.MenuItem(label="Abrir el AVA en el navegador")
     it_encender = Gtk.MenuItem(label="Encender el AVA")
     it_reiniciar = Gtk.MenuItem(label="Reiniciar el AVA")
     it_salir = Gtk.MenuItem(label="Quitar este icono (el AVA sigue funcionando)")
 
-    for w in (it_estado, it_detalle, Gtk.SeparatorMenuItem(), it_copiar, it_abrir,
-              Gtk.SeparatorMenuItem(), it_encender, it_reiniciar,
-              Gtk.SeparatorMenuItem(), it_salir):
+    for w in ([it_estado, it_detalle, Gtk.SeparatorMenuItem()] + items_recursos +
+              [Gtk.SeparatorMenuItem(), it_copiar, it_abrir,
+               Gtk.SeparatorMenuItem(), it_encender, it_reiniciar,
+               Gtk.SeparatorMenuItem(), it_salir]):
         menu.append(w)
     menu.show_all()
 
@@ -221,8 +342,16 @@ def main_grafico():
     it_reiniciar.connect("activate", al_reiniciar)
     it_salir.connect("activate", lambda _: Gtk.main_quit())
 
-    def pintar(color, titular, detalle, url):
+    def pintar(color, titular, detalle, url, medidas=()):
         estado_ui["url"] = url
+        # Cada medida en su línea, con la etiqueta y el valor alineados.
+        for it, dato in zip(items_recursos, list(medidas) + [None] * len(items_recursos)):
+            if dato:
+                etiqueta, valor = dato
+                it.set_label(f"{etiqueta:<12} {valor}")
+                it.show()
+            else:
+                it.hide()
         it_estado.set_label(titular)
         it_detalle.set_label(detalle)
         it_encender.set_sensitive(color != VERDE)
@@ -246,7 +375,13 @@ def main_grafico():
         # hacerlo en el hilo de GTK congelaría el menú abierto todo ese tiempo.
         def trabajo():
             datos = estado()
-            GLib.idle_add(pintar, *datos)
+            # Las medidas van en el mismo hilo: docker stats tarda un par de
+            # segundos y en el hilo de GTK congelaría el menú abierto.
+            try:
+                medidas = recursos()
+            except Exception:
+                medidas = []
+            GLib.idle_add(pintar, *datos, medidas)
         threading.Thread(target=trabajo, daemon=True).start()
         return True
 
@@ -267,6 +402,10 @@ def main_grafico():
     def barra_perdida(*_):
         # GNOME Shell puede reiniciarse; al volver se crea el indicador de nuevo.
         estado_ui["ind"] = None
+
+    # Refrescar al abrir el menú: es el único momento en que el profesor está
+    # mirando estas cifras, y con el refresco de un minuto se le quedarían viejas.
+    menu.connect("show", lambda *_: refrescar())
 
     Gio.bus_watch_name(Gio.BusType.SESSION, WATCHER, Gio.BusNameWatcherFlags.NONE,
                        barra_lista, barra_perdida)
