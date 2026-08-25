@@ -187,6 +187,21 @@ EOF
     ok "límites de memoria: alumno $ALU · docente $INS"
 fi
 
+# Un .env viejo —hecho a mano o heredado de una instalación anterior— puede no
+# traer esta línea. Sin ella el AVA arranca entero, el alumno no ve ningún error
+# y el navegador recibe 200, pero el puente de métricas se queda en modo
+# simulación: NADA de lo que hace la clase llega a la base. Se pierde el curso
+# completo sin una sola señal. Por eso se añade también a los .env que ya
+# existían, en vez de darlo por hecho al crearlo.
+if [ -f .env ] && ! grep -q '^ENVIAR_AL_BACKEND=' .env 2>/dev/null && ! $solo_verificar; then
+    cat >> .env <<'EOF'
+
+# --- Telemetría (se añadió porque este .env venía sin la línea) ---
+ENVIAR_AL_BACKEND=true
+EOF
+    ok "telemetría activada (el .env venía sin ENVIAR_AL_BACKEND)"
+fi
+
 if grep -q '^GOOGLE_API_KEY_1=.\+' .env 2>/dev/null; then
     ok "el Tutor IA tiene clave de Gemini"
 else
