@@ -91,6 +91,15 @@ else
 # Generado por servidor/instalar.sh el $(date '+%Y-%m-%d %H:%M').
 # Contiene secretos: no subir a git (.gitignore ya lo excluye).
 
+# --- Cómo se compone el stack en esta máquina ---
+# Compose lee estas dos de aquí, así que un "docker compose up" a secas ya usa
+# el override del túnel. Sin ellas, cualquiera que levante el stack sin los -f
+# arranca Caddy con el Caddyfile de la VM: pide certificado para el dominio
+# viejo, publica 80/443 en vez del puerto del túnel, y el AVA deja de responder
+# desde fuera con un 502. Pasó el 2026-08-24 y costó encontrarlo.
+COMPOSE_PROJECT_NAME=ava
+COMPOSE_FILE=docker-compose.yml:servidor/docker-compose.tunel.yml
+
 # --- Base de datos ---
 DB_USER=ava
 DB_PASSWORD=$(openssl rand -hex 24)
@@ -145,9 +154,14 @@ EOF
     ok "límites de memoria: alumno $ALU · docente $INS"
 fi
 
-grep -q '^GOOGLE_API_KEY_1=.\+' .env 2>/dev/null \
-    && ok "el Tutor IA tiene clave de Gemini" \
-    || aviso "sin clave de Gemini: el tutor responderá 503 (el resto funciona)"
+if grep -q '^GOOGLE_API_KEY_1=.\+' .env 2>/dev/null; then
+    ok "el Tutor IA tiene clave de Gemini"
+else
+    aviso "sin clave de Gemini el tutor responde 503 y el alumno lee «El tutor no"
+    info "está disponible en este momento», que parece una avería del AVA."
+    info "Ponlas en .env (GOOGLE_API_KEY_1 y _2) y recrea el backend:"
+    info "    docker compose up -d --force-recreate api_go"
+fi
 
 if $solo_verificar; then
     paso "Estado actual"
