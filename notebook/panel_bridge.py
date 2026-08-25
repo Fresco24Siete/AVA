@@ -27,7 +27,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timezone
 
 from tornado import web
 
@@ -840,6 +840,13 @@ class ValorarHandler(_BaseHandler):
         evento = {
             "tipo_evento": "cuadernillo_rating",
             "cuadernillo": codigo,
+            # Obligatorio para el backend, que sin él responde 400 y la
+            # valoración se pierde. Lo pone el servidor del alumno, no el
+            # navegador, por lo mismo que la identidad: es un dato que el
+            # docente va a leer y no puede depender de la hora del portátil.
+            "submitted_at": datetime.now(timezone.utc)
+                                    .isoformat(timespec="milliseconds")
+                                    .replace("+00:00", "Z"),
             "rating": rating,
             # Se manda siempre, aunque esté vacío: así el alumno puede borrar
             # lo que escribió antes. Ausente significaría «no lo toqué».
