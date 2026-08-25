@@ -114,17 +114,44 @@ paso "Instalando los programas necesarios"
 export DEBIAN_FRONTEND=noninteractive
 sudo apt-get update -qq
 sudo apt-get install -y -qq ca-certificates curl git python3 openssl \
-    python3-gi gir1.2-gtk-3.0 libnotify-bin xclip >/dev/null
+    python3-gi gir1.2-gtk-3.0 libnotify-bin >/dev/null
 ok "herramientas básicas"
+
+# El portapapeles depende del tipo de sesión: xclip no funciona en Wayland, que
+# es lo que trae Ubuntu por defecto, y falla en silencio.
+SESION="${XDG_SESSION_TYPE:-desconocida}"
+if [ "$SESION" = "wayland" ]; then
+    sudo apt-get install -y -qq wl-clipboard >/dev/null 2>&1 || true
+else
+    sudo apt-get install -y -qq xclip >/dev/null 2>&1 || true
+fi
+ok "escritorio: $SESION"
 
 # El indicador de la barra necesita este puente entre Python y el sistema.
 if ! sudo apt-get install -y -qq gir1.2-ayatanaappindicator3-0.1 >/dev/null 2>&1; then
     sudo apt-get install -y -qq gir1.2-appindicator3-0.1 >/dev/null 2>&1 \
         || aviso "sin soporte de indicador: el AVA funcionará, pero sin icono en la barra"
 fi
-# En GNOME el icono además necesita esta extensión, que Ubuntu suele traer.
-sudo apt-get install -y -qq gnome-shell-extension-appindicator >/dev/null 2>&1 || true
-ok "soporte para el icono de la barra"
+# GNOME no tiene bandeja propia: el icono lo pinta una extensión. En Ubuntu 26.04
+# el paquete que la trae es gnome-shell-ubuntu-extensions (el nombre viejo ya es
+# solo un alias). Y en equipos ACTUALIZADOS desde una versión anterior suele
+# faltar, que es justo el caso de un computador que ya se venía usando.
+sudo apt-get install -y -qq --no-install-recommends gnome-shell-ubuntu-extensions \
+    >/dev/null 2>&1 || sudo apt-get install -y -qq gnome-shell-extension-appindicator \
+    >/dev/null 2>&1 || true
+
+# Instalarla no la activa. Se intenta encender por si el escritorio no es la
+# sesión de Ubuntu o si alguien la apagó alguna vez.
+for ext in ubuntu-appindicators@ubuntu.com appindicatorsupport@rgcjonas.gmail.com; do
+    gnome-extensions enable "$ext" >/dev/null 2>&1 && break
+done
+if gnome-extensions list --enabled 2>/dev/null | grep -q appindicator; then
+    ok "soporte para el icono de la barra (activo)"
+    EXTENSION_LISTA=si
+else
+    aviso "la extensión del icono se instaló pero aún no está activa"
+    EXTENSION_LISTA=no
+fi
 
 if ! command -v docker >/dev/null; then
     info "instalando Docker (es lo que más tarda)…"
@@ -182,29 +209,55 @@ fi
 # --------------------------------------------------------------------- 5. túnel
 paso "Publicando el AVA para que entren tus alumnos"
 
-if ! tailscale status >/dev/null 2>&1; then
+# BackendState dice la verdad; "tailscale status" a secas devuelve 0 aunque esté
+# sin autenticar, y entonces el instalador seguiría como si todo estuviera bien.
+estado_ts() {
+    tailscale status --json 2>/dev/null \
+        | python3 -c 'import json,sys; print(json.load(sys.stdin).get("BackendState",""))' \
+        2>/dev/null || echo ""
+}
+
+if [ "$(estado_ts)" != "Running" ]; then
     echo
-    ambar "  Falta un paso que solo puedes hacer tú:"
+    ambar "  ─────────────────────────────────────────────────────"
+    ambar "   Este es el único paso que tienes que hacer tú"
+    ambar "  ─────────────────────────────────────────────────────"
     echo
-    echo "    1. Se va a abrir una dirección en el navegador."
-    echo "    2. Entra con tu cuenta (o crea una, es gratis)."
-    echo "    3. Vuelve aquí cuando termine."
+    echo "   Se va a mostrar una dirección web (y un código QR)."
+    echo "   Ábrela, entra con tu cuenta —Google o GitHub sirven— y"
+    echo "   autoriza este computador. Solo se hace una vez."
     echo
-    read -r -p "    Presiona Enter para continuar… " _
-    sudo tailscale up --hostname=ava-servidor || true
+    read -r -p "   Presiona Enter cuando estés listo… " _ || true
+    # --qr permite autenticar con el celular sin copiar la dirección a mano.
+    sudo tailscale up --hostname=ava-servidor --qr || true
 fi
 
-if tailscale status >/dev/null 2>&1; then
-    ok "conectado como $(tailscale status --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' 2>/dev/null || echo '?')"
-    if ! tailscale serve status 2>/dev/null | grep -q "$PUERTO_INTERNO"; then
-        sudo tailscale funnel --bg "$PUERTO_INTERNO" >/dev/null 2>&1 \
-            && ok "publicado en internet" \
-            || aviso "no se pudo publicar todavía; se reintenta al final"
+if [ "$(estado_ts)" = "Running" ]; then
+    NOMBRE=$(tailscale status --json 2>/dev/null \
+        | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' \
+        2>/dev/null || echo "")
+    ok "conectado como ${NOMBRE:-?}"
+
+    if tailscale serve status 2>/dev/null | grep -q "$PUERTO_INTERNO"; then
+        ok "el túnel ya publica el AVA"
+    elif sudo tailscale funnel --bg "$PUERTO_INTERNO" 2>/tmp/ava-funnel.err; then
+        ok "publicado en internet"
     else
-        ok "ya estaba publicado"
+        # No se traga el error: sin túnel, los alumnos no entran y el profesor
+        # tiene que saberlo AHORA, no el día de la clase.
+        aviso "No se pudo publicar el túnel todavía."
+        info "Suele ser que falta autorizarlo una vez desde la web. El detalle:"
+        sed 's/^/      /' /tmp/ava-funnel.err 2>/dev/null | head -6
+        info ""
+        info "Cuando lo autorices, termina con este comando:"
+        info "    sudo tailscale funnel --bg $PUERTO_INTERNO"
     fi
 else
-    aviso "Tailscale no quedó conectado: el AVA funciona, pero solo en este computador."
+    aviso "Tailscale no quedó conectado."
+    info "El AVA funciona, pero solo dentro de este computador."
+    info "Para que entren tus alumnos, ejecuta después:"
+    info "    sudo tailscale up --hostname=ava-servidor --qr"
+    info "    sudo tailscale funnel --bg $PUERTO_INTERNO"
 fi
 
 # ----------------------------------------------------------------- 6. indicador
@@ -213,21 +266,25 @@ paso "Poniendo el indicador en la barra de arriba"
 DESTINO="$HOME/.local/share/ava"
 mkdir -p "$DESTINO" "$HOME/.config/autostart"
 cp servidor/indicador/ava_indicador.py "$DESTINO/"
+cp -r servidor/indicador/iconos "$DESTINO/"
 chmod +x "$DESTINO/ava_indicador.py"
 
+# Nada de X-GNOME-Autostart-Delay: desde GNOME 49 el arranque de sesión lo
+# gestiona systemd, que ignora esa clave. Esperar a que la barra esté lista es
+# trabajo del propio programa, y lo hace vigilando el bus.
 cat > "$HOME/.config/autostart/ava-indicador.desktop" <<EOF
 [Desktop Entry]
 Type=Application
+Version=1.0
 Name=Estado del AVA
-Comment=Muestra si el servidor del curso está funcionando
+Comment=Indica en la barra superior si el servidor del curso está funcionando
 Exec=python3 $DESTINO/ava_indicador.py
-Icon=emblem-ok-symbolic
+Icon=$DESTINO/iconos/ava-verde.svg
 Terminal=false
+StartupNotify=false
 X-GNOME-Autostart-enabled=true
-# Se espera un poco: si arranca antes que la barra del sistema, el icono no
-# encuentra dónde ponerse y no aparece.
-X-GNOME-Autostart-Delay=20
 EOF
+chmod 644 "$HOME/.config/autostart/ava-indicador.desktop"
 ok "se encenderá solo con la sesión"
 
 # Y se lanza ya, para que el profesor lo vea sin reiniciar.
@@ -267,8 +324,14 @@ if echo "$ESTADO_TXT" | grep -q "^\[verde\]"; then
     echo "  Ponla en Moodle, en la herramienta externa del curso, así:"
     echo "      $URL/hub/lti/launch"
     echo
-    echo "  Arriba a la derecha tienes un icono ✓ con el estado."
-    echo "  Si algún día se pone rojo, haz clic y elige «Reiniciar el AVA»."
+    if [ "${EXTENSION_LISTA:-no}" = "si" ]; then
+        echo "  Arriba a la derecha tienes un icono verde con el estado."
+        echo "  Si algún día se pone rojo, haz clic y elige «Reiniciar el AVA»."
+    else
+        echo "  Falta una cosa para ver el icono de estado en la barra:"
+        echo "  cierra sesión y vuelve a entrar (o reinicia el computador)."
+        echo "  El AVA sigue funcionando mientras tanto."
+    fi
 else
     ambar "════════════════════════════════════════════════════════"
     ambar "  El AVA quedó instalado, pero todavía no responde del todo."

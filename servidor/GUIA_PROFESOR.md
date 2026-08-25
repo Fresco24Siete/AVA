@@ -55,7 +55,13 @@ La clave y el secreto no se tocan: siguen siendo los mismos.
 ## El icono de la barra
 
 Arriba a la derecha, junto al reloj, te queda un icono con el estado del
-servidor:
+servidor.
+
+**Si no lo ves después de instalar, cierra sesión y vuelve a entrar.** El icono
+lo dibuja una extensión del escritorio, y una extensión recién instalada no
+aparece en una sesión que ya estaba abierta. No basta con reiniciar el AVA.
+
+Los estados son estos:
 
 | Icono | Qué significa | Qué hacer |
 |---|---|---|
