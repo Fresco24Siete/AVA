@@ -170,12 +170,36 @@ sudo systemctl enable --now docker >/dev/null 2>&1 || true
 ok "Docker $(docker --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
 
 # Poder usar Docker sin sudo. El grupo no aplica hasta cerrar sesión, así que en
-# esta misma corrida se usa "sg docker" para no obligar a reiniciar a mitad.
+# esta misma corrida hay que lanzar los comandos con el grupo ya puesto, para no
+# obligar a reiniciar a mitad de la instalación.
 if ! id -nG "$USER" | tr ' ' '\n' | grep -qx docker; then
     sudo usermod -aG docker "$USER"
     ok "tu usuario ahora puede usar Docker (efectivo al reiniciar sesión)"
 fi
-d() { if docker ps >/dev/null 2>&1; then docker "$@"; else sg docker -c "docker $(printf '%q ' "$@")"; fi; }
+
+# Esto se hacía siempre con "sg", que viene en el paquete login. Ubuntu 26.04 ya
+# no lo trae, así que en un computador recién estrenado la instalación moría
+# justo aquí: "sg: command not found" seguido de "Docker no responde", que
+# además señala al sitio equivocado —Docker estaba perfecto—. Ahora se usa lo
+# que haya; sudo está siempre, porque ya se usa para todo lo demás.
+if docker ps >/dev/null 2>&1; then
+    con_docker() { "$@"; }                       # el grupo ya está activo
+elif command -v sg >/dev/null 2>&1 && sg docker -c 'docker ps' >/dev/null 2>&1; then
+    con_docker() { sg docker -c "$(printf '%q ' "$@")"; }
+elif sudo -E -u "$USER" -g docker docker ps >/dev/null 2>&1; then
+    # -E conserva el entorno. Sin él se pierden DISPLAY y WAYLAND_DISPLAY, y el
+    # paso del indicador creería que no hay escritorio y no encendería el icono.
+    con_docker() { sudo -E -u "$USER" -g docker "$@"; }
+else
+    # Antes que dejar a medias una instalación —o hacerla como root, que deja el
+    # .env y el icono en el sitio equivocado—, se para y se dice qué hacer.
+    mal "Docker está instalado, pero tu usuario todavía no puede usarlo."
+    info "Cierra sesión y vuelve a entrar (o reinicia el computador), y"
+    info "ejecuta otra vez:"
+    info "    bash instalar-ava.sh"
+    exit 1
+fi
+d() { con_docker docker "$@"; }
 d ps >/dev/null || { mal "Docker no responde."; exit 1; }
 ok "Docker responde"
 
@@ -200,11 +224,7 @@ cd "$CARPETA"
 
 # ---------------------------------------------------------------- 4. instalación
 paso "Instalando y encendiendo el AVA (esto tarda)"
-if docker ps >/dev/null 2>&1; then
-    bash servidor/instalar.sh
-else
-    sg docker -c "bash servidor/instalar.sh"
-fi
+con_docker bash servidor/instalar.sh
 
 # --------------------------------------------------------------------- 5. túnel
 paso "Publicando el AVA para que entren tus alumnos"
