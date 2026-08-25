@@ -1,0 +1,283 @@
+#!/usr/bin/env bash
+# Deja el AVA funcionando en este computador, desde cero.
+#
+# Pensado para el equipo del profesor: instala lo que falte (Docker, Tailscale),
+# descarga el AVA, lo configura, lo enciende, hace que arranque solo cada vez
+# que se prenda el computador y deja un indicador en la barra de arriba que dice
+# si está funcionando.
+#
+# Se ejecuta así, en una terminal:
+#
+#     curl -fsSL https://raw.githubusercontent.com/Fresco24Siete/AVA/feat/menu-cuadernillos-y-notas/servidor/instalar-servidor.sh -o instalar-ava.sh && bash instalar-ava.sh
+#
+# Se descarga entero ANTES de ejecutarse a propósito: si la conexión se corta a
+# mitad, no queda una instalación hecha por la mitad.
+#
+# Se puede repetir las veces que haga falta: no borra nada y no repite lo hecho.
+set -euo pipefail
+
+RAMA="${AVA_RAMA:-feat/menu-cuadernillos-y-notas}"
+REPO="${AVA_REPO:-https://github.com/Fresco24Siete/AVA.git}"
+CARPETA="${AVA_CARPETA:-$HOME/AVA}"
+PUERTO_INTERNO=8081
+PASOS_TOTAL=8
+paso_n=0
+
+verde()  { printf '\033[32m%s\033[0m\n' "$1"; }
+rojo()   { printf '\033[31m%s\033[0m\n' "$1"; }
+ambar()  { printf '\033[33m%s\033[0m\n' "$1"; }
+ok()     { printf '  \033[32m✓\033[0m %s\n' "$1"; }
+mal()    { printf '  \033[31m✗\033[0m %s\n' "$1"; }
+aviso()  { printf '  \033[33m!\033[0m %s\n' "$1"; }
+info()   { printf '    %s\n' "$1"; }
+paso()   { paso_n=$((paso_n + 1)); printf '\n\033[1m[%d/%d] %s\033[0m\n' "$paso_n" "$PASOS_TOTAL" "$1"; }
+
+# Si algo revienta, el profesor tiene que saber qué hacer, no ver una traza.
+fallo_en_linea() {
+    echo
+    rojo "════════════════════════════════════════════════════════"
+    rojo " La instalación se detuvo en el paso $paso_n de $PASOS_TOTAL."
+    rojo "════════════════════════════════════════════════════════"
+    echo
+    echo " No se dañó nada. Puedes volver a ejecutar este mismo archivo:"
+    echo "     bash $0"
+    echo " y seguirá desde donde se quedó."
+    echo
+    echo " Si vuelve a fallar, mándale a Diego esta línea:"
+    echo "     falló en el paso $paso_n (línea $1)"
+    exit 1
+}
+trap 'fallo_en_linea $LINENO' ERR
+
+clear 2>/dev/null || true
+echo "════════════════════════════════════════════════════════"
+echo "  Instalación del AVA — servidor del curso"
+echo "  $(date '+%A %d de %B, %H:%M')"
+echo "════════════════════════════════════════════════════════"
+echo
+echo "  Esto va a dejar el AVA funcionando en este computador."
+echo "  Tarda entre 10 y 25 minutos, según la conexión."
+echo "  Te va a pedir tu contraseña una vez, para instalar programas."
+echo
+
+# ---------------------------------------------------------------- 1. la máquina
+paso "Revisando el computador"
+
+if [ "$(id -u)" -eq 0 ]; then
+    mal "No ejecutes esto con sudo ni como root."
+    info "Ábrelo con tu usuario normal: bash $0"
+    exit 1
+fi
+command -v apt-get >/dev/null || { mal "Esto solo funciona en Ubuntu o Debian."; exit 1; }
+
+. /etc/os-release 2>/dev/null || true
+ok "Sistema: ${PRETTY_NAME:-desconocido}"
+
+RAM_MB=$(free -m | awk '/^Mem:/{print $2}')
+DISCO_GB=$(df -BG --output=avail "$HOME" | tail -1 | tr -dc '0-9')
+ok "Memoria: ${RAM_MB} MB · Espacio libre: ${DISCO_GB} GB · Núcleos: $(nproc)"
+
+if [ "$RAM_MB" -lt 4000 ]; then
+    mal "Este computador tiene poca memoria (${RAM_MB} MB) para ser el servidor."
+    info "Con menos de 4 GB los alumnos van a tener problemas. Se recomienda otro equipo."
+    read -r -p "    ¿Seguir de todas formas? (escribe SI) " r
+    [ "$r" = "SI" ] || exit 1
+fi
+if [ "$DISCO_GB" -lt 25 ]; then
+    mal "Queda poco espacio en disco: ${DISCO_GB} GB. El AVA necesita unos 20 GB."
+    info "Libera espacio y vuelve a ejecutar esto."
+    exit 1
+fi
+
+# El reloj: si se desvía más de 30 segundos, Moodle no puede entrar y el error
+# que ve el profesor no dice nada de la hora.
+if ! timedatectl show -p NTPSynchronized --value 2>/dev/null | grep -q yes; then
+    aviso "El reloj del computador no se está sincronizando solo."
+    info "Se va a activar (si no, los alumnos no podrán entrar desde Moodle)."
+    sudo timedatectl set-ntp true 2>/dev/null || aviso "No se pudo activar; revísalo en Configuración › Fecha y hora."
+fi
+ok "Reloj: $(timedatectl show -p Timezone --value 2>/dev/null || echo '?')"
+
+# Se pide la contraseña UNA vez y se mantiene viva mientras dure la instalación,
+# para no interrumpir al profesor cinco veces.
+echo
+echo "  Necesito tu contraseña para instalar los programas:"
+sudo -v
+( while true; do sudo -n true; sleep 50; kill -0 "$$" 2>/dev/null || exit; done ) 2>/dev/null &
+MANTENER_SUDO=$!
+trap 'kill $MANTENER_SUDO 2>/dev/null || true; fallo_en_linea $LINENO' ERR
+trap 'kill $MANTENER_SUDO 2>/dev/null || true' EXIT
+
+# ------------------------------------------------------------------ 2. programas
+paso "Instalando los programas necesarios"
+
+export DEBIAN_FRONTEND=noninteractive
+sudo apt-get update -qq
+sudo apt-get install -y -qq ca-certificates curl git python3 openssl \
+    python3-gi gir1.2-gtk-3.0 libnotify-bin xclip >/dev/null
+ok "herramientas básicas"
+
+# El indicador de la barra necesita este puente entre Python y el sistema.
+if ! sudo apt-get install -y -qq gir1.2-ayatanaappindicator3-0.1 >/dev/null 2>&1; then
+    sudo apt-get install -y -qq gir1.2-appindicator3-0.1 >/dev/null 2>&1 \
+        || aviso "sin soporte de indicador: el AVA funcionará, pero sin icono en la barra"
+fi
+# En GNOME el icono además necesita esta extensión, que Ubuntu suele traer.
+sudo apt-get install -y -qq gnome-shell-extension-appindicator >/dev/null 2>&1 || true
+ok "soporte para el icono de la barra"
+
+if ! command -v docker >/dev/null; then
+    info "instalando Docker (es lo que más tarda)…"
+    sudo install -m 0755 -d /etc/apt/keyrings
+    sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+        -o /etc/apt/keyrings/docker.asc
+    sudo chmod a+r /etc/apt/keyrings/docker.asc
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" \
+        | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+    sudo apt-get update -qq
+    sudo apt-get install -y -qq docker-ce docker-ce-cli containerd.io \
+        docker-buildx-plugin docker-compose-plugin >/dev/null
+fi
+sudo systemctl enable --now docker >/dev/null 2>&1 || true
+ok "Docker $(docker --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+
+# Poder usar Docker sin sudo. El grupo no aplica hasta cerrar sesión, así que en
+# esta misma corrida se usa "sg docker" para no obligar a reiniciar a mitad.
+if ! id -nG "$USER" | tr ' ' '\n' | grep -qx docker; then
+    sudo usermod -aG docker "$USER"
+    ok "tu usuario ahora puede usar Docker (efectivo al reiniciar sesión)"
+fi
+d() { if docker ps >/dev/null 2>&1; then docker "$@"; else sg docker -c "docker $(printf '%q ' "$@")"; fi; }
+d ps >/dev/null || { mal "Docker no responde."; exit 1; }
+ok "Docker responde"
+
+if ! command -v tailscale >/dev/null; then
+    info "instalando Tailscale (lo que deja entrar a tus alumnos)…"
+    curl -fsSL https://tailscale.com/install.sh | sh >/dev/null 2>&1
+fi
+ok "Tailscale $(tailscale version 2>/dev/null | head -1)"
+
+# -------------------------------------------------------------------- 3. código
+paso "Descargando el AVA"
+if [ -d "$CARPETA/.git" ]; then
+    git -C "$CARPETA" fetch -q origin
+    git -C "$CARPETA" checkout -q "$RAMA"
+    git -C "$CARPETA" reset -q --hard "origin/$RAMA"
+    ok "actualizado en $CARPETA"
+else
+    git clone -q --branch "$RAMA" "$REPO" "$CARPETA"
+    ok "descargado en $CARPETA"
+fi
+cd "$CARPETA"
+
+# ---------------------------------------------------------------- 4. instalación
+paso "Instalando y encendiendo el AVA (esto tarda)"
+if docker ps >/dev/null 2>&1; then
+    bash servidor/instalar.sh
+else
+    sg docker -c "bash servidor/instalar.sh"
+fi
+
+# --------------------------------------------------------------------- 5. túnel
+paso "Publicando el AVA para que entren tus alumnos"
+
+if ! tailscale status >/dev/null 2>&1; then
+    echo
+    ambar "  Falta un paso que solo puedes hacer tú:"
+    echo
+    echo "    1. Se va a abrir una dirección en el navegador."
+    echo "    2. Entra con tu cuenta (o crea una, es gratis)."
+    echo "    3. Vuelve aquí cuando termine."
+    echo
+    read -r -p "    Presiona Enter para continuar… " _
+    sudo tailscale up --hostname=ava-servidor || true
+fi
+
+if tailscale status >/dev/null 2>&1; then
+    ok "conectado como $(tailscale status --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' 2>/dev/null || echo '?')"
+    if ! tailscale serve status 2>/dev/null | grep -q "$PUERTO_INTERNO"; then
+        sudo tailscale funnel --bg "$PUERTO_INTERNO" >/dev/null 2>&1 \
+            && ok "publicado en internet" \
+            || aviso "no se pudo publicar todavía; se reintenta al final"
+    else
+        ok "ya estaba publicado"
+    fi
+else
+    aviso "Tailscale no quedó conectado: el AVA funciona, pero solo en este computador."
+fi
+
+# ----------------------------------------------------------------- 6. indicador
+paso "Poniendo el indicador en la barra de arriba"
+
+DESTINO="$HOME/.local/share/ava"
+mkdir -p "$DESTINO" "$HOME/.config/autostart"
+cp servidor/indicador/ava_indicador.py "$DESTINO/"
+chmod +x "$DESTINO/ava_indicador.py"
+
+cat > "$HOME/.config/autostart/ava-indicador.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Estado del AVA
+Comment=Muestra si el servidor del curso está funcionando
+Exec=python3 $DESTINO/ava_indicador.py
+Icon=emblem-ok-symbolic
+Terminal=false
+X-GNOME-Autostart-enabled=true
+# Se espera un poco: si arranca antes que la barra del sistema, el icono no
+# encuentra dónde ponerse y no aparece.
+X-GNOME-Autostart-Delay=20
+EOF
+ok "se encenderá solo con la sesión"
+
+# Y se lanza ya, para que el profesor lo vea sin reiniciar.
+if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+    pkill -f "ava_indicador.py" 2>/dev/null || true
+    (setsid python3 "$DESTINO/ava_indicador.py" >/dev/null 2>&1 &) || true
+    ok "icono encendido"
+else
+    info "el icono aparecerá la próxima vez que entres a tu sesión"
+fi
+
+# ------------------------------------------------------- 7. arranque automático
+paso "Dejando que arranque solo al encender el computador"
+# Los contenedores tienen restart=unless-stopped, así que Docker los repone al
+# arrancar. Lo único que hay que garantizar es que Docker mismo arranque.
+sudo systemctl enable docker >/dev/null 2>&1 || true
+ok "el AVA se encenderá solo con el computador"
+
+# ------------------------------------------------------------ 8. comprobaciones
+paso "Comprobando que todo quedó bien"
+sleep 3
+ESTADO_TXT=$(AVA_CARPETA="$CARPETA" AVA_PUERTO="$PUERTO_INTERNO" \
+    python3 "$DESTINO/ava_indicador.py" --estado 2>/dev/null || true)
+echo "$ESTADO_TXT" | sed 's/^/  /'
+
+URL=$(tailscale status --json 2>/dev/null | python3 -c 'import json,sys; print("https://"+json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' 2>/dev/null || echo "")
+
+echo
+if echo "$ESTADO_TXT" | grep -q "^\[verde\]"; then
+    verde "════════════════════════════════════════════════════════"
+    verde "  ¡Listo! El AVA está funcionando."
+    verde "════════════════════════════════════════════════════════"
+    echo
+    echo "  La dirección para tus alumnos:"
+    echo "      $URL"
+    echo
+    echo "  Ponla en Moodle, en la herramienta externa del curso, así:"
+    echo "      $URL/hub/lti/launch"
+    echo
+    echo "  Arriba a la derecha tienes un icono ✓ con el estado."
+    echo "  Si algún día se pone rojo, haz clic y elige «Reiniciar el AVA»."
+else
+    ambar "════════════════════════════════════════════════════════"
+    ambar "  El AVA quedó instalado, pero todavía no responde del todo."
+    ambar "════════════════════════════════════════════════════════"
+    echo
+    echo "  Casi siempre es que aún está arrancando. Espera dos minutos"
+    echo "  y mira el icono de la barra de arriba."
+    echo
+    echo "  Si sigue en rojo, ejecuta esto y mándale el resultado a Diego:"
+    echo "      cd $CARPETA && bash servidor/instalar.sh --verificar"
+fi
+echo
