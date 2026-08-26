@@ -16,8 +16,28 @@
 # imprime el comando exacto para quien los tenga.
 set -euo pipefail
 
+ESTE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$RAIZ"
+
+# El grupo docker solo entra al abrir sesión de nuevo, así que la terminal desde
+# la que se acaba de instalar todavía no lo tiene. Eso salía como "este usuario
+# no puede usar Docker" en la primera línea, justo después de una instalación
+# que había ido bien, y dejaba al profesor sin saber qué hacer. Si el grupo YA
+# está concedido en el sistema, nos relanzamos con él puesto en vez de fallar.
+# No se depende de "sg": Ubuntu 26.04 ya no lo trae (ver instalar-servidor.sh).
+if ! docker ps >/dev/null 2>&1 \
+   && getent group docker 2>/dev/null | grep -qw "$(id -un)" \
+   && [ -z "${AVA_GRUPO_APLICADO:-}" ]; then
+    export AVA_GRUPO_APLICADO=1
+    if command -v sg >/dev/null 2>&1 && sg docker -c 'docker ps' >/dev/null 2>&1; then
+        exec sg docker -c "bash $(printf '%q' "$ESTE") $(printf '%q ' "$@")"
+    elif sudo -E -u "$(id -un)" -g docker docker ps >/dev/null 2>&1; then
+        # -E conserva DISPLAY y WAYLAND_DISPLAY; sin ellos el paso del indicador
+        # creería que no hay escritorio y no encendería el icono de la barra.
+        exec sudo -E -u "$(id -un)" -g docker bash "$ESTE" "$@"
+    fi
+fi
 
 COMPOSE=(docker compose -p ava -f docker-compose.yml -f servidor/docker-compose.tunel.yml)
 PUERTO_INTERNO=8081          # donde escucha Caddy; es lo que se le pasa al túnel
@@ -45,9 +65,19 @@ for cmd in docker git openssl python3; do
     command -v "$cmd" >/dev/null || mal "falta $cmd"
 done
 docker compose version >/dev/null 2>&1 || mal "falta docker compose v2"
-docker ps >/dev/null 2>&1 \
-    && ok "Docker responde sin sudo" \
-    || mal "este usuario no puede usar Docker (¿está en el grupo docker?)"
+if docker ps >/dev/null 2>&1; then
+    ok "Docker responde sin sudo"
+elif getent group docker 2>/dev/null | grep -qw "$(id -un)"; then
+    # El grupo está concedido pero esta sesión no lo tiene, y arriba no se pudo
+    # aplicar. Solo queda volver a entrar; se dice, en vez de dejar un ✗ mudo.
+    mal "el grupo docker aún no está activo en esta sesión"
+    info "Cierra sesión y vuelve a entrar (o reinicia), y repite:"
+    info "    cd $RAIZ && bash servidor/instalar.sh${1:+ $1}"
+else
+    mal "este usuario no está en el grupo docker"
+    info "Concédelo y vuelve a entrar a la sesión:"
+    info "    sudo usermod -aG docker $(id -un)"
+fi
 
 RAM_MB=$(free -m | awk '/^Mem:/{print $2}')
 DISCO_GB=$(df -BG --output=avail "$RAIZ" | tail -1 | tr -dc '0-9')

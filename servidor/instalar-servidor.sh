@@ -298,7 +298,12 @@ ok "el AVA se encenderá solo con el computador"
 # ------------------------------------------------------------ 8. comprobaciones
 paso "Comprobando que todo quedó bien"
 sleep 3
-ESTADO_TXT=$(AVA_CARPETA="$CARPETA" AVA_PUERTO="$PUERTO_INTERNO" \
+# Va por con_docker igual que todo lo demás: el indicador pregunta por Docker, y
+# en la primera instalación esta terminal todavía no tiene el grupo. Sin esto,
+# "docker info" fallaba y el indicador informaba de un AVA caído, así que el
+# instalador cerraba con "todavía no responde del todo" una instalación que
+# estaba perfecta. Da miedo y manda a buscar una avería que no existe.
+ESTADO_TXT=$(con_docker env AVA_CARPETA="$CARPETA" AVA_PUERTO="$PUERTO_INTERNO" \
     python3 "$DESTINO/ava_indicador.py" --estado 2>/dev/null || true)
 echo "$ESTADO_TXT" | sed 's/^/  /'
 
