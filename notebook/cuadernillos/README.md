@@ -72,6 +72,18 @@ completos, `grade_id` únicos, prefijo `test_` en las celdas que califican y
 `metadata.tutor_ia` presente. Un par mal formado no falla en Jupyter — falla en
 silencio, dejando el ejercicio fuera de la nota y fuera de la analítica.
 
+`build.py` no ejecuta nada, así que un ejercicio puede construir perfecto y
+estar roto. Eso lo comprueba `verificar.py`, que corre de cada ejercicio las dos
+mitades: la solución del instructor tiene que **pasar** las pruebas visibles y
+las ocultas, y la plantilla que ve el alumno tiene que **fallar**. Lo segundo es
+lo que nunca se ve mirando el notebook: una plantilla demasiado completa aprueba
+sola y el ejercicio deja de medir nada.
+
+```bash
+python3 notebook/cuadernillos/verificar.py             # todos
+python3 notebook/cuadernillos/verificar.py semana_01   # uno
+```
+
 Si cambias un diagrama:
 
 ```bash

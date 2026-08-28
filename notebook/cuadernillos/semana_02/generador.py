@@ -307,9 +307,9 @@ llenar en el ejercicio E3.
 
 Porque sirven para cosas distintas y en momentos distintos.
 
-- **El pseudocódigo** es para **pensar**. No tiene compilador, así que no te
-  castiga por un punto y coma; te deja concentrarte en la lógica. Y como está en
-  español, se lo puedes mostrar a alguien que no programa.
+- **El pseudocódigo** es para **pensar**. Nadie lo ejecuta, así que no te
+  castiga por un punto y coma mal puesto; te deja concentrarte en la lógica. Y
+  como está en español, se lo puedes mostrar a alguien que no programa.
 - **El diagrama de flujo** es para **ver**. Un rombo con dos flechas te muestra
   de un vistazo que hay dos caminos; en texto, esa misma idea hay que
   reconstruirla leyendo.
@@ -1579,7 +1579,7 @@ ps.trazador(RETO_SI, entradas=["12000"])''', etiquetas=("ava-figura",))
     # =========================================================================
     # Bloque 7 — Sección 7: el tutor
     # =========================================================================
-    c.seccion(7, "Habla con el asistente", 5, """Tienes **5 preguntas** en este cuadernillo (las ves en el botón de abajo a la
+    c.seccion(6, "Habla con el asistente", 5, """Tienes **5 preguntas** en este cuadernillo (las ves en el botón de abajo a la
 derecha). Cinco no es poco: es justo lo que alcanza si preguntas bien. Aquí van
 cinco que valen la pena, una por cada cosa importante de hoy:
 
@@ -1610,7 +1610,7 @@ preguntas desde otra parte, el asistente responde a ciegas.""")
     # =========================================================================
     # Bloque 8 — Sección 8: cierre
     # =========================================================================
-    c.seccion(8, "Cierre", 7, """Antes de reclamar tu insignia, marca honestamente lo que ya puedes hacer. Esto
+    c.seccion(7, "Cierre", 7, """Antes de reclamar tu insignia, marca honestamente lo que ya puedes hacer. Esto
 no tiene nota: es tu plan para la semana.""")
 
     c.code("radar_salida()")
