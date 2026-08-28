@@ -117,8 +117,13 @@ services:
       sbom: false
     container_name: mi-backend-api
     restart: unless-stopped
-    ports:
-      - "8080:8080"
+    # SIN "ports". Al backend solo tienen que llegar el Hub y los contenedores
+    # de los alumnos, y eso ocurre por la red interna de Docker (api_go:8080).
+    # Publicarlo lo dejaba abierto a internet, y el cortafuegos NO lo tapa:
+    # Docker escribe sus reglas de iptables antes que las de ufw, asi que un
+    # puerto publicado se salta el cortafuegos sin decir nada. En el servidor
+    # nuevo se comprobo: http://<ip>:8080 contestaba desde fuera. Pedia token,
+    # pero es la ingesta de telemetria del curso y no tiene por que ser publica.
     env_file:
       - .env
     environment:
