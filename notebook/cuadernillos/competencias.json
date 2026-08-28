@@ -109,5 +109,62 @@
    "I3",
    "I4"
   ]
+ },
+ "semana_05": {
+  "ejercicio_1": [
+   "I3"
+  ],
+  "ejercicio_2": [
+   "I3"
+  ],
+  "ejercicio_3": [
+   "I3"
+  ],
+  "ejercicio_4": [
+   "I3"
+  ],
+  "ejercicio_5": [
+   "I3"
+  ],
+  "ejercicio_6": [
+   "I3"
+  ],
+  "ejercicio_7": [
+   "I3",
+   "I5"
+  ],
+  "ejercicio_8": [
+   "I3",
+   "I4"
+  ]
+ },
+ "semana_06": {
+  "ejercicio_1": [
+   "I3"
+  ],
+  "ejercicio_2": [
+   "I3"
+  ],
+  "ejercicio_3": [
+   "I3"
+  ],
+  "ejercicio_4": [
+   "I3",
+   "I4"
+  ],
+  "ejercicio_5": [
+   "I3"
+  ],
+  "ejercicio_6": [
+   "I3"
+  ],
+  "ejercicio_7": [
+   "I3",
+   "I4"
+  ],
+  "ejercicio_8": [
+   "I3",
+   "I4"
+  ]
  }
 }
