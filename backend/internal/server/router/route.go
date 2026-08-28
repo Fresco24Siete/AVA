@@ -6,6 +6,7 @@ import (
 	"proxy-go/internal/middleware"
 	"proxy-go/internal/repository"
 	"proxy-go/internal/service"
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -13,30 +14,49 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-
-func ConfigureRouter (db *sqlx.DB) *gin.Engine{
+func ConfigureRouter(db *sqlx.DB) *gin.Engine {
 
 	router := gin.Default()
 
-	router.Use(cors.New(cors.Config{
-		AllowOrigins: []string{"https://jupyteruisproyecto.duckdns.org"},
-		AllowMethods: []string{"GET", "POST"},
+	// El origen permitido era el dominio de la primera VM, escrito a mano. Al
+	// mudar el AVA de maquina quedaba apuntando a un sitio que ya no existe, y
+	// nadie se entera: las llamadas del puente de metricas van de contenedor a
+	// contenedor por la red de Docker, sin navegador y por tanto sin CORS. Solo
+	// rompe el dia que algo llame desde la pagina del alumno.
+	origenes := []string{}
+	for _, o := range strings.Split(os.Getenv("CORS_ORIGENES"), ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			origenes = append(origenes, o)
+		}
+	}
+	if len(origenes) == 0 {
+		if d := strings.TrimSpace(os.Getenv("AVA_DOMINIO")); d != "" {
+			origenes = append(origenes, "https://"+d)
+		}
+	}
+	corsCfg := cors.Config{
+		AllowMethods:     []string{"GET", "POST"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		AllowCredentials: true,
-    	MaxAge:           12 * time.Hour,
-	}))
+		MaxAge:           12 * time.Hour,
+	}
+	if len(origenes) > 0 {
+		corsCfg.AllowOrigins = origenes
+		router.Use(cors.New(corsCfg))
+	}
+	// Sin origenes configurados no se monta CORS: es mas seguro no responder
+	// cabeceras de permiso que responderlas con un dominio equivocado.
 
 	//exercise inyection
 	exerciseRepository := repository.NewExerciseAttempsRepository(db)
 	attempRepository := repository.NewAttemptErrorRepository(db)
-	exerciseService :=  service.NewExerciseAttempsService(exerciseRepository, attempRepository)
+	exerciseService := service.NewExerciseAttempsService(exerciseRepository, attempRepository)
 	exerciseHandler := handler.NewExerciseHandler(exerciseService)
 
 	//Cuadernillo inyection
 	cuadernilloRepository := repository.NewCuadernilloRatingRepository(db)
 	cuadernilloService := service.NewCuadernilloRatingService(cuadernilloRepository)
 	cuadernilloHandler := handler.NewCuadernilloRatingHandler(cuadernilloService)
-
 
 	// Telemetria: el Hub acuña un token por alumno al crear su contenedor y
 	// metrics_bridge lo manda como Bearer en cada evento. Sin esto, el backend

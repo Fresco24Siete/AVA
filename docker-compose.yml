@@ -32,6 +32,12 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      # El Caddyfile las lee como {$AVA_DOMINIO} y {$AVA_MOODLE}. Sin esto el
+      # dominio habria que escribirlo dentro del fichero, y mudar el AVA de
+      # maquina significaba acordarse de editarlo a mano.
+      - AVA_DOMINIO=${AVA_DOMINIO:-localhost}
+      - AVA_MOODLE=${AVA_MOODLE:-https://lms.uis.edu.co}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data

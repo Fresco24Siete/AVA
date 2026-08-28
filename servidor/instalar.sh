@@ -39,8 +39,39 @@ if ! docker ps >/dev/null 2>&1 \
     fi
 fi
 
-COMPOSE=(docker compose -p ava -f docker-compose.yml -f servidor/docker-compose.tunel.yml)
-PUERTO_INTERNO=8081          # donde escucha Caddy; es lo que se le pasa al túnel
+# Dos formas de publicar el AVA, y el resto del script cambia con ella:
+#
+#   túnel   — máquina de escritorio detrás de NAT (el PC del profesor). Caddy
+#             escucha solo en 127.0.0.1:8081 y el TLS lo pone Tailscale Funnel.
+#   público — servidor con IP y dominio propios (Hetzner, GCP…). Caddy toma
+#             80 y 443 y saca el certificado él mismo.
+#
+# Lo decide AVA_DOMINIO: si hay dominio, hay servidor público. Se lee del .env,
+# que es donde vive el resto de la configuración, y se puede forzar por entorno.
+dominio_del_env() {
+    [ -f .env ] || return 0
+    sed -n 's/^AVA_DOMINIO=[[:space:]]*//p' .env | tail -1 | tr -d "\"'" | tr -d '[:space:]'
+}
+AVA_DOMINIO="${AVA_DOMINIO:-$(dominio_del_env)}"
+
+if [ -n "$AVA_DOMINIO" ]; then
+    MODO=publico
+    COMPOSE=(docker compose -p ava -f docker-compose.yml)
+    COMPOSE_FILE_ENV=docker-compose.yml
+    PUERTO_INTERNO=443       # Caddy publica 80 y 443 y hace el TLS
+    # Se comprueba contra el propio Caddy, pidiéndole el dominio por cabecera:
+    # así no depende de que el DNS ya se haya propagado. -k porque el
+    # certificado es para el dominio y estamos entrando por 127.0.0.1.
+    probar_http() { curl -sk -o /dev/null -w '%{http_code}' --max-time 10 \
+                    -H "Host: $AVA_DOMINIO" "https://127.0.0.1$1" 2>/dev/null || echo 000; }
+else
+    MODO=tunel
+    COMPOSE=(docker compose -p ava -f docker-compose.yml -f servidor/docker-compose.tunel.yml)
+    COMPOSE_FILE_ENV=docker-compose.yml:servidor/docker-compose.tunel.yml
+    PUERTO_INTERNO=8081      # donde escucha Caddy; es lo que se le pasa al túnel
+    probar_http() { curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
+                    "http://127.0.0.1:8081$1" 2>/dev/null || echo 000; }
+fi
 FALLOS=0
 
 # --- cómo se ve esto por pantalla -------------------------------------------
@@ -161,7 +192,14 @@ else
 # viejo, publica 80/443 en vez del puerto del túnel, y el AVA deja de responder
 # desde fuera con un 502. Pasó el 2026-08-24 y costó encontrarlo.
 COMPOSE_PROJECT_NAME=ava
-COMPOSE_FILE=docker-compose.yml:servidor/docker-compose.tunel.yml
+COMPOSE_FILE=$COMPOSE_FILE_ENV
+
+# Dominio público del AVA. Vacío = está detrás de un túnel y no tiene dominio
+# propio. Con valor, Caddy pide el certificado para él y el backend acepta ese
+# origen en CORS. Es lo único que hay que cambiar al mudar el AVA de máquina.
+AVA_DOMINIO=$AVA_DOMINIO
+# El Moodle que puede embeber el AVA en un marco.
+AVA_MOODLE=${AVA_MOODLE:-https://lms.uis.edu.co}
 
 # --- Base de datos ---
 DB_USER=ava
@@ -380,8 +418,7 @@ paso "5. Comprobaciones"
 esperar_http() {          # $1 = ruta · $2 = intentos (cada uno son 2 s)
     local ruta="$1" intentos="${2:-60}" codigo=000
     for _ in $(seq 1 "$intentos"); do
-        codigo=$(curl -s -o /dev/null -w '%{http_code}' \
-                 "http://127.0.0.1:${PUERTO_INTERNO}${ruta}" 2>/dev/null || echo 000)
+        codigo=$(probar_http "$ruta")
         if [ "$codigo" != "000" ] && [ "$codigo" -lt 500 ]; then
             echo "$codigo"; return 0
         fi
@@ -392,9 +429,9 @@ esperar_http() {          # $1 = ruta · $2 = intentos (cada uno son 2 s)
 
 info "esperando al Hub…"
 if codigo=$(esperar_http /hub/login 60); then
-    ok "el Hub responde por Caddy (puerto ${PUERTO_INTERNO}, HTTP $codigo)"
+    ok "el Hub responde por Caddy (modo $MODO, HTTP $codigo)"
 else
-    mal "el Hub no responde por el puerto ${PUERTO_INTERNO} (HTTP $codigo)"
+    mal "el Hub no responde por Caddy (modo $MODO, HTTP $codigo)"
 fi
 
 # El intercambio se registra en el Hub al arrancar, así que puede tardar un poco
@@ -430,7 +467,11 @@ ok "$vivos servicios en marcha"
 paso "6. El indicador de la barra"
 
 INDICADOR="$HOME/.local/share/ava"
-if [ ! -f servidor/indicador/ava_indicador.py ]; then
+if [ "$MODO" = publico ]; then
+    info "no aplica: un servidor de nube no tiene escritorio donde pintarlo."
+    info "Para ver el estado desde aquí:"
+    info "    cd $RAIZ && bash servidor/instalar.sh --verificar"
+elif [ ! -f servidor/indicador/ava_indicador.py ]; then
     aviso "no encuentro el indicador en el repositorio; me lo salto"
 elif $solo_verificar; then
     if pgrep -f "ava_indicador.py" >/dev/null 2>&1; then
@@ -490,7 +531,25 @@ fi
 # --- 7. lo que queda por hacer con permisos de administrador -----------------
 paso "7. Para publicarlo en internet"
 
-if command -v tailscale >/dev/null 2>&1; then
+if [ "$MODO" = publico ]; then
+    # Que Caddy conteste no significa que el mundo llegue: falta que el DNS
+    # apunte AQUÍ. Si no, Let's Encrypt no puede validar y el certificado nunca
+    # sale; el síntoma es un error de TLS que no menciona el DNS para nada.
+    MIA=$(curl -s --max-time 10 https://api.ipify.org 2>/dev/null || echo "")
+    RESUELVE=$(getent ahostsv4 "$AVA_DOMINIO" 2>/dev/null | awk '{print $1; exit}')
+    if [ -z "$RESUELVE" ]; then
+        mal "$AVA_DOMINIO no resuelve a ninguna IP todavía"
+        info "Crea el registro A apuntando a ${MIA:-la IP de esta máquina} y espera unos minutos."
+    elif [ -n "$MIA" ] && [ "$RESUELVE" != "$MIA" ]; then
+        mal "$AVA_DOMINIO apunta a $RESUELVE, y esta máquina es $MIA"
+        info "Corrige el registro A; mientras no coincida no habrá certificado."
+    else
+        ok "$AVA_DOMINIO apunta a esta máquina ($RESUELVE)"
+    fi
+    echo
+    info "En Moodle, la actividad LTI debe apuntar a:"
+    info "    https://${AVA_DOMINIO}/hub/lti/launch"
+elif command -v tailscale >/dev/null 2>&1; then
     if tailscale serve status 2>/dev/null | grep -q "${PUERTO_INTERNO}"; then
         ok "el túnel ya está publicando el puerto ${PUERTO_INTERNO}"
         nombre=$(tailscale status --json 2>/dev/null \
