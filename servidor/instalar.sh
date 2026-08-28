@@ -59,18 +59,29 @@ if [ -n "$AVA_DOMINIO" ]; then
     COMPOSE=(docker compose -p ava -f docker-compose.yml)
     COMPOSE_FILE_ENV=docker-compose.yml
     PUERTO_INTERNO=443       # Caddy publica 80 y 443 y hace el TLS
-    # Se comprueba contra el propio Caddy, pidiéndole el dominio por cabecera:
-    # así no depende de que el DNS ya se haya propagado. -k porque el
-    # certificado es para el dominio y estamos entrando por 127.0.0.1.
-    probar_http() { curl -sk -o /dev/null -w '%{http_code}' --max-time 10 \
-                    -H "Host: $AVA_DOMINIO" "https://127.0.0.1$1" 2>/dev/null || echo 000; }
+    # Se comprueba contra el propio Caddy con --resolve: la petición sale hacia
+    # el dominio (así el SNI es el correcto y Caddy sirve el sitio, y el
+    # certificado valida) pero se conecta a 127.0.0.1, de modo que no depende de
+    # que el DNS ya se haya propagado. Con -H "Host:" no servía: el SNI iba como
+    # 127.0.0.1, Caddy no reconocía el sitio y curl fallaba en el handshake.
+    probar_http() {
+        local c
+        c=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
+            --resolve "${AVA_DOMINIO}:443:127.0.0.1" \
+            "https://${AVA_DOMINIO}$1" 2>/dev/null || true)
+        printf '%s' "${c:-000}"
+    }
 else
     MODO=tunel
     COMPOSE=(docker compose -p ava -f docker-compose.yml -f servidor/docker-compose.tunel.yml)
     COMPOSE_FILE_ENV=docker-compose.yml:servidor/docker-compose.tunel.yml
     PUERTO_INTERNO=8081      # donde escucha Caddy; es lo que se le pasa al túnel
-    probar_http() { curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
-                    "http://127.0.0.1:8081$1" 2>/dev/null || echo 000; }
+    probar_http() {
+        local c
+        c=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
+            "http://127.0.0.1:8081$1" 2>/dev/null || true)
+        printf '%s' "${c:-000}"
+    }
 fi
 FALLOS=0
 
@@ -419,6 +430,10 @@ esperar_http() {          # $1 = ruta · $2 = intentos (cada uno son 2 s)
     local ruta="$1" intentos="${2:-60}" codigo=000
     for _ in $(seq 1 "$intentos"); do
         codigo=$(probar_http "$ruta")
+        # "000000" —curl imprimiendo 000 dos veces— pasaba el "-lt 500" y daba
+        # por bueno un servicio caido. Cualquier cosa que no sean tres digitos
+        # es un fallo, no un exito.
+        case "$codigo" in [1-9][0-9][0-9]) ;; *) codigo=000 ;; esac
         if [ "$codigo" != "000" ] && [ "$codigo" -lt 500 ]; then
             echo "$codigo"; return 0
         fi
@@ -575,12 +590,16 @@ if [ -f .env ]; then
     paso "8. Datos para la actividad de Moodle"
     lti_k=$(grep -m1 '^LTI_CLIENT_KEY=' .env | cut -d= -f2-)
     lti_s=$(grep -m1 '^LTI_CLIENT_SECRET=' .env | cut -d= -f2-)
-    maquina=$(tailscale status --json 2>/dev/null \
-              | python3 -c "import json,sys; print(json.load(sys.stdin)['Self']['DNSName'].rstrip('.'))" \
-              2>/dev/null || echo "")
+    if [ "$MODO" = publico ]; then
+        maquina="$AVA_DOMINIO"
+    else
+        maquina=$(tailscale status --json 2>/dev/null \
+                  | python3 -c "import json,sys; print(json.load(sys.stdin)['Self']['DNSName'].rstrip('.'))" \
+                  2>/dev/null || echo "")
+    fi
     info "En Moodle, «Herramienta externa» del curso:"
     info ""
-    info "  URL de lanzamiento    https://${maquina:-<nombre-de-esta-maquina>.ts.net}/hub/lti/launch"
+    info "  URL de lanzamiento    https://${maquina:-<el-dominio-de-esta-maquina>}/hub/lti/launch"
     info "  Clave de consumidor   ${lti_k:-?}"
     info "  Secreto compartido    ${lti_s:-?}"
     info ""
