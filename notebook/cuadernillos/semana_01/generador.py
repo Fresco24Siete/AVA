@@ -65,17 +65,17 @@ máquina cuando lo haces.
 
     c.md("""## Al terminar este cuadernillo vas a poder…
 
-- Contar, sin leer, **de dónde salió la computación**: de una idea matemática
-  de hace mil años, no de un aparato.
-- Señalar qué parte de un sistema es **hardware**, cuál es **software**, cuál
-  es un **dato** y cuál es un **proceso** — y no confundirlos nunca más.
-- Explicar por qué existen **tres alturas de lenguaje** (máquina, ensamblador,
-  alto nivel) y ver la misma suma escrita en las tres.
+- Ejecutar código Python en un cuadernillo y explicar **quién lo ejecuta**.
+- Guardar valores en **variables** y distinguir los cuatro tipos básicos:
+  texto, entero, decimal y booleano.
+- Leer un programa **como lo lee el intérprete** —de arriba abajo, una línea a
+  la vez— y predecir con qué valores termina.
 - Distinguir un **editor**, una **terminal**, un **intérprete** y un **IDE**, y
   decir para qué sirven Python, VS Code y Jupyter sin repetir un eslogan.
 - Crear, escribir y leer un **archivo** desde código.
 - Reconocer los **tres tipos de error** —sintaxis, ejecución y lógica— y saber
   cuál de los tres nadie te va a avisar.
+- Escribir tu primera **función** completa: recibe datos, calcula y devuelve.
 
 **Lo que NO se te pide hoy:** escribir programas largos, memorizar fechas ni
 saber nada de antemano. Si nunca has programado, este cuadernillo está escrito
@@ -185,257 +185,14 @@ pedazo de silicio.
 """)
 
     # =========================================================================
-    # Bloque 3A — Historia, hardware y software
+    # Bloque 3 — El entorno de Python
     # =========================================================================
-    c.seccion(3, "La máquina por dentro", 35, """### 3A. Mil años en cinco minutos
+    c.seccion(3, "¿Dónde se escribe todo esto?", 25, """Ya ejecutaste código y ya sabes que quien lo ejecuta es el kernel. Falta
+ponerle nombre a las herramientas, porque durante el semestre se van a nombrar
+todo el tiempo y se confunden con facilidad.
 
-La palabra **algoritmo** no viene de la informática: viene del nombre de una
-persona. Y el primer programa de la historia se escribió **un siglo antes** de
-que existiera el primer computador. Ejecuta la línea de tiempo.""")
+Cuatro palabras, y las tres aplicaciones que vas a usar de verdad.""")
 
-    c.code("linea_de_tiempo()")
-
-    c.md("""Fíjate en el ENIAC: 27 toneladas y 17.000 tubos de vidrio para hacer menos
-cuentas que la calculadora de tu celular. ¿Qué cambió? El **transistor**, y el
-hecho de que cada año caben más en el mismo pedazo de silicio.
-""")
-
-    c.code("grafica_transistores()")
-
-    c.md("""Y mientras el hardware se encogía, el **software** hacía el camino contrario:
-subía de altura.
-
-| Época | Cómo se le hablaba a la máquina | Quién traducía |
-|---|---|---|
-| 1945 | Moviendo cables y interruptores | Nadie: la persona *era* el traductor |
-| 1949 | **Lenguaje ensamblador**: `ADD`, `MOV`, `JMP` | Un programa ensamblador |
-| 1957–1959 | **FORTRAN, COBOL**: fórmulas y frases | Un compilador |
-| 1972 | **C**: alto nivel con control fino de la memoria | Un compilador |
-| 1991 | **Python**: código que se lee casi como inglés | Un **intérprete** |
-| 2015–hoy | Librerías de IA: describes el modelo, no el cálculo | Capas y capas de lo anterior |
-
-Cada fila de esa tabla es la misma jugada: **alguien escribió un programa para
-no tener que volver a escribir lo de abajo a mano.** Eso es, literalmente, la
-historia del software.
-""")
-
-    c.md("""### Las cuatro cosas que hay dentro de un sistema
-
-Ejecuta el diagrama y quédate con las cuatro palabras: te las van a preguntar
-toda la carrera.
-""")
-
-    c.figura("s01_d2_capas",
-             "Hardware, software, dato y proceso: el ciclo no se acaba nunca.")
-
-    c.md("""| | Qué es | Cómo lo reconoces | Ejemplo en la UIS |
-|---|---|---|---|
-| **Hardware** | Lo físico | Se puede golpear (no lo hagas) | El portátil de la sala de cómputo, el lector del carné |
-| **Software** | Las instrucciones | Se instala, se actualiza, se borra | Moodle, Python, el juego del celular |
-| **Dato** | Lo que se guarda y se transforma | Es un valor: un número, un texto, una foto | Tu nota 4.3, tu foto del carné, la placa de un bus |
-| **Proceso** | Lo que se hace con los datos | Es un verbo | Calcular el promedio, ordenar por apellido, cobrar el pasaje |
-
-Un error clásico de primer semestre: creer que un archivo de Word es software.
-No lo es. **Word es software; tu documento es un dato.** El software es la
-receta, el dato es el ingrediente y el proceso es cocinar.
-""")
-
-    c.md("""### ¿Y las «aplicaciones informáticas»?
-
-Todo el software del mundo cabe en cuatro cajones. Ejecuta el diagrama.
-""")
-
-    c.figura("s01_d7_aplicaciones",
-             "Los cuatro cajones, con ejemplos que ya usas en Bucaramanga.")
-
-    c.md("""Detalle que casi nadie nota el primer día: **el software de desarrollo también
-es software**. Python, VS Code y Jupyter son programas que sirven para escribir
-programas. Estás usando un programa para aprender a hacer programas. Bienvenido
-al oficio.
-""")
-
-    c.md("Tres preguntas rápidas. No tienen nota: dan XP y te dicen si te quedó claro.")
-
-    c.code('''quiz(
-    "Q1", 6,
-    "El primer algoritmo pensado para una máquina se escribió…",
-    ["un siglo antes de que existiera el primer computador",
-     "al mismo tiempo que el ENIAC",
-     "cuando se inventó Python",
-     "en 1936, con Turing"],
-    "un siglo antes de que existiera el primer computador",
-    "Ada Lovelace, 1843. La Máquina Analítica para la que lo escribió nunca "
-    "llegó a construirse: el algoritmo es anterior al aparato.",
-    pistas=["Vuelve a la línea de tiempo: la máquina para la que se escribió ni "
-            "siquiera llegó a construirse."],
-)''')
-
-    c.code('''quiz(
-    "Q2", 6,
-    "¿Cuál de estas afirmaciones es FALSA?",
-    ["El ENIAC se programaba moviendo cables",
-     "Un archivo de Word es software",
-     "Un transistor es hardware",
-     "Ordenar la lista del curso es un proceso"],
-    "Un archivo de Word es software",
-    "Word es software; tu documento es un <b>dato</b>. La receta y el "
-    "ingrediente no son la misma cosa.",
-    pistas=["Tres de las cuatro son ciertas. Piensa en la diferencia entre la "
-            "receta y el ingrediente."],
-)''')
-
-    c.code('''quiz(
-    "Q3", 6,
-    "El software que controla los semáforos de la Carrera 27 es…",
-    ["una aplicación de usuario",
-     "una aplicación especializada de control",
-     "un sistema operativo",
-     "una herramienta de desarrollo"],
-    "una aplicación especializada de control",
-    "Nadie se sienta delante de él: gobierna un equipo del mundo real, igual "
-    "que el software de un ascensor o de una máquina de la planta.",
-    pistas=["No lo usa una persona en un escritorio ni sirve para escribir "
-            "programas: gobierna un equipo del mundo real."],
-)''')
-
-    # =========================================================================
-    # Bloque 3B — Los tres pisos
-    # =========================================================================
-    c.md("""### 3B. Los tres pisos del edificio
-
-Tu procesador no entiende `print`. No entiende `suma`. No entiende **ninguna
-palabra**. Solo entiende números, y ni siquiera en decimal: en binario, unos y
-ceros que en el fondo son «hay corriente» y «no hay corriente».
-
-Entonces, ¿cómo diablos funcionó tu programa?
-
-Porque entre tú y el silicio hay **pisos**. Vamos a bajarlos uno por uno, con la
-misma cuenta de siempre: **4 + 9**.
-""")
-
-    c.md("""#### Piso 3 — Alto nivel: lo que tú escribes
-
-Cerca de una persona, lejos de la máquina. Se lee casi como inglés.
-""")
-
-    c.code('''def sumar(a, b):
-    return a + b
-
-print(sumar(4, 9))''')
-
-    c.md("""#### Piso 2 — Bajo nivel: lo que entiende la máquina virtual de Python
-
-Antes de ejecutar nada, Python **traduce** tu función a una lista de órdenes
-mínimas, cada una tan simple que no se puede partir más: «trae `a`», «trae
-`b`», «súmalos», «devuélvelo». Eso se llama **bytecode**, y es el pariente
-directo del **lenguaje ensamblador**.
-
-Puedes verlo. En serio. Ejecuta:
-""")
-
-    c.code("""import dis
-dis.dis(sumar)""")
-
-    c.md("""Léelo así, ignorando los números de la izquierda:
-
-| Orden | Qué significa |
-|---|---|
-| `RESUME` | «arranca» (papeleo interno de Python; ignóralo) |
-| `LOAD_FAST a` | trae el valor de `a` y ponlo sobre la mesa |
-| `LOAD_FAST b` | trae el valor de `b` y ponlo sobre la mesa |
-| `BINARY_OP +` | toma los dos de la mesa, súmalos, deja el resultado |
-| `RETURN_VALUE` | entrega lo que quedó en la mesa |
-
-Cinco órdenes para una suma. **Tú escribiste una línea; la máquina necesitó
-cinco pasos.** Y esto todavía no es lenguaje de máquina de verdad: es el
-ensamblador de una máquina *imaginaria* (la máquina virtual de Python).
-
-*(Este listado es el de Python 3.11, que es el del AVA. Si en tu computador ves
-líneas de más o con otro nombre, ignóralas: dependen de la versión.)*
-
-Si en vez de Python usáramos C++ —que se compila directo al procesador— el
-ensamblador real de un Intel se vería así (no lo ejecutes, solo léelo):
-
-```asm
-mov  eax, DWORD PTR [rbp-4]   ; trae a
-add  eax, DWORD PTR [rbp-8]   ; súmale b
-ret                           ; devuelve el resultado
-```
-
-¿Ves el parecido? *Trae, suma, devuelve.* Todos los ensambladores del mundo
-dicen lo mismo con otras palabras.
-""")
-
-    c.md("""#### Piso 1 — Lenguaje de máquina: lo que de verdad viaja
-
-Ni siquiera `LOAD_FAST` existe dentro del computador. Esa palabra es un favor
-que nos hace Python para que podamos leer. Lo que hay de verdad son **bytes**.
-Míralos:
-""")
-
-    c.code('''crudo = sumar.__code__.co_code
-print("Los mismos 5 pasos, en bytes:", list(crudo))
-print()
-print("Y en binario, que es lo único que existe de verdad:")
-print(" ".join(format(b, "08b") for b in crudo))''')
-
-    c.md("""Eso —esa fila de unos y ceros— es tu función. No una foto de tu función: **es
-tu función**. Cada `1` es un transistor con corriente y cada `0` es uno sin
-corriente.
-
-Ahora entiendes la frase completa: *bajar de nivel es acercarse a la máquina y
-alejarse de la persona*.
-""")
-
-    c.figura("s01_d3_niveles",
-             "La misma suma, tres veces. Lo que cambia es a qué altura está escrita.")
-
-    c.code("tres_pisos(sumar)     # los tres paneles, con la MISMA función")
-
-    c.md("""### Maneja tú una máquina de verdad (una pequeñita)
-
-Ver bytes es una cosa; **darle órdenes en su idioma** es otra. Te presento la
-**MiniMáquina**: un computador de mentiras con una sola gaveta (el
-*acumulador*) y cuatro instrucciones. Su lenguaje de máquina son números:
-
-| Código | Instrucción | Qué hace |
-|---|---|---|
-| `1 n` | CARGAR n | pone `n` en la gaveta, botando lo que hubiera |
-| `2 n` | SUMAR n | le suma `n` a lo que hay en la gaveta |
-| `3 0` | MOSTRAR | muestra lo que hay en la gaveta |
-| `0 0` | PARAR | apaga la máquina |
-
-Cada instrucción son **dos números**: el código y su argumento. Un programa es
-una lista de números y nada más. Ejecuta este y mira la traza:
-""")
-
-    c.code('''programa = [1, 4,    # CARGAR 4
-            2, 9,    # SUMAR 9
-            3, 0,    # MOSTRAR
-            0, 0]    # PARAR
-
-MiniMaquina(programa).ejecutar(traza=True)''')
-
-    c.md("""Acabas de **programar en lenguaje de máquina**. Sin comillas, sin metáfora: le
-diste a una máquina una lista de números y los obedeció en orden.
-
-Y ahora la moraleja de toda la sección. Estas tres cosas hacen exactamente lo
-mismo:
-
-```
-[1, 4, 2, 9, 3, 0, 0, 0]        <- lenguaje de máquina  (la máquina feliz, tú perdido)
-CARGAR 4 / SUMAR 9 / MOSTRAR    <- ensamblador          (empate incómodo)
-print(4 + 9)                    <- alto nivel           (tú feliz, alguien tradujo por ti)
-```
-
-Los tres pisos existen porque **alguien tuvo que ceder**. Durante veinte años
-cedieron las personas. Desde FORTRAN cede la máquina — y ese «alguien que
-traduce» es el intérprete que vas a conocer en un minuto.
-""")
-
-    # =========================================================================
-    # Bloque 3C — El entorno
-    # =========================================================================
     c.md("""### 3C. ¿Dónde se escribe todo esto?
 
 Cuatro palabras que se confunden todo el tiempo y que a partir de hoy vas a
@@ -741,167 +498,163 @@ Tres reglas de la casa:
 
     # --- Ejercicio 1 ------------------------------------------------------
     c.ejercicio(
-        numero=1, competencias=['I4'], titulo="Hardware, software, dato o proceso", estrellas=1, puntos=3,
-        enunciado="""Esta es la versión individual de la actividad que hicieron en clase. Abajo hay
-ocho cosas de la vida real de la UIS. Clasifica cada una escribiendo **una** de
-estas cuatro palabras, entre comillas:
+        numero=1, competencias=['I3'], titulo="Tu ficha de estudiante", estrellas=1, puntos=3,
+        enunciado="""Una **variable** es un nombre que guarda un valor. Se crea con `=`, que aquí no
+significa «es igual a» sino «guarda esto»:
 
-`"hardware"` · `"software"` · `"dato"` · `"proceso"`
+```python
+ciudad = "Bucaramanga"
+```
 
-La primera ya está resuelta como ejemplo. Si dudas, vuelve a la tabla de la
-sección 3A: *el software es la receta, el dato es el ingrediente, el proceso es
-cocinar y el hardware es la olla.*""",
-        partida='''# Reemplaza cada  ...  por una de estas cuatro palabras, entre comillas:
-#     "hardware"    "software"    "dato"    "proceso"
-CLASIFICACION = {
-    "el mouse del portátil":                    "hardware",   # resuelto, de ejemplo
-    "WhatsApp":                                 ...,
-    "la nota 4.3 de tu primer parcial":         ...,
-    "ordenar la lista del curso por apellido":  ...,
-    "la pantalla táctil del cajero automático": ...,
-    "Windows 11":                               ...,
-    "la foto de tu carné de la UIS":            ...,
-    "calcular el promedio del semestre":        ...,
-}''',
-        solucion='''CLASIFICACION = {
-    "el mouse del portátil":                    "hardware",
-    "WhatsApp":                                 "software",
-    "la nota 4.3 de tu primer parcial":         "dato",
-    "ordenar la lista del curso por apellido":  "proceso",
-    "la pantalla táctil del cajero automático": "hardware",
-    "Windows 11":                               "software",
-    "la foto de tu carné de la UIS":            "dato",
-    "calcular el promedio del semestre":        "proceso",
-}''',
-        pruebas='''assert isinstance(CLASIFICACION, dict), "CLASIFICACION debe seguir siendo un diccionario"
-assert len(CLASIFICACION) == 8, "No agregues ni borres filas: son ocho"
-assert all(isinstance(v, str) for v in CLASIFICACION.values()), \\
-    "Cada respuesta va entre comillas, como texto"
+Python distingue cuatro tipos que vas a usar todo el semestre:
 
-corregir("ejercicio_1", CLASIFICACION)
-print("Ejercicio 1 superado: distingues hardware, software, datos y procesos.")''',
+| Tipo | Qué guarda | Ejemplo |
+|---|---|---|
+| `str` | Texto, siempre entre comillas | `"Ana"` |
+| `int` | Un número entero, sin decimales | `2026` |
+| `float` | Un número con decimales | `4.2` |
+| `bool` | Verdadero o falso, sin comillas | `True` |
+
+Crea **tu** ficha con esos cuatro nombres exactos. Los valores son tuyos, pero
+el tipo tiene que ser el correcto:
+
+- `nombre` — tu nombre, como texto
+- `codigo` — tu código estudiantil, como número entero
+- `promedio` — el promedio que te gustaría sacar, con decimales
+- `primer_semestre` — `True` o `False`
+
+**Cuidado con el clásico:** `codigo = "2026"` **no** es un entero, es texto con
+forma de número. Las comillas cambian el tipo.""",
+        partida='''nombre = ...
+codigo = ...
+promedio = ...
+primer_semestre = ...''',
+        solucion='''nombre = "Ana Maria"
+codigo = 2260123
+promedio = 4.2
+primer_semestre = True''',
+        pruebas='''assert isinstance(nombre, str) and nombre.strip(), \\
+    "nombre debe ser texto entre comillas y no puede quedar vacio"
+assert isinstance(codigo, int) and not isinstance(codigo, bool), \\
+    "codigo debe ser un entero SIN comillas (2260123, no \\"2260123\\")"
+assert isinstance(promedio, float), \\
+    "promedio debe llevar decimales (4.2), no ser entero (4)"
+assert isinstance(primer_semestre, bool), \\
+    "primer_semestre debe ser True o False, sin comillas"
+print("Ejercicio 1 verificado: cuatro variables, cuatro tipos correctos.")''',
+        pruebas_ocultas='''assert 0.0 <= promedio <= 5.0, "En la UIS el promedio va de 0.0 a 5.0"
+assert codigo > 0, "El codigo estudiantil es un numero positivo"''',
         pistas=[
-            "Hazte una pregunta por cada fila: ¿esto lo puedo tocar? Si sí, es hardware.",
-            "De las que quedan: ¿es un <i>verbo</i> (algo que se hace) o un <i>valor</i> "
-            "(algo que se guarda)? Verbo &rarr; proceso; valor &rarr; dato.",
-            "Ejemplo resuelto: «Windows 11» no se puede tocar, no es un valor y no es "
-            "una acción que alguien realiza: es un conjunto de instrucciones que se "
-            "instala. Aplica ese mismo razonamiento a las demás.",
+            "Las comillas deciden el tipo. Con comillas es texto; sin comillas, Python "
+            "lo lee como numero. Pregúntate para cada línea: ¿esto necesita comillas?",
+            "Un `float` necesita el punto decimal, aunque sea `4.0`. Si escribes `4` a "
+            "secas, Python lo guarda como `int` y la prueba te lo va a decir.",
+            "`True` y `False` van con mayúscula inicial y sin comillas. `\"True\"` con "
+            "comillas es texto, no un booleano.",
         ],
     )
 
     # --- Ejercicio 2 ------------------------------------------------------
     c.ejercicio(
-        numero=2, competencias=['I4'], titulo="La escalera de los lenguajes", estrellas=1, puntos=3,
-        enunciado="""Los cuatro fragmentos de abajo hacen **lo mismo**: sumar dos números. Lo que
-cambia es a qué altura están escritos.
+        numero=2, competencias=['I4'], titulo="Cada herramienta con su oficio", estrellas=1, puntos=3,
+        enunciado="""Vuelve a la sección 3 si hace falta. Completa el diccionario emparejando cada
+herramienta con **lo único que la distingue de las otras tres**.
 
-Ordénalos en la lista `NIVELES`, del **más cercano a la máquina** (posición 1)
-al **más cercano a una persona** (posición 4). Copia los textos tal cual, con
-sus comillas.
+Las cuatro respuestas posibles, escritas exactamente así:
 
-```
-A)  std::cout << a + b;
-B)  10110000 01100001
-C)  print(a + b)
-D)  MOV AL, 61h
-```
-
-Pista conceptual, no técnica: pregúntate en cuál de los cuatro **no aparece
-ninguna palabra**, y en cuál se parece más a algo que dirías en voz alta.""",
-        partida='''NIVELES = [
-    ...,   # 1 = lo más cerca de la máquina
-    ...,
-    ...,
-    ...,   # 4 = lo más cerca de una persona
-]''',
-        solucion='''NIVELES = [
-    "10110000 01100001",
-    "MOV AL, 61h",
-    "std::cout << a + b;",
-    "print(a + b)",
-]''',
-        pruebas='''assert isinstance(NIVELES, list) and len(NIVELES) == 4, "NIVELES debe ser una lista de 4 textos"
-assert all(isinstance(x, str) for x in NIVELES), "Copia los fragmentos como texto, entre comillas"
-assert len(set(NIVELES)) == 4, "No repitas fragmentos: cada uno va una sola vez"
-
-corregir("ejercicio_2", NIVELES)
-print("Ejercicio 2 superado: ya sabes leer la altura de un lenguaje.")''',
+- `"escribir"` — sirve para escribir y guardar el texto del programa
+- `"ordenar"` — sirve para darle órdenes escritas al sistema operativo
+- `"ejecutar"` — es el único que lee tu código y lo convierte en acciones
+- `"todo_junto"` — es un paquete que trae a los otros tres dentro""",
+        partida='''HERRAMIENTAS = {
+    "editor": ...,
+    "terminal": ...,
+    "interprete": ...,
+    "ide": ...,
+}''',
+        solucion='''HERRAMIENTAS = {
+    "editor": "escribir",
+    "terminal": "ordenar",
+    "interprete": "ejecutar",
+    "ide": "todo_junto",
+}''',
+        pruebas='''assert isinstance(HERRAMIENTAS, dict), "HERRAMIENTAS debe seguir siendo un diccionario"
+assert set(HERRAMIENTAS) == {"editor", "terminal", "interprete", "ide"}, \\
+    "No cambies las cuatro llaves: editor, terminal, interprete, ide"
+_validas = {"escribir", "ordenar", "ejecutar", "todo_junto"}
+assert set(HERRAMIENTAS.values()) <= _validas, \\
+    "Usa solo estas cuatro respuestas: escribir, ordenar, ejecutar, todo_junto"
+assert len(set(HERRAMIENTAS.values())) == 4, \\
+    "Cada herramienta hace algo distinto: no repitas ninguna respuesta"
+print("Ejercicio 2 verificado: ya no vas a confundir las cuatro.")''',
+        pruebas_ocultas='''assert HERRAMIENTAS["interprete"] == "ejecutar"
+assert HERRAMIENTAS["ide"] == "todo_junto"
+assert HERRAMIENTAS["editor"] == "escribir"
+assert HERRAMIENTAS["terminal"] == "ordenar"''',
         pistas=[
-            "Empieza por los extremos, que son los fáciles: ¿cuál no tiene ni una sola "
-            "letra que un humano pueda leer? Ese es el 1.",
-            "<code>MOV</code> es una abreviatura de <i>move</i>: es ensamblador, el "
-            "piso 2 de la sección 3B.",
-            "Quedan dos lenguajes de alto nivel. El que está más abajo es el que se "
-            "compila directo al procesador y te obliga a ser más específico; el que "
-            "está más arriba es el que estás aprendiendo.",
+            "Empieza por el que tienes más claro y ve descartando: como las cuatro "
+            "respuestas son distintas, cada acierto te reduce el problema.",
+            "Solo uno de los cuatro **hace** algo con tu código; los otros tres te "
+            "ayudan a escribirlo, guardarlo o lanzarlo.",
+            "El IDE no es una quinta herramienta: es la caja que contiene a las otras. "
+            "Y la terminal no entiende Python, entiende órdenes del sistema.",
         ],
     )
-
-    c.md("""*¿Por qué C++ va por debajo de Python?* Porque se compila directo a código de
-máquina y te obliga a declarar tipos y detalles que Python resuelve solo. Los
-dos son de alto nivel; uno está un escalón más abajo que el otro.
-""")
 
     # --- Ejercicio 3 ------------------------------------------------------
     c.ejercicio(
-        numero=3, competencias=['I3', 'I4'], titulo="Escribe en lenguaje de máquina", estrellas=2, puntos=4,
-        enunciado="""Tu turno de darle órdenes a la MiniMáquina en su propio idioma. Recuerda su
-repertorio completo:
+        numero=3, competencias=['I3'], titulo="Traza el intérprete", estrellas=2, puntos=4,
+        enunciado="""El intérprete lee **de arriba abajo, una línea a la vez**, y cada línea se
+ejecuta con los valores que existen *en ese momento*. Eso hace que reasignar una
+variable no cambie lo que ya se calculó con ella.
 
-| Código | Instrucción | Qué hace |
-|---|---|---|
-| `1 n` | CARGAR n | pone `n` en la gaveta |
-| `2 n` | SUMAR n | le suma `n` a la gaveta |
-| `3 0` | MOSTRAR | muestra lo que hay en la gaveta |
-| `0 0` | PARAR | apaga la máquina |
+Lee este programa **sin ejecutarlo**:
 
-**Escribe el programa que calcule 4 + 9 + 7 y muestre el resultado.**
+```python
+a = 10
+b = 3
+suma = a + b
+a = 100
+doble = suma * 2
+b = suma
+```
 
-Tres reglas que la máquina exige:
-- se CARGA **una sola vez** (el primer número); los demás se SUMAN
-- hay que MOSTRAR antes de PARAR, o nadie verá nada
-- todo programa termina con PARAR""",
-        partida='''# Escribe la lista completa. La primera instrucción va de regalo:
-#   1, 4   significa  CARGAR 4
-programa_suma = [
-    1, 4,     # CARGAR 4
-    # <- sigue tú: SUMAR 9, SUMAR 7, MOSTRAR y PARAR
-]''',
-        solucion='''programa_suma = [
-    1, 4,     # CARGAR 4
-    2, 9,     # SUMAR 9
-    2, 7,     # SUMAR 7
-    3, 0,     # MOSTRAR
-    0, 0,     # PARAR
-]''',
-        pruebas='''assert isinstance(programa_suma, list), "programa_suma tiene que ser una lista"
-assert all(isinstance(x, int) for x in programa_suma), "Todo en lenguaje de máquina son números enteros"
-assert len(programa_suma) % 2 == 0, "Cada instrucción son DOS números: código y argumento"
-assert set(programa_suma[0::2]) <= {0, 1, 2, 3}, \\
-    "Usaste un código de instrucción que la MiniMáquina no conoce (solo 0, 1, 2 y 3)"
-assert programa_suma[0::2].count(1) == 1, \\
-    "Se CARGA una sola vez: los demás números se SUMAN"
+¿Con qué valores termina cada variable? Escríbelos en `TRAZA`.
 
-_maquina = MiniMaquina(programa_suma)
-_salidas = _maquina.ejecutar(traza=False)
-
-assert _maquina.termino_con_parar, "Todo programa debe terminar con PARAR (0, 0)"
-assert _salidas, "Tu programa no mostró nada: ¿le pusiste MOSTRAR (3, 0)?"
-assert _salidas == [20], f"La MiniMáquina mostró {_salidas} y esperábamos [20]"
-
-print("Ejercicio 3 superado: escribiste y ejecutaste un programa en lenguaje de máquina.")''',
+**La trampa está en `suma`.** Se calculó cuando `a` valía 10. Cambiar `a`
+después no vuelve atrás a recalcularla: el intérprete ya pasó por esa línea y
+no regresa.""",
+        partida='''TRAZA = {
+    "a": ...,
+    "b": ...,
+    "suma": ...,
+    "doble": ...,
+}''',
+        solucion='''TRAZA = {
+    "a": 100,
+    "b": 13,
+    "suma": 13,
+    "doble": 26,
+}''',
+        pruebas='''assert isinstance(TRAZA, dict) and set(TRAZA) == {"a", "b", "suma", "doble"}, \\
+    "TRAZA debe tener exactamente las llaves a, b, suma y doble"
+assert all(isinstance(v, int) for v in TRAZA.values()), \\
+    "Los cuatro valores son numeros enteros, sin comillas"
+assert TRAZA["suma"] == 13, \\
+    "suma se calculo con a=10 y b=3, ANTES de que a cambiara"
+assert TRAZA["a"] == 100, "La ultima linea que toca 'a' le deja 100"
+print("Ejercicio 3 verificado: sabes leer un programa como lo lee la maquina.")''',
+        pruebas_ocultas='''assert TRAZA["doble"] == 26, "doble es suma * 2, y suma vale 13"
+assert TRAZA["b"] == 13, "la ultima linea le asigna a b el valor de suma"''',
         pistas=[
-            "Ya tienes la primera instrucción puesta. Te faltan tres: sumar el segundo "
-            "número, sumar el tercero, y mostrar. Y al final, parar.",
-            "Cada instrucción ocupa DOS posiciones de la lista. <code>SUMAR 9</code> se "
-            "escribe <code>2, 9</code>. MOSTRAR no necesita argumento, pero igual lleva "
-            "su segundo número: <code>3, 0</code>.",
-            "Tu lista debe tener 10 números en total: 5 instrucciones × 2. Empieza con "
-            "<code>1, 4</code> y termina con <code>0, 0</code>.",
+            "Coge lápiz y papel y haz una tabla con una columna por variable y una fila "
+            "por línea. Ve rellenándola línea a línea, sin adelantarte.",
+            "Cuando llegues a `a = 100`, pregúntate: ¿esto cambia el valor que ya quedó "
+            "guardado en `suma`? La respuesta es no, y ahí está todo el ejercicio.",
+            "Las dos últimas líneas usan `suma`, que vale 13 desde la línea tres. Así "
+            "que `doble` es 26 y `b` termina valiendo lo mismo que `suma`.",
         ],
     )
-
     # --- Ejercicio 4 ------------------------------------------------------
     c.ejercicio(
         numero=4, competencias=['I3'], titulo="Diagnostica los tres", estrellas=2, puntos=3,
@@ -1104,168 +857,63 @@ la terminal y el explorador.
 """)
 
     # --- Ejercicio 7 ------------------------------------------------------
-    c.md("""Antes del último ejercicio, ejecuta esta celda: es el vocabulario cerrado con el
-que se arma el mapa. Puedes volver a ella cuando quieras.
-""")
-    c.code("ver_vocabulario()")
-
     c.ejercicio(
-        numero=7, competencias=['I5'], titulo="Arma tu mapa de la computación", estrellas=4, puntos=4,
-        enunciado="""Último ejercicio, y el que más vale la pena. Vas a dibujar el mapa de todo lo
-que viste hoy — pero en vez de arrastrar cajitas con el mouse, lo vas a
-**escribir**, que es como se representan las ideas cuando una máquina tiene que
-entenderlas.
+        numero=7, competencias=['I3', 'I5'], titulo="Tu primer programa completo", estrellas=4, puntos=4,
+        enunciado="""El ejercicio final junta todo lo de hoy: variables, tipos, cálculo y texto.
 
-Un mapa conceptual es una lista de **relaciones**, y cada relación es una frase
-de tres partes:
+Escribe la función `ficha(nombre, notas)` que recibe:
+
+- `nombre`: el nombre del estudiante, como texto
+- `notas`: una lista de números, por ejemplo `[4.0, 3.5, 2.8]`
+
+y **devuelve** (no imprime) una sola línea de texto con este formato exacto:
 
 ```
-("intérprete",  "traduce",  "lenguaje de alto nivel")
-  ^ de qué        ^ qué hace     ^ con qué
+Ana: promedio 3.43 — Aprobado
 ```
 
-que se lee: *«el intérprete traduce el lenguaje de alto nivel»*.
+Las reglas:
 
-**Tu tarea:** agrega **al menos 6 relaciones tuyas** a las 3 de ejemplo, usando
-solo el vocabulario permitido. Ejecuta `ver_vocabulario()` para verlo cuando
-quieras.
+1. El promedio es la suma de las notas dividida entre cuántas hay.
+2. Se muestra con **dos decimales**.
+3. El estado es `Aprobado` si el promedio es **mayor o igual a 3.0**, y
+   `Reprobado` si no.
+4. Entre el promedio y el estado va un guion largo con un espacio a cada lado:
+   ` — `. Cópialo de aquí para no pelear con el teclado.
 
-**Regla de oro:** cada relación tuya tiene que poder leerse en voz alta como una
-frase con sentido. Si suena rara al decirla, está mal.
-
-Y cuatro relaciones **no pueden faltar** — son el corazón de esta semana. Si
-repasaste la sección 3, ya sabes cuáles son.""",
-        partida='''MAPA = [
-    ("computador", "se compone de", "hardware"),          # ejemplo
-    ("computador", "se compone de", "software"),          # ejemplo
-    ("Python", "es un", "lenguaje de alto nivel"),        # ejemplo
-    # Agrega aquí abajo AL MENOS 6 relaciones tuyas, una por línea y con esta forma:
-    #     ("concepto", "relación", "concepto"),
-]''',
-        solucion='''MAPA = [
-    ("computador", "se compone de", "hardware"),
-    ("computador", "se compone de", "software"),
-    ("Python", "es un", "lenguaje de alto nivel"),
-    ("procesador", "ejecuta", "lenguaje de máquina"),
-    ("intérprete", "traduce", "lenguaje de alto nivel"),
-    ("IDE", "se compone de", "editor"),
-    ("proceso", "produce", "dato"),
-    ("hardware", "se compone de", "procesador"),
-    ("dato", "se guarda en", "archivo"),
-    ("programa", "puede tener", "error de lógica"),
-]''',
-        pruebas='''assert isinstance(MAPA, list), "MAPA debe ser una lista"
-assert len(MAPA) >= 9, f"Tu mapa tiene {len(MAPA)} relaciones y necesita al menos 9 (3 de ejemplo + 6 tuyas)"
-
-for _t in MAPA:
-    assert isinstance(_t, tuple) and len(_t) == 3, \\
-        f"Cada relación es una tupla de tres textos. Revisa esta: {_t}"
-    assert _t[0] in VOCABULARIO, f"'{_t[0]}' no está en el vocabulario. Ejecuta ver_vocabulario()"
-    assert _t[2] in VOCABULARIO, f"'{_t[2]}' no está en el vocabulario. Ejecuta ver_vocabulario()"
-    assert _t[1] in RELACIONES, f"'{_t[1]}' no es una relación permitida. Ejecuta ver_vocabulario()"
-    assert _t[0] != _t[2], f"Un concepto no se relaciona consigo mismo: {_t}"
-
-_conceptos = {t[0] for t in MAPA} | {t[2] for t in MAPA}
-assert len(_conceptos) >= 8, f"Usaste {len(_conceptos)} conceptos distintos y necesitas al menos 8"
-assert len(set(MAPA)) == len(MAPA), "Hay una relación repetida: cada una va una sola vez"
-
-corregir("ejercicio_7", MAPA)     # comprueba las 4 relaciones nucleares
-
-dibujar_mapa(MAPA)
-print("Ejercicio 7 superado. Tu mapa quedó dibujado arriba: revísalo con la rúbrica de abajo.")''',
+**Dos avisos.** `return` **devuelve** un valor a quien llamó la función; `print`
+lo muestra en pantalla y devuelve nada. Aquí se pide `return`. Y para los dos
+decimales te sirve `round(promedio, 2)`, aunque hay una forma más directa que
+puedes buscar: se llama *f-string*.""",
+        partida='''def ficha(nombre, notas):
+    ...''',
+        solucion='''def ficha(nombre, notas):
+    promedio = sum(notas) / len(notas)
+    estado = "Aprobado" if promedio >= 3.0 else "Reprobado"
+    return f"{nombre}: promedio {promedio:.2f} — {estado}"''',
+        pruebas='''assert callable(ficha), "ficha debe ser una funcion definida con def"
+_r = ficha("Ana", [4.0, 3.5, 2.8])
+assert isinstance(_r, str), "ficha debe DEVOLVER texto con return, no imprimirlo con print"
+assert _r == "Ana: promedio 3.43 — Aprobado", \\
+    "Con ('Ana', [4.0, 3.5, 2.8]) se espera exactamente: Ana: promedio 3.43 — Aprobado"
+print("Ejercicio 7 verificado:", _r)''',
+        pruebas_ocultas='''assert ficha("Luis", [2.0, 2.5]) == "Luis: promedio 2.25 — Reprobado"
+assert ficha("Sara", [3.0]) == "Sara: promedio 3.00 — Aprobado", \\
+    "Exactamente 3.0 aprueba, y los decimales se muestran aunque sean ceros"
+assert ficha("Jose", [5.0, 5.0, 5.0]) == "Jose: promedio 5.00 — Aprobado"''',
         pistas=[
-            "Recorre el cuadernillo de arriba abajo y por cada sección pregúntate: ¿qué "
-            "dos conceptos de esta sección van juntos, y con qué verbo? La sección 3A te "
-            "da dos, la 3B te da dos, la 3C te da dos y la 4 te da una.",
-            "Las cuatro obligatorias contestan estas cuatro preguntas: ¿qué ejecuta el "
-            "lenguaje de máquina? ¿quién traduce el alto nivel? ¿de qué está hecho un "
-            "IDE? ¿qué produce un proceso?",
-            "Una que ya está resuelta como modelo: "
-            "<code>(\"procesador\", \"ejecuta\", \"lenguaje de máquina\")</code>. Te "
-            "faltan tres del mismo estilo: mira las columnas de la tabla de la "
-            "sección 3C.",
+            "Divide el problema en tres pasos y resuelvelos por separado: primero el "
+            "promedio, luego el estado, y solo al final arma el texto.",
+            "Para el promedio tienes `sum(notas)` y `len(notas)` ya hechas en Python. "
+            "Para el estado necesitas decidir entre dos textos segun una condicion.",
+            "El formato con dos decimales sale con `f\"{promedio:.2f}\"`. Y ojo con el "
+            "estado: la nota 3.0 exacta APRUEBA, asi que la comparacion es `>=`, no `>`.",
         ],
     )
-
-    c.md("""#### Lo que la máquina NO puede corregirte
-
-El cuadernillo comprueba que tu mapa esté **bien armado**: que uses el
-vocabulario, que conectes al menos ocho conceptos y que no se te escapen las
-cuatro relaciones que son el corazón de esta semana. Lo que **no** puede
-comprobar es si tus otras relaciones son buenas ideas o disparates con buena
-ortografía. Eso lo miras tú con la rúbrica de abajo y lo mira el profesor en
-clase. Es honesto decírtelo: una máquina puede verificar la forma de una idea,
-no su valor.
-
-**Rúbrica de autoevaluación.** Mira tu mapa dibujado y contéstate:
-
-| Criterio | Sí / Todavía no |
-|---|---|
-| ¿Cada relación mía se puede leer en voz alta como una frase con sentido? | |
-| ¿Conecté las dos mitades del mapa (lo físico con lo abstracto), o quedaron dos islas? | |
-| ¿Hay algún concepto que quedó suelto, sin ninguna flecha? | |
-| ¿Podría explicarle mi mapa a alguien de mi casa en dos minutos? | |
-""")
-
-    c.figura("s01_d9_mapa_modelo",
-             "Un mapa posible. No es «el» mapa correcto: compara la forma, no las palabras.")
-
     # =========================================================================
-    # Bloque 6 — El reto
+    # Bloque 6 — El tutor
     # =========================================================================
-    c.seccion(6, "El reto: MiniMáquina 2.0", 10, """*(opcional, sin nota)*
-
-La MiniMáquina sabe cargar, sumar, mostrar y parar. Le falta **restar**.
-
-Abajo está su motor completo — el mismo que ejecutaste en la sección 3B, sin
-trucos. Léelo (vas a entender más de lo que crees), y **agrégale la instrucción
-`4 n` = RESTAR n**.
-
-No hay verificador ni puntos. Hay algo mejor: si funciona, acabas de ampliar el
-repertorio de instrucciones de un procesador. Eso es literalmente diseñar
-hardware.
-
-Si te sobran ganas: agrégale también `5 n` = MULTIPLICAR, y después intenta
-escribir un programa que calcule el promedio de tres notas usando solo tus
-instrucciones. Vas a descubrir por qué se inventaron los lenguajes de alto
-nivel.""")
-
-    c.code('''def mi_minimaquina(programa):
-    """La MiniMáquina entera. Léela de arriba abajo: es más simple de lo que parece."""
-    acumulador = 0          # la única gaveta que tiene la máquina
-    mostrados = []          # lo que fue mostrando por el camino
-    i = 0                   # dónde va leyendo dentro de la lista
-
-    while i + 1 < len(programa):        # mientras queden instrucciones completas
-        codigo = programa[i]            # qué hay que hacer
-        argumento = programa[i + 1]     # con qué número
-
-        if codigo == 1:                 # CARGAR
-            acumulador = argumento
-        elif codigo == 2:               # SUMAR
-            acumulador = acumulador + argumento
-        elif codigo == 3:               # MOSTRAR
-            print("La gaveta tiene:", acumulador)
-            mostrados.append(acumulador)
-        elif codigo == 0:               # PARAR
-            break
-        # <- AGREGA AQUÍ TU INSTRUCCIÓN
-        #    elif codigo == 4:          # RESTAR
-        #        ...
-
-        i = i + 2                       # cada instrucción ocupa dos posiciones
-
-    return mostrados
-
-
-# 4 + 9 - 6 debería mostrar 7. Mientras RESTAR no exista, la máquina se salta
-# esa instrucción y muestra 13. Ejecuta, mira el 13, y arréglalo.
-mi_minimaquina([1, 4, 2, 9, 4, 6, 3, 0, 0, 0])''')
-
-    # =========================================================================
-    # Bloque 7 — El tutor
-    # =========================================================================
-    c.seccion(7, "Tus cinco preguntas", 5, """Abajo a la derecha de la pantalla hay un botón con un robot. Es **Ava**, el
+    c.seccion(6, "Tus cinco preguntas", 5, """Abajo a la derecha de la pantalla hay un botón con un robot. Es **Ava**, el
 tutor de inteligencia artificial del curso. Tres cosas que tienes que saber
 antes de tocarlo:
 
@@ -1301,12 +949,13 @@ Son gratis y resuelven, con mucho, la mayoría de los atascos:
 
 | Ejercicio | Preguntas sugeridas | Por qué |
 |---|---|---|
-| 1 y 2 (clasificar, ordenar) | **0** | Son de concepto: la respuesta está en la sección 3. Si dudas, relee — es más rápido |
-| 3 (MiniMáquina) | **0–1** | Si el programa no muestra 20, tu pregunta ideal es sobre la tabla de traza |
+| 1 (variables y tipos) | **0** | Las comillas deciden el tipo: está explicado en el enunciado |
+| 2 (las cuatro herramientas) | **0** | Es de concepto y la respuesta está en la sección 3. Si dudas, relee — es más rápido |
+| 3 (trazar el intérprete) | **0–1** | Si tu traza no cuadra, la pregunta buena es sobre el orden de ejecución, no sobre el resultado |
 | 4 (tipos de error) | **0** | La tabla comparativa de la sección 4 lo resuelve |
 | 5 (arreglar la lógica) | **1** | Aquí sí vale la pena si no ves qué está mal |
 | 6 (archivos) | **1** | El manejo de `open` es nuevo y es normal atascarse |
-| 7 (mapa conceptual) | **1–2** | Guarda estas: es el ejercicio abierto |
+| 7 (tu primera función) | **1–2** | Guarda estas: es el ejercicio más largo del cuadernillo |
 
 ### Cómo se pregunta bien
 
@@ -1340,9 +989,9 @@ pasó, y pide una pregunta en vez de una respuesta.**
 )''')
 
     # =========================================================================
-    # Bloque 8 — Cierre
+    # Bloque 7 — Cierre
     # =========================================================================
-    c.seccion(8, "Cierre", 10, """Antes de reclamar tu insignia, tres preguntas que solo te interesan a ti:
+    c.seccion(7, "Cierre", 10, """Antes de reclamar tu insignia, tres preguntas que solo te interesan a ti:
 
 1. **¿Qué puedes hacer hoy que no podías esta mañana?** (respóndete en voz
    alta; si la respuesta es «nada», vuelve a la sección 3B)

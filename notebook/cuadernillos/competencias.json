@@ -1,14 +1,13 @@
 {
  "semana_01": {
   "ejercicio_1": [
-   "I4"
+   "I3"
   ],
   "ejercicio_2": [
    "I4"
   ],
   "ejercicio_3": [
-   "I3",
-   "I4"
+   "I3"
   ],
   "ejercicio_4": [
    "I3"
@@ -21,6 +20,7 @@
    "I4"
   ],
   "ejercicio_7": [
+   "I3",
    "I5"
   ]
  },
