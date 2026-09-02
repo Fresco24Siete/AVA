@@ -189,7 +189,7 @@ function notebookBasico(doc) {
 caso('0. custom.js se carga en Node y registra los hooks esperados', () => {
   const doc = crearDocumento(); const nb = notebookBasico(doc);
   const env = cargarEntorno(nb.celdas);
-  igual(Object.keys(env.handlers).sort(), ['execute.CodeCell', 'finished_execute.CodeCell', 'notebook_loaded.Notebook'], 'eventos registrados');
+  igual(Object.keys(env.handlers).sort(), ['execute.CodeCell', 'finished_execute.CodeCell', 'kernel_ready.Kernel', 'notebook_loaded.Notebook'], 'eventos registrados');
   afirmar(env.consola.some(l => l[1].indexOf('[nbgrader-metrics] listo') === 0), 'log de arranque');
   igual(env.fetches.length, 0, 'sin fetch al cargar');
 });

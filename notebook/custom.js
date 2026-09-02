@@ -469,11 +469,58 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
         }
     }
 
+    // El motor tiene que ejecutarse SOLO, y esto no es una comodidad: es la
+    // consecuencia de esconderlo. La celda 'ava-motor' define iniciar(), los
+    // quices, las pistas y el verificador, y justo encima se esconde para que
+    // nadie lea las respuestas. Resultado: el alumno abre el cuadernillo, ve
+    // como primera celda `iniciar()`, la ejecuta y recibe
+    //
+    //     NameError: name 'iniciar' is not defined
+    //
+    // en la PRIMERA cosa que hace en el curso. Le pasó a la clase entera el
+    // 2026-09-02. La celda estaba ahí y era correcta; simplemente nadie la
+    // había ejecutado, y estando oculta no había forma de que lo supiera.
+    //
+    // Se ejecuta una sola vez por sesión y solo si no tiene ya un número de
+    // ejecución: volver a correrla no rompe nada --el motor es idempotente--
+    // pero reiniciaría la barra de XP delante del estudiante.
+    var motor_lanzado = false;
+    function arrancar_motor() {
+        if (motor_lanzado) return;
+        if (!Jupyter || !Jupyter.notebook || !Jupyter.notebook.kernel) return;
+        if (!Jupyter.notebook.kernel.is_connected()) return;
+        var celdas = Jupyter.notebook.get_cells();
+        for (var i = 0; i < celdas.length; i++) {
+            var celda = celdas[i];
+            var tags = (celda.metadata && celda.metadata.tags) || [];
+            if (tags.indexOf('ava-motor') === -1) continue;
+            if (celda.input_prompt_number) { motor_lanzado = true; return; }
+            motor_lanzado = true;
+            try {
+                celda.execute();
+                console.log('[ava] motor del cuadernillo arrancado solo');
+            } catch (err) {
+                // Si falla, mejor dejar la celda a la vista que dejar al
+                // estudiante con un NameError y ninguna pista.
+                motor_lanzado = false;
+                console.warn('[ava] no se pudo arrancar el motor', err);
+            }
+            return;
+        }
+    }
+
     if (Jupyter && Jupyter.notebook && Jupyter.notebook.events) {
         // notebook_loaded no siempre ha llegado cuando corre custom.js, así que
         // se cubren los dos caminos y la función es idempotente.
         Jupyter.notebook.events.on('notebook_loaded.Notebook', esconder_andamiaje);
         setTimeout(esconder_andamiaje, 1200);
+
+        // El motor necesita además que el kernel esté listo: ejecutar antes de
+        // que conecte no hace nada y se pierde el arranque.
+        Jupyter.notebook.events.on('kernel_ready.Kernel', arrancar_motor);
+        Jupyter.notebook.events.on('notebook_loaded.Notebook', arrancar_motor);
+        setTimeout(arrancar_motor, 2000);
+        setTimeout(arrancar_motor, 5000);
     }
 
 
