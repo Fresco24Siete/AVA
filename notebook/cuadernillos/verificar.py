@@ -93,9 +93,57 @@ def verificar(codigo):
         print(f"  el arranque no corre: {type(err).__name__}: {err}")
         return 1
 
+    # Todas las celdas de código del cuerpo, no solo los ejercicios. Este bloque
+    # existe porque faltaba: un `c.code("iniciar()")` copiado de otra semana
+    # construía perfecto, pasaba los contratos, y reventaba con NameError en la
+    # PRIMERA celda que ejecuta el estudiante. Lo vio la clase entera antes que
+    # nadie aquí. Las celdas de ejercicio se saltan: se comprueban aparte, y su
+    # plantilla falla a propósito.
+    fallos = 0
+    ids_ejercicio = set(celdas)
+    # Se ejecutan sobre el MISMO espacio, acumulando, como hace un notebook de
+    # verdad: una celda usa lo que dejaron las anteriores. Ejecutarlas aisladas
+    # daba una avalancha de NameError falsos.
+    cuerpo = dict(base)
+    for pos, celda in enumerate(codigos[1:], start=1):
+        gid = celda.get("metadata", {}).get("nbgrader", {}).get("grade_id")
+        if gid in ids_ejercicio:
+            continue        # los ejercicios se comprueban aparte, mas abajo
+        fuente = "".join(celda["source"])
+        if not fuente.strip():
+            continue
+        # Las magias de IPython (!pwd, %timeit) no son Python y aqui no hay
+        # kernel que las entienda. En Jupyter funcionan; se saltan.
+        if any(l.lstrip().startswith(("!", "%")) for l in fuente.splitlines()):
+            continue
+        # Hay celdas que fallan A PROPOSITO: la semana 1 ensena los tres tipos
+        # de error rompiendo codigo adrede. Se reconocen por el comentario, y
+        # para esas el fallo es el exito: lo que se comprueba es que sigan
+        # fallando, porque una celda que enseña un error y deja de darlo
+        # convierte la explicacion en una mentira.
+        etiquetas = celda.get("metadata", {}).get("tags", [])
+        # "error-sembrado" es la convención que ya usaba el repositorio para las
+        # celdas que enseñan un error rompiendo código adrede.
+        adrede = ("error-sembrado" in etiquetas
+                  or "a propósito" in fuente or "a proposito" in fuente)
+        try:
+            with contextlib.redirect_stdout(mudo), contextlib.redirect_stderr(mudo):
+                exec(compile(fuente, f"celda_{pos}", "exec"), cuerpo)
+        except Exception as err:
+            if adrede:
+                continue
+            fallos += 1
+            primera = fuente.strip().splitlines()[0][:46]
+            print(f"  celda {pos} ({primera}): {type(err).__name__}: "
+                  f"{str(err).splitlines()[0][:70]}")
+        else:
+            if adrede:
+                fallos += 1
+                print(f"  celda {pos}: dice que falla a proposito y NO falla; "
+                      f"la explicacion de al lado ya no es cierta")
+
     numeros = sorted(int(k.split("_")[1]) for k in celdas
                      if k.startswith("ejercicio_"))
-    fallos = 0
     for n in numeros:
         solucion = celdas[f"ejercicio_{n}"]
         prueba = (celdas[f"test_ejercicio_{n}"]

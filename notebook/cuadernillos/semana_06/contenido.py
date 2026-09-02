@@ -239,3 +239,30 @@ def comparar_ordenamientos(tamano=200):
         f'importa no es el número exacto sino el orden de magnitud — y que al '
         f'doblar los datos, los dos primeros multiplican su trabajo por cuatro, '
         f'y el tercero no.</p>')
+
+# =============================================================================
+# Portada
+# =============================================================================
+def portada():
+    """Tarjeta de bienvenida: la primera salida que produce el propio kernel.
+
+    Cada semana tiene la suya, con su titulo y sus datos. No esta en el motor
+    comun a proposito: es lo unico que identifica de un vistazo en que
+    cuadernillo esta el estudiante.
+    """
+    _s6_pintar(
+        f'<div style="font-family:{_S6_FUENTE};background:linear-gradient(135deg,'
+        f'#2e2377,{_S6_AZUL});color:#fff;border-radius:10px;padding:18px 22px;'
+        'margin:6px 0 10px">'
+        '<div style="font-size:13px;letter-spacing:.09em;text-transform:uppercase;'
+        'opacity:.82">Semana 6 · Unidad 6</div>'
+        '<div style="font-size:26px;font-weight:700;margin:2px 0 6px">Buscar y ordenar</div>'
+        '<div style="font-size:14.5px;line-height:1.5;opacity:.94">Listas, cadenas, busqueda y ordenamiento.<br>'
+        '<span style="opacity:.8">80 puntos · 95 XP · insignia «Quien ordena»</span></div></div>')
+
+
+# Alias: los cuadernillos 1 y 2 estrenaron dos nombres distintos para lo mismo
+# --iniciar() y portada()-- y conviene que los dos funcionen en todas las
+# semanas. Que un alumno escriba el de otro cuadernillo y le salte un NameError
+# en la PRIMERA celda es la peor bienvenida posible, y ya paso una vez.
+iniciar = portada

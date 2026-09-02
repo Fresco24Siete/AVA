@@ -193,3 +193,30 @@ def las_tres_variables():
         for nombre, para, como, ej, color in _S4_TRES)
     _s4_pintar(f'<div style="display:flex;gap:12px;flex-wrap:wrap;margin:10px 0">'
                f'{tarjetas}</div>')
+
+# =============================================================================
+# Portada
+# =============================================================================
+def portada():
+    """Tarjeta de bienvenida: la primera salida que produce el propio kernel.
+
+    Cada semana tiene la suya, con su titulo y sus datos. No esta en el motor
+    comun a proposito: es lo unico que identifica de un vistazo en que
+    cuadernillo esta el estudiante.
+    """
+    _s4_pintar(
+        f'<div style="font-family:{_S4_FUENTE};background:linear-gradient(135deg,'
+        f'#2e2377,{_S4_AZUL});color:#fff;border-radius:10px;padding:18px 22px;'
+        'margin:6px 0 10px">'
+        '<div style="font-size:13px;letter-spacing:.09em;text-transform:uppercase;'
+        'opacity:.82">Semana 4 · Unidad 4</div>'
+        '<div style="font-size:26px;font-weight:700;margin:2px 0 6px">Repetir</div>'
+        '<div style="font-size:14.5px;line-height:1.5;opacity:.94">Ciclos, contadores y acumuladores.<br>'
+        '<span style="opacity:.8">80 puntos · 90 XP · insignia «Quien automatiza»</span></div></div>')
+
+
+# Alias: los cuadernillos 1 y 2 estrenaron dos nombres distintos para lo mismo
+# --iniciar() y portada()-- y conviene que los dos funcionen en todas las
+# semanas. Que un alumno escriba el de otro cuadernillo y le salte un NameError
+# en la PRIMERA celda es la peor bienvenida posible, y ya paso una vez.
+iniciar = portada

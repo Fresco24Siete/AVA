@@ -1262,3 +1262,10 @@ def reclamar_insignia():
 
     boton.on_click(_al_pulsar)
     display(W.VBox(casillas + [boton, salida]))
+
+
+# Los cuadernillos 1 y 2 estrenaron dos nombres para la misma tarjeta.
+# El alias hace que los dos funcionen en todas las semanas: que un alumno
+# escriba el de otro cuadernillo y le salte un NameError en la PRIMERA celda
+# es la peor bienvenida posible, y ya paso una vez.
+portada = iniciar

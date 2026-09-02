@@ -280,3 +280,30 @@ def chuleta_operadores():
             f'font:600 12px {_S3_FUENTE}">Ejemplo</th></tr>'
             f'{cuerpo}</table></div>')
     _s3_pintar("".join(bloques))
+
+# =============================================================================
+# Portada
+# =============================================================================
+def portada():
+    """Tarjeta de bienvenida: la primera salida que produce el propio kernel.
+
+    Cada semana tiene la suya, con su titulo y sus datos. No esta en el motor
+    comun a proposito: es lo unico que identifica de un vistazo en que
+    cuadernillo esta el estudiante.
+    """
+    _s3_pintar(
+        f'<div style="font-family:{_S3_FUENTE};background:linear-gradient(135deg,'
+        f'#2e2377,{_S3_AZUL});color:#fff;border-radius:10px;padding:18px 22px;'
+        'margin:6px 0 10px">'
+        '<div style="font-size:13px;letter-spacing:.09em;text-transform:uppercase;'
+        'opacity:.82">Semana 3 · Unidad 3</div>'
+        '<div style="font-size:26px;font-weight:700;margin:2px 0 6px">Decidir</div>'
+        '<div style="font-size:14.5px;line-height:1.5;opacity:.94">Expresiones booleanas, operadores y condicionales.<br>'
+        '<span style="opacity:.8">80 puntos · 90 XP · insignia «Quien decide»</span></div></div>')
+
+
+# Alias: los cuadernillos 1 y 2 estrenaron dos nombres distintos para lo mismo
+# --iniciar() y portada()-- y conviene que los dos funcionen en todas las
+# semanas. Que un alumno escriba el de otro cuadernillo y le salte un NameError
+# en la PRIMERA celda es la peor bienvenida posible, y ya paso una vez.
+iniciar = portada

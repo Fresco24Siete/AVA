@@ -59,7 +59,7 @@ con la que llegar a él, y el contenido nuevo de la segunda clase.
 """)
 
     c.arranque()
-    c.code("iniciar()")
+    c.code("portada()")
 
     c.md("""## Al terminar este cuadernillo vas a poder…
 

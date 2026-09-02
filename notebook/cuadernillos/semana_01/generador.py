@@ -300,7 +300,7 @@ Ejecuta y compruébalo.
 
 nota = 4.2
 if nota >= 3.0
-    print("Aprobado")''')
+    print("Aprobado")''', etiquetas=("error-sembrado",))
 
     c.md("""**No se imprimió nada.** Ni siquiera la primera línea, que estaba perfecta.
 
@@ -342,7 +342,7 @@ nota_texto = "4.2"
 
 print("Paso 2: la muestro tal cual ->", nota_texto)
 print("Paso 3: le sumo un punto  ->", nota_texto + 1)
-print("Paso 4: aquí nunca llego")''')
+print("Paso 4: aquí nunca llego")''', etiquetas=("error-sembrado",))
 
     c.md("""**Salieron dos de cuatro.** Ahí está toda la diferencia con el error anterior:
 aquí el programa **sí arrancó**, corrió un rato y se estrelló en la línea 5.
@@ -415,7 +415,8 @@ Instalando tu propia alarma. Un **caso de prueba** es una situación cuyo
 resultado correcto conoces de antemano, como los tres cuatros. Ejecuta:
 """)
 
-    c.code('assert promedio == 4.0, "Con tres notas de 4.0 el promedio TIENE que dar 4.0"')
+    c.code('assert promedio == 4.0, "Con tres notas de 4.0 el promedio TIENE que dar 4.0"',
+           etiquetas=("error-sembrado",))
 
     c.md("""**Acabas de fabricar el mensaje rojo que Python no te iba a dar.** Eso es
 `assert`: una frase que dice «esto tiene que ser cierto; si no lo es, grita».

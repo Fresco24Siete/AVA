@@ -57,7 +57,7 @@ uno veinte pasos y el otro un millón.
 """)
 
     c.arranque()
-    c.code("iniciar()")
+    c.code("portada()")
 
     c.md("""## Al terminar este cuadernillo vas a poder…
 

@@ -224,3 +224,30 @@ def ver_tipos(*valores):
             f'font:600 12px {_S5_FUENTE}">{h}</th>'
             for h in ("Escribes", "Da", "Y su tipo es"))
         + f'</tr>{"".join(filas)}</table>')
+
+# =============================================================================
+# Portada
+# =============================================================================
+def portada():
+    """Tarjeta de bienvenida: la primera salida que produce el propio kernel.
+
+    Cada semana tiene la suya, con su titulo y sus datos. No esta en el motor
+    comun a proposito: es lo unico que identifica de un vistazo en que
+    cuadernillo esta el estudiante.
+    """
+    _s5_pintar(
+        f'<div style="font-family:{_S5_FUENTE};background:linear-gradient(135deg,'
+        f'#2e2377,{_S5_AZUL});color:#fff;border-radius:10px;padding:18px 22px;'
+        'margin:6px 0 10px">'
+        '<div style="font-size:13px;letter-spacing:.09em;text-transform:uppercase;'
+        'opacity:.82">Semana 5 · Unidad 5</div>'
+        '<div style="font-size:26px;font-weight:700;margin:2px 0 6px">Consolidar</div>'
+        '<div style="font-size:14.5px;line-height:1.5;opacity:.94">Media vuelta: repaso de las cuatro semanas y Python por dentro.<br>'
+        '<span style="opacity:.8">80 puntos · 85 XP · insignia «Media vuelta»</span></div></div>')
+
+
+# Alias: los cuadernillos 1 y 2 estrenaron dos nombres distintos para lo mismo
+# --iniciar() y portada()-- y conviene que los dos funcionen en todas las
+# semanas. Que un alumno escriba el de otro cuadernillo y le salte un NameError
+# en la PRIMERA celda es la peor bienvenida posible, y ya paso una vez.
+iniciar = portada

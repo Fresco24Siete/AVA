@@ -58,7 +58,7 @@ Secuencia, decisión y repetición. Tres estructuras. No hay una cuarta.
 """)
 
     c.arranque()
-    c.code("iniciar()")
+    c.code("portada()")
 
     c.md("""## Al terminar este cuadernillo vas a poder…
 

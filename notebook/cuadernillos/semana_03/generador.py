@@ -58,7 +58,7 @@ receta y empiezan a parecerse a algo que piensa.
 """)
 
     c.arranque()
-    c.code("iniciar()")
+    c.code("portada()")
 
     c.md("""## Al terminar este cuadernillo vas a poder…
 
