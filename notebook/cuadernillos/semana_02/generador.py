@@ -117,8 +117,8 @@ dicen si estás listo para lo de hoy.
 Si algo aquí se te atasca, **esa es la señal**: vuelve al cuadernillo de la
 Semana 1 antes de seguir. Lo de hoy se apoya en eso.""")
 
-    c.code("quiz_hardware()")
-    c.code("quiz_niveles()")
+    c.code("quiz_herramientas()")
+    c.code("quiz_tipos()")
 
     c.code('''# Esta línea está rota, igual que la de la semana pasada.
 # Quítale el # del principio, arréglala y ejecútala.

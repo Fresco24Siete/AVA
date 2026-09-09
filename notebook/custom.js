@@ -564,9 +564,44 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
         }
         if (!poner()) setTimeout(poner, 1500);
 
-        var btn = barra.querySelector('#ava-barra-entregar');
-        var msg = barra.querySelector('#ava-barra-msg');
-        btn.onclick = function () {
+        // Y una copia al FINAL del cuadernillo. La barra de arriba es sticky,
+        // pero en un cuadernillo de ochenta celdas el alumno termina abajo,
+        // piensa que acabó y cierra. El profesor lo vio en la primera clase: seis
+        // estudiantes trabajaron y no llegó ninguna entrega. Es el mismo botón,
+        // en el sitio donde de verdad se termina.
+        var cierre = document.createElement('div');
+        cierre.id = 'ava-cierre';
+        cierre.style.cssText =
+            'display:flex;align-items:center;gap:14px;flex-wrap:wrap;' +
+            'background:#eef4fd;border:1px solid #cfe0f7;border-left:4px solid #2a78d6;' +
+            'border-radius:6px;padding:16px 18px;margin:28px 0 40px;' +
+            'font:15px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
+        cierre.innerHTML =
+            '<div style="flex:1;min-width:220px">' +
+            '<div style="font-weight:600;font-size:16px;margin-bottom:2px">' +
+            '¿Terminaste?</div>' +
+            '<div style="color:#52514e;font-size:14px">Tu trabajo <b>no le llega ' +
+            'a tu profesor</b> hasta que lo entregues. Puedes entregar las veces ' +
+            'que quieras.</div></div>' +
+            '<span id="ava-cierre-msg" style="color:#52514e;font-size:14px"></span>' +
+            '<button id="ava-cierre-entregar" style="background:#2a78d6;color:#fff;' +
+            'border:none;border-radius:4px;padding:10px 20px;font:600 14.5px ' +
+            'system-ui,sans-serif;cursor:pointer">Guardar y entregar</button>';
+
+        function poner_cierre() {
+            var cont = document.getElementById('notebook-container');
+            if (!cont || document.getElementById('ava-cierre')) return !!cont;
+            cont.appendChild(cierre);
+            return true;
+        }
+        if (!poner_cierre()) setTimeout(poner_cierre, 1500);
+
+        // Los dos botones hacen exactamente lo mismo; cada uno escribe en su
+        // propio hueco de mensaje para que el alumno lea la respuesta donde
+        // acaba de pulsar, no al otro extremo de la pagina.
+        function conectar(btn, msg) {
+            if (!btn || !msg) return;
+            btn.onclick = function () {
             btn.disabled = true;
             msg.style.color = '#52514e';
             msg.textContent = 'Guardando…';
@@ -612,7 +647,13 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
                 Jupyter.notebook.events.one('notebook_saved.Notebook', seguir);
                 setTimeout(seguir, 4000);
             }
-        };
+            };
+        }
+
+        conectar(barra.querySelector('#ava-barra-entregar'),
+                 barra.querySelector('#ava-barra-msg'));
+        conectar(cierre.querySelector('#ava-cierre-entregar'),
+                 cierre.querySelector('#ava-cierre-msg'));
     })();
 
     // --- Tutor IA -----------------------------------------------------------

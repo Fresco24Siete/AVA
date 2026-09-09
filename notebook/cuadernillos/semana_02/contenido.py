@@ -652,32 +652,47 @@ def tabla_cobertura():
 # código para saber qué marcar. La celda queda en una sola línea y el motor
 # esconde su código con CSS.
 
-def quiz_hardware():
-    """Calentamiento 1 — hardware y software (repaso de la Semana 1)."""
+def quiz_herramientas():
+    """Calentamiento 1 — las cuatro herramientas (repaso de la Semana 1).
+
+    Antes preguntaba por la clasificación hardware / software. Esa parte se
+    quitó de la Semana 1 por indicación del profesor --excedía el nivel-- y el
+    quiz se quedó preguntando por algo que ya nadie había visto. Ahora pregunta
+    por el entorno de Python, que sí se enseña y es su ejercicio 2.
+    """
     _s2_motor().quiz(
         "C1", 8,
-        "El intérprete de Python que ejecuta este cuadernillo, ¿qué es?",
-        ["Hardware", "Software", "Un dato", "Una parte del procesador"],
-        "Software",
-        "Es un programa: se instala, se actualiza y se ejecuta. Que no se "
-        "pueda tocar no lo hace menos real.",
-        pistas=["Piensa en la clasificación de la Semana 1: lo que se toca es "
-                "hardware; lo que se ejecuta, software."],
+        "De las cuatro herramientas de la Semana 1, ¿cuál es la ÚNICA que "
+        "ejecuta tu código?",
+        ["El editor", "La terminal", "El intérprete", "El IDE"],
+        "El intérprete",
+        "El editor te deja escribirlo y la terminal darle órdenes al sistema. "
+        "El IDE no es una quinta herramienta: es la caja que trae a las otras "
+        "dentro. Ejecutar, ejecuta solo el intérprete.",
+        pistas=["Tres de las cuatro te ayudan a escribir, guardar o lanzar el "
+                "programa. Solo una lo convierte en acciones."],
     )
 
 
-def quiz_niveles():
-    """Calentamiento 2 — los niveles de lenguaje (repaso de la Semana 1)."""
+def quiz_tipos():
+    """Calentamiento 2 — los cuatro tipos básicos (repaso de la Semana 1).
+
+    Sustituye al de niveles de lenguaje, que preguntaba por máquina y
+    ensamblador: contenido retirado de la Semana 1. Y de paso arregla un fallo
+    de presentación --usaba `&rarr;` en las opciones, y las opciones van a un
+    RadioButtons de ipywidgets, que las pinta como TEXTO PLANO: el estudiante
+    leía literalmente "&rarr;". Las entidades HTML solo valen dentro de las
+    cajas, nunca en las opciones de un quiz.
+    """
     _s2_motor().quiz(
         "C2", 8,
-        "Ordena de MÁS cercano a la máquina a MÁS cercano al humano:",
-        ["lenguaje de máquina &rarr; ensamblador &rarr; Python",
-         "Python &rarr; ensamblador &rarr; lenguaje de máquina",
-         "ensamblador &rarr; lenguaje de máquina &rarr; Python"],
-        "lenguaje de máquina &rarr; ensamblador &rarr; Python",
-        "Bajar de nivel es acercarse a la máquina y alejarse de la persona.",
-        pistas=["El lenguaje de máquina son unos y ceros; Python se parece al "
-                "inglés. El ensamblador queda en la mitad."],
+        'Escribes `codigo = "2260123"`. ¿De qué tipo es `codigo`?',
+        ["Entero (int)", "Decimal (float)", "Texto (str)", "Booleano (bool)"],
+        "Texto (str)",
+        "Las comillas deciden el tipo. Con comillas es texto, aunque por dentro "
+        "parezca un número: por eso `\"25\" + 1` no suma, se estrella.",
+        pistas=["Fíjate solo en las comillas. Son lo único que hay que mirar "
+                "para saber si Python lo guardó como número o como texto."],
     )
 
 

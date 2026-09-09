@@ -155,12 +155,32 @@ class Cuadernillo:
         return self.md(cuerpo)
 
     # -- Piezas del motor ----------------------------------------------------
+    # Va delante de la celda del motor, que es lo primero de todo cuadernillo,
+    # así que sale en los seis sin tener que acordarse en cada generador.
+    #
+    # Las dos cosas que dice salieron de la primera clase real: seis estudiantes
+    # trabajaron el cuadernillo entero y no llegó ni una entrega --terminaban,
+    # daban por hecho que con eso bastaba, y cerraban--, y varios ejecutaban
+    # celdas sueltas sin correr las de arriba, lo que rompe todo porque cada
+    # celda usa lo que dejaron las anteriores.
+    INSTRUCCIONES = """> ### Antes de empezar, dos cosas
+>
+> **1. Ejecuta las celdas en orden, de arriba abajo.** Una por una, con
+> `Shift+Enter`. Cada celda usa lo que dejaron las de arriba, así que saltarte
+> una hace que las siguientes fallen aunque estén bien escritas.
+>
+> **2. Al terminar, entrega.** Tu trabajo **no le llega a tu profesor** hasta que
+> pulses **Guardar y entregar** — el botón está arriba y también al final del
+> cuadernillo. Puedes entregar las veces que quieras: siempre cuenta la última.
+"""
+
     def arranque(self):
         """Primera celda de código: carga el motor y crea el objeto `ava`.
 
         Se deja marcada la posición: el contenido definitivo se arma en
         `a_dict()`, cuando ya se conocen las pistas de todos los ejercicios.
         """
+        self.md(self.INSTRUCCIONES)
         self._i_arranque = len(self.celdas)
         return self.code("", editable=False, etiquetas=("ava-motor",))
 
