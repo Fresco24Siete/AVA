@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 	"proxy-go/config"
 	"proxy-go/internal/server/router"
 
@@ -24,9 +25,16 @@ func main(){
 	//Configurar el Enrutador
 	router := router.ConfigureRouter(conexionBD)
 
-	//Encender el servidor
-	log.Println("Servidor operando en el puerto 8080...")
-	if err := router.Run(":8080"); err != nil {
+	// Puerto configurable. Dentro de Docker siempre es el 8080 y da igual, pero
+	// al levantarlo a mano -- en la maquina del profesor, o para probar contra
+	// una base de pruebas -- el 8080 suele estar ocupado por otra cosa.
+	puerto := os.Getenv("PORT")
+	if puerto == "" {
+		puerto = "8080"
+	}
+
+	log.Printf("Servidor operando en el puerto %s...", puerto)
+	if err := router.Run(":" + puerto); err != nil {
 		log.Fatalf("Error al arrancar el servidor: %v", err)
 	}
 }

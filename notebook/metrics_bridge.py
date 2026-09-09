@@ -1,8 +1,14 @@
 import json
 import logging
 import os
+import re
 
 from tornado import web
+
+try:
+    from jupyter_server.base.handlers import JupyterHandler as _BaseHandler
+except ImportError:                                   # notebook 6 clásico
+    from notebook.base.handlers import IPythonHandler as _BaseHandler
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 # tornado.web.RequestHandler NO tiene self.log (a diferencia del handler base de
@@ -36,6 +42,9 @@ IDENTIDAD = {
                       or os.environ.get("CUADERNILLO_ID"),
 }
 
+# Un cuadernillo es un nombre de carpeta de nbgrader: letras, dígitos, guiones.
+_NOMBRE_SEGURO = re.compile(r"^[A-Za-z0-9_.-]{1,120}$")
+
 # Ruteo por tipo de evento hacia los endpoints del backend (sección 5).
 RUTAS_BACKEND = {
     "exercise_attempt": "/api/exercises/attempts",
@@ -58,29 +67,44 @@ def _url_backend(tipo_evento):
     return base.rstrip("/") + ruta
 
 
-class MetricsEventoHandler(web.RequestHandler):
-
-    def check_xsrf_cookie(self):
-        # Endpoint interno de telemetría, mismo origen, dentro del propio server
-        # del alumno. jupyter_server (ServerApp) aplica XSRF y rechazaba el POST
-        # con 403 ('_xsrf argument missing'), perdiendo el 100% de la telemetría.
-        # La protección real de este flujo es el token Bearer que metrics_bridge
-        # usa al reenviar al backend, no el XSRF de esta llamada local. Por eso
-        # se exime este handler del chequeo.
-        return
-
+class MetricsEventoHandler(_BaseHandler):
+    # Heredaba de tornado.web.RequestHandler y se eximía del XSRF, con lo que
+    # aceptaba POST anónimos: cualquiera podía inyectar telemetría a nombre del
+    # dueño del contenedor, y con ella llenar la base de la VM.
+    #
+    # Ahora exige sesión. El XSRF se mantiene porque desde que las cookies van
+    # con SameSite=None —hace falta para que el AVA funcione dentro del marco de
+    # Moodle— una página cualquiera podría hacer este POST con las credenciales
+    # del alumno puestas. custom.js ya manda la cabecera X-XSRFToken; el volcado
+    # de cierre de pestaña, que usa sendBeacon y no admite cabeceras, manda el
+    # token en la URL, que tornado también acepta.
+    @web.authenticated
     async def post(self):
         try:
             evento = json.loads(self.request.body)
         except Exception:
+            evento = None
+        # Un JSON válido que no es objeto ([1,2,3]) reventaba más abajo con un
+        # 500 y su traceback en el log. Es la misma falta: el cuerpo no es un
+        # evento.
+        if not isinstance(evento, dict):
             self.set_status(400)
             self.finish(json.dumps({"error": "json invalido"}))
             return
 
         enviar_backend = os.environ.get("ENVIAR_AL_BACKEND", "false").lower() in ("true", "1", "yes")
 
-        # La identidad la pone el servidor, nunca el cliente.
+        # La identidad la pone el servidor, nunca el cliente: quién es y de qué
+        # curso salen del entorno que dejó el Hub. El CUADERNILLO, en cambio, lo
+        # dice el navegador, que es quien sabe qué archivo tiene abierto; el
+        # activo del arranque queda como respaldo. Con solo el activo, un alumno
+        # que entraba antes de la primera publicación mandaba toda su telemetría
+        # sin cuadernillo, y uno que repasaba la semana 1 la etiquetaba como la 2.
+        cuadernillo = str(evento.pop("cuadernillo", "") or "").strip()
+        if not _NOMBRE_SEGURO.match(cuadernillo):
+            cuadernillo = ""
         evento.update(IDENTIDAD)
+        evento["cuadernillo_id"] = cuadernillo or IDENTIDAD.get("cuadernillo_id") or ""
 
         # tipo_evento es solo el discriminador de ruteo; no forma parte del
         # payload de la sección 5, así que se saca antes de reenviar.
@@ -145,6 +169,57 @@ class MetricsEventoHandler(web.RequestHandler):
 
         self.set_status(204)
         self.finish()
+
+
+def enviar_evento_sincrono(evento):
+    """Manda un evento al backend desde el servidor, sin pasar por el navegador.
+
+    Existe para la valoración del cuadernillo, que se envía desde el panel del
+    alumno (panel_bridge) y no desde una celda. Comparte con el handler lo que
+    importa: la identidad la pone el servidor con lo que dejó el Hub, y el token
+    sale del entorno del contenedor. Así una valoración no se puede falsificar
+    desde una celda de código ni desde la consola del navegador.
+
+    Devuelve True si el backend la aceptó. Es síncrona a propósito: quien la
+    llama es un handler que responde con una redirección y necesita saber si
+    guardó antes de decirle al alumno que quedó registrada.
+    """
+    import urllib.request as _req
+
+    evento = dict(evento or {})
+    cuadernillo = str(evento.pop("cuadernillo", "") or "").strip()
+    if not _NOMBRE_SEGURO.match(cuadernillo):
+        cuadernillo = ""
+    evento.update(IDENTIDAD)
+    evento["cuadernillo_id"] = cuadernillo or IDENTIDAD.get("cuadernillo_id") or ""
+
+    tipo_evento = evento.pop("tipo_evento", None)
+    api_url = _url_backend(tipo_evento)
+    if api_url is None:
+        log.error("[metrics_bridge] tipo de evento desconocido '%s'.", tipo_evento)
+        return False
+
+    if os.environ.get("ENVIAR_AL_BACKEND", "false").lower() not in ("true", "1", "yes"):
+        log.info("[metrics_bridge] simulación: '%s' no se envió:\n%s",
+                 tipo_evento, json.dumps(evento, indent=2, ensure_ascii=False))
+        return True
+
+    token = os.environ.get("STUDENT_METRICS_TOKEN")
+    if not token:
+        log.error("[metrics_bridge] sin STUDENT_METRICS_TOKEN: evento descartado.")
+        return False
+
+    try:
+        peticion = _req.Request(
+            api_url, data=json.dumps(evento).encode("utf-8"),
+            headers={"Authorization": f"Bearer {token}",
+                     "Content-Type": "application/json"},
+            method="POST")
+        with _req.urlopen(peticion, timeout=8) as resp:
+            return resp.status < 300
+    except Exception as err:
+        log.error("[metrics_bridge] no se pudo enviar '%s': %s", tipo_evento, err)
+        return False
 
 
 def _add_route(web_app):

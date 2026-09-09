@@ -11,13 +11,19 @@
 (function () {
     'use strict';
 
-    var MAX_CONTEXTO_CODIGO = 2500;
     var estadoServidor = null;   // {habilitado, max, usadas, restantes, ...}
     var enviando = false;
     var panelAbierto = false;
 
     function jup() {
         return (window.Jupyter && window.Jupyter.notebook) ? window.Jupyter : null;
+    }
+
+    // El token XSRF, leido de la cookie: acompana cada peticion al servidor
+    // del alumno (ver custom.js para el porque).
+    function xsrfToken() {
+        var m = document.cookie.match(/\b_xsrf=([^;]+)/);
+        return m ? decodeURIComponent(m[1]) : '';
     }
 
     function baseUrl() {
@@ -58,99 +64,21 @@
         return (str || '').replace(/[\u001b\u009b][\[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
     }
 
-    // --- Contexto del ejercicio ---------------------------------------------
-    // Sin esto el tutor responde en el vacío ("¿en qué ejercicio vas?"). Se le
-    // manda el enunciado, el código que el alumno lleva escrito y el último
-    // error, que es justo lo que un tutor humano miraría por encima del hombro.
-    function meta_nbgrader(cell) {
-        return (cell && cell.metadata && cell.metadata.nbgrader) ? cell.metadata.nbgrader : null;
-    }
+    // --- Contexto ------------------------------------------------------------
+    // Al tutor se le manda SOLO la pregunta del estudiante.
+    //
+    // Antes se le enviaba también el enunciado, el código escrito y —esto era lo
+    // grave— la celda de prueba entera, con los assert que llevan la respuesta
+    // esperada. Un tutor que ve la respuesta puede regalarla, y de hecho se le
+    // estaba pidiendo que no lo hiciera solo por el prompt del sistema.
+    //
+    // Quitarlo tiene un precio y conviene tenerlo presente: el tutor ya no
+    // puede decir "en tu línea 3 falta un paréntesis", porque no ve el código.
+    // A cambio responde antes (4.000 caracteres menos por pregunta), cuesta
+    // menos y no puede filtrar la solución. Si algún día se quiere devolver
+    // parte del contexto, que sea el enunciado y el código del alumno, nunca la
+    // celda de prueba.
 
-    function es_celda_de_ejercicio(cell) {
-        var m = meta_nbgrader(cell);
-        return !!(m && m.grade_id && (m.solution === true || m.grade === true));
-    }
-
-    // Cada ejercicio son dos celdas: "ejercicio_1" (la solución del alumno) y
-    // "test_ejercicio_1" (la prueba). Se normaliza igual que en custom.js para
-    // que ambas apunten al mismo ejercicio.
-    function normalizar_codigo_ejercicio(grade_id) {
-        return grade_id.indexOf('test_') === 0 ? grade_id.slice(5) : grade_id;
-    }
-
-    function buscar_celda_por_grade_id(cells, grade_id) {
-        for (var i = 0; i < cells.length; i++) {
-            var m = meta_nbgrader(cells[i]);
-            if (m && m.grade_id === grade_id) return i;
-        }
-        return -1;
-    }
-
-    function error_de_celda(cell) {
-        var outputs = (cell && cell.output_area && cell.output_area.outputs) || [];
-        for (var i = 0; i < outputs.length; i++) {
-            if (outputs[i].output_type === 'error') {
-                var e = outputs[i];
-                return limpiar_ansi((e.ename || 'Error') + (e.evalue ? (': ' + e.evalue) : ''));
-            }
-        }
-        return null;
-    }
-
-    function construir_contexto() {
-        var J = jup();
-        if (!J) return '';
-
-        var cells = J.notebook.get_cells();
-        var idx = J.notebook.get_selected_index();
-
-        // Desde donde está parado el alumno, se busca hacia arriba la celda de
-        // ejercicio más cercana; si está en el chat sin seleccionar nada útil,
-        // se cae a la última celda de ejercicio que haya tocado.
-        var objetivo = null;
-        for (var i = Math.min(idx, cells.length - 1); i >= 0; i--) {
-            if (es_celda_de_ejercicio(cells[i])) { objetivo = i; break; }
-        }
-        if (objetivo === null) {
-            for (var j = cells.length - 1; j >= 0; j--) {
-                if (es_celda_de_ejercicio(cells[j])) { objetivo = j; break; }
-            }
-        }
-        if (objetivo === null) return 'El estudiante no está sobre un ejercicio concreto del cuadernillo.';
-
-        // Se ancla SIEMPRE en la celda de solución, aunque el alumno tenga el
-        // cursor sobre la de prueba. Si no, al tutor le llegaban los asserts
-        // etiquetados como "código del estudiante", que es justo lo contrario
-        // de lo que necesita ver para dar una pista útil.
-        var cod = normalizar_codigo_ejercicio(meta_nbgrader(cells[objetivo]).grade_id);
-        var iSolucion = buscar_celda_por_grade_id(cells, cod);
-        var iPrueba = buscar_celda_por_grade_id(cells, 'test_' + cod);
-        var ancla = iSolucion >= 0 ? iSolucion : objetivo;
-
-        var partes = ['Ejercicio: ' + cod];
-
-        // Enunciado: la celda markdown inmediatamente anterior a la solución.
-        for (var k = ancla - 1; k >= 0 && k >= ancla - 3; k--) {
-            if (cells[k].cell_type === 'markdown') {
-                partes.push('Enunciado:\n' + (cells[k].get_text() || '').slice(0, 1200));
-                break;
-            }
-        }
-
-        var codigo = (cells[ancla].get_text && cells[ancla].get_text()) || '';
-        partes.push('Código actual del estudiante:\n' + codigo.slice(0, MAX_CONTEXTO_CODIGO));
-
-        if (iPrueba >= 0) {
-            partes.push('Celda de prueba que debe pasar:\n' +
-                        ((cells[iPrueba].get_text() || '').slice(0, 800)));
-        }
-
-        // El error puede estar en cualquiera de las dos celdas.
-        var err = error_de_celda(cells[ancla]) || (iPrueba >= 0 ? error_de_celda(cells[iPrueba]) : null);
-        if (err) partes.push('Último error de ejecución:\n' + err);
-
-        return partes.join('\n\n');
-    }
 
     // --- Transcripción (solo presentación) -----------------------------------
     function clave_chat() {
@@ -280,13 +208,13 @@
         pintar_mensajes();
         actualizar_contador();
 
-        var payload = { mensaje: texto, contexto: construir_contexto() };
+        var payload = { mensaje: texto, contexto: '', cuadernillo: cuadernillo_abierto() };
 
         try {
             var resp = await fetch(baseUrl() + 'tutor-ia/preguntar', {
                 method: 'POST',
                 credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-XSRFToken': xsrfToken() },
                 body: JSON.stringify(payload)
             });
             var datos = await resp.json().catch(function () { return {}; });
@@ -373,6 +301,15 @@
     // "Habilitable en el cuadernillo": el instructor lo apaga por notebook con
     //   notebook.metadata.tutor_ia = {"enabled": false}
     // y operaciones lo apaga para todo el curso con TUTOR_IA_HABILITADO=false.
+    // El cuadernillo abierto en esta pestana. El servidor solo conoce el que
+    // estaba activo cuando nacio el contenedor; el cupo de preguntas es por
+    // cuadernillo, asi que se manda el de verdad.
+    function cuadernillo_abierto() {
+        var J = jup();
+        var nombre = (J && J.notebook && J.notebook.notebook_name) || '';
+        return nombre.replace(/\.ipynb$/, '').replace(/_v\d+$/, '');
+    }
+
     function habilitado_en_cuadernillo() {
         var J = jup();
         var meta = (J && J.notebook.metadata && J.notebook.metadata.tutor_ia) || null;
@@ -386,7 +323,11 @@
         }
 
         try {
-            var resp = await fetch(baseUrl() + 'tutor-ia/estado', { credentials: 'same-origin' });
+            var resp = await fetch(baseUrl() + 'tutor-ia/estado?cuadernillo=' +
+                                   encodeURIComponent(cuadernillo_abierto()), {
+                credentials: 'same-origin',
+                headers: { 'X-XSRFToken': xsrfToken() },
+            });
             if (!resp.ok) throw new Error('HTTP ' + resp.status);
             estadoServidor = await resp.json();
         } catch (err) {

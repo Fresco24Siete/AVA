@@ -14,6 +14,15 @@ networks:
 volumes:
   caddy_data:
   postgres-data:
+  hub_estado:
+  # El curso de nbgrader del docente (source/, release/, submitted/, gradebook).
+  # Solo lo monta el contenedor del instructor (ver jupyterhub_config.py).
+  nbgrader_shared:
+    external: true
+  # Base y ficheros del servicio de intercambio. Aquí viven las liberaciones y
+  # las entregas hasta que el docente las recoge. Ningún otro contenedor lo
+  # monta: se llega por HTTP.
+  nbexchange_data:
 
 services:
   caddy:
@@ -23,6 +32,12 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      # El Caddyfile las lee como {$AVA_DOMINIO} y {$AVA_MOODLE}. Sin esto el
+      # dominio habria que escribirlo dentro del fichero, y mudar el AVA de
+      # maquina significaba acordarse de editarlo a mano.
+      - AVA_DOMINIO=${AVA_DOMINIO:-localhost}
+      - AVA_MOODLE=${AVA_MOODLE:-https://lms.uis.edu.co}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
@@ -40,6 +55,9 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./hub_config/jupyterhub_config.py:/srv/jupyterhub/jupyterhub_config.py
+      # Base y secreto de cookies del Hub: sin esto, cada redespliegue los borra
+      # y el Hub pierde de vista los contenedores que ya estaban corriendo.
+      - hub_estado:/srv/jupyterhub/data
     networks:
       - moodle_jupyter_net
     env_file:
@@ -47,13 +65,50 @@ services:
     environment:
       - DOCKER_NETWORK_NAME=moodle_jupyter_net
       - JUPYTERHUB_CRYPT_KEY=${JUPYTERHUB_CRYPT_KEY}
-      - ENVIAR_AL_BACKEND=${ENVIAR_AL_BACKEND:-false}
+      # Por defecto SÍ se envía. Antes el defecto era "false", y un .env sin esta
+      # línea tiraba a la basura toda la telemetría del curso sin avisar: el
+      # puente responde 200 «simulado» y nadie mira el log del contenedor.
+      # Quien quiera el modo simulación ahora tiene que pedirlo a propósito.
+      - ENVIAR_AL_BACKEND=${ENVIAR_AL_BACKEND:-true}
       # El Hub reenvía estas al contenedor del alumno (ver auth_state_a_env).
       - TUTOR_IA_HABILITADO=${TUTOR_IA_HABILITADO:-true}
       - TUTOR_MAX_PREGUNTAS=${TUTOR_MAX_PREGUNTAS:-5}
       # Token maestro con el que el Hub pide a la API un token por alumno
       # (ver _mintear_token_estudiante). Sin el, la telemetria se descarta.
       - METRICS_API_TOKEN=${METRICS_API_TOKEN:-}
+      # Servicio de intercambio de nbgrader (ver NBEXCHANGE.md). El token es el
+      # mismo que recibe el servicio: asi el Hub sabe que es el y le deja leer
+      # quien es cada usuario.
+      - NBEXCHANGE_URL=http://nbexchange:9000
+      - NBEXCHANGE_API_TOKEN=${NBEXCHANGE_API_TOKEN:-}
+
+  nbexchange:
+    build:
+      context: ./nbexchange
+      provenance: false
+      sbom: false
+    container_name: nbexchange
+    restart: unless-stopped
+    # Sin `ports`: solo se le habla desde la red interna (Hub y contenedores de
+    # alumnos/docente). Nada de esto pasa por Caddy.
+    environment:
+      # La API interna del Hub (hub_port por defecto, 8081). Con ella valida el
+      # token de cada contenedor que lo llama y lee el auth_state del usuario.
+      - JUPYTERHUB_API_URL=http://jupyterhub:8081/hub/api
+      - JUPYTERHUB_API_TOKEN=${NBEXCHANGE_API_TOKEN:-}
+      - JUPYTERHUB_SERVICE_PREFIX=/services/nbexchange/
+      # Base propia del servicio, SEPARADA de la de telemetria: SQLite en su
+      # volumen. Cambiarla a Postgres es cambiar esta URL (y meter el servicio
+      # en backend_db_net); hoy no hace falta, guarda unos cientos de filas.
+      - NBEX_DB_URL=sqlite:////var/nbexchange/nbexchange.sqlite
+      - NBEX_BASE_STORE=/var/nbexchange/almacen
+      # Tope por subida. Un cuadernillo pesa ~350 KB; 50 MB sobra. El cliente
+      # (notebook/nbgrader_config.py) usa el mismo valor.
+      - NBEX_MAX_BUFFER_SIZE=52428800
+    volumes:
+      - nbexchange_data:/var/nbexchange
+    networks:
+      - moodle_jupyter_net
 
   api_go:
     build:
@@ -62,8 +117,13 @@ services:
       sbom: false
     container_name: mi-backend-api
     restart: unless-stopped
-    ports:
-      - "8080:8080"
+    # SIN "ports". Al backend solo tienen que llegar el Hub y los contenedores
+    # de los alumnos, y eso ocurre por la red interna de Docker (api_go:8080).
+    # Publicarlo lo dejaba abierto a internet, y el cortafuegos NO lo tapa:
+    # Docker escribe sus reglas de iptables antes que las de ufw, asi que un
+    # puerto publicado se salta el cortafuegos sin decir nada. En el servidor
+    # nuevo se comprobo: http://<ip>:8080 contestaba desde fuera. Pedia token,
+    # pero es la ingesta de telemetria del curso y no tiene por que ser publica.
     env_file:
       - .env
     environment:
@@ -78,6 +138,9 @@ services:
       # ingesta se acepta sin verificar identidad y se avisa por el log.
       - METRICS_API_TOKEN=${METRICS_API_TOKEN:-}
       - METRICS_TOKEN_SECRET=${METRICS_TOKEN_SECRET:-}
+    # Las entregas de los alumnos ya no pasan por aqui: van al servicio
+    # nbexchange y el docente las recoge desde formgrader. El backend no monta
+    # el volumen de nbgrader.
     depends_on:
       postgres-database:
         condition: service_healthy
@@ -101,7 +164,11 @@ services:
       timeout: 5s
       retries: 5
     volumes:
-      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      # El esquema v2, no el v1: es el que trae competencias, notas y el CHECK
+      # que acepta 'sin_validar'. Se aplico a mano sobre la base viva, asi que
+      # montar el v1 aqui significaba que recrear el volumen dejaba una base sin
+      # la mitad del AVA, fallando en silencio.
+      - ./database/schema_v2.sql:/docker-entrypoint-initdb.d/schema.sql
       - postgres-data:/var/lib/postgresql/data
     networks:
       - backend_db_net

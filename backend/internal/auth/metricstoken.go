@@ -44,8 +44,15 @@ type Claims struct {
 	EstudianteID string `json:"sid"`
 	CursoID      string `json:"cid"`
 	Cuadernillo  string `json:"nbid,omitempty"`
-	Expira       int64  `json:"exp"`
+	// "docente" cuando el token lo acuñó el Hub para un instructor. Un token
+	// así abre las rutas de /internal de SU curso (panel, notas), en vez de
+	// darle al docente el token maestro, que abre todas las de todos.
+	Rol    string `json:"rol,omitempty"`
+	Expira int64  `json:"exp"`
 }
+
+// RolDocente es el valor del claim `rol` para los tokens de instructor.
+const RolDocente = "docente"
 
 func firmar(secreto, mensaje []byte) string {
 	mac := hmac.New(sha256.New, secreto)
@@ -55,6 +62,11 @@ func firmar(secreto, mensaje []byte) string {
 
 // Mint devuelve un token firmado para ese estudiante y curso.
 func Mint(secreto, estudianteID, cursoID, cuadernillo string, duracion time.Duration) (string, error) {
+	return MintConRol(secreto, estudianteID, cursoID, cuadernillo, "", duracion)
+}
+
+// MintConRol es Mint con el claim `rol` (ver RolDocente).
+func MintConRol(secreto, estudianteID, cursoID, cuadernillo, rol string, duracion time.Duration) (string, error) {
 	if secreto == "" {
 		return "", ErrSinSecreto
 	}
@@ -67,6 +79,7 @@ func Mint(secreto, estudianteID, cursoID, cuadernillo string, duracion time.Dura
 		EstudianteID: estudianteID,
 		CursoID:      cursoID,
 		Cuadernillo:  cuadernillo,
+		Rol:          rol,
 		Expira:       time.Now().Add(duracion).Unix(),
 	})
 	if err != nil {

@@ -1,0 +1,36 @@
+# Override para levantar el AVA completo en una máquina de desarrollo (sin
+# Caddy ni dominio), por ejemplo para probar el intercambio con el Hub real:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+#
+# Hace falta .env con al menos DB_*, JUPYTERHUB_CRYPT_KEY y los tokens
+# (METRICS_API_TOKEN, METRICS_TOKEN_SECRET, NBEXCHANGE_API_TOKEN); las imágenes
+# del alumno y del docente construidas con los nombres de abajo; y el volumen
+# `docker volume create nbgrader_shared`. Para entrar sin Moodle:
+# nbexchange/pruebas/lti_falso.py. Ver nbexchange/pruebas/README.md.
+services:
+  caddy:
+    # Pediría un certificado para el dominio de producción. Con un perfil,
+    # `up -d` a secas no lo arranca.
+    profiles: ["produccion"]
+
+  jupyterhub:
+    ports:
+      - "8000:8000"
+    environment:
+      - IMAGEN_ALUMNO=${IMAGEN_ALUMNO:-mi_imagen_jupyterlab:latest}
+      - IMAGEN_DOCENTE=${IMAGEN_DOCENTE:-mi_imagen_jupyterlab_docente:latest}
+      # Telemetría de verdad, aunque el .env diga lo contrario: esta prueba es
+      # precisamente para verla llegar a la base.
+      - ENVIAR_AL_BACKEND=true
+      # Que el arranque del alumno falle ruidosamente si no hay token de
+      # telemetría, en vez de trabajar a ciegas.
+      - METRICS_REQUERIDO=${METRICS_REQUERIDO:-true}
+      # Una máquina de desarrollo suele tener menos memoria que la VM.
+      - MEM_LIMIT_ALUMNO=${MEM_LIMIT_ALUMNO:-512M}
+      - MEM_LIMIT_INSTRUCTOR=${MEM_LIMIT_INSTRUCTOR:-768M}
+    depends_on:
+      api_go:
+        condition: service_started
+      nbexchange:
+        condition: service_started
