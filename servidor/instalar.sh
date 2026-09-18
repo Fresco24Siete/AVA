@@ -325,93 +325,104 @@ else
     info "    docker compose up -d --force-recreate api_go"
 fi
 
+# Antes, --verificar imprimia el estado de los contenedores y se iba, sin llegar
+# a ninguna de las comprobaciones de los pasos 5 a 8: ni si el Hub responde, ni
+# si la base tiene sus tablas, ni si el mapeo de competencias esta cargado. O
+# sea, la opcion que existe para diagnosticar era la que menos diagnosticaba, y
+# es la que usa el profesor cuando algo va mal. Ahora solo se salta lo que
+# MODIFICA --construir imagenes y levantar el stack-- y comprueba todo lo demas.
 if $solo_verificar; then
     paso "Estado actual"
     "${COMPOSE[@]}" ps 2>/dev/null || info "el stack no está levantado"
-    exit 0
 fi
+if $solo_verificar; then
+    paso "3 y 4. Construir y levantar — se saltan (--verificar)"
+    info "no se construye ninguna imagen ni se toca el stack"
+else
 
-# --- 3. imágenes -------------------------------------------------------------
-paso "3. Construyendo las imágenes"
+    # --- 3. imágenes -------------------------------------------------------------
+    paso "3. Construyendo las imágenes"
 
-# ORDEN OBLIGATORIO: la imagen del docente hereda de la del alumno
-# (notebook/Dockerfile.docente empieza por FROM mi_imagen_jupyterlab:latest).
-# Construir solo la del docente deja dentro el código viejo de notebook/, y el
-# fallo aparece mucho después y en otro sitio: costó una hora encontrarlo.
-info "alumno (primero: la del docente hereda de ella)…"
-docker build -q -t mi_imagen_jupyterlab:latest notebook >/dev/null
-ok "mi_imagen_jupyterlab:latest"
+    # ORDEN OBLIGATORIO: la imagen del docente hereda de la del alumno
+    # (notebook/Dockerfile.docente empieza por FROM mi_imagen_jupyterlab:latest).
+    # Construir solo la del docente deja dentro el código viejo de notebook/, y el
+    # fallo aparece mucho después y en otro sitio: costó una hora encontrarlo.
+    info "alumno (primero: la del docente hereda de ella)…"
+    docker build -q -t mi_imagen_jupyterlab:latest notebook >/dev/null
+    ok "mi_imagen_jupyterlab:latest"
 
-info "docente…"
-docker build -q -t mi_imagen_jupyterlab_docente:latest -f notebook/Dockerfile.docente notebook >/dev/null
-ok "mi_imagen_jupyterlab_docente:latest"
+    info "docente…"
+    docker build -q -t mi_imagen_jupyterlab_docente:latest -f notebook/Dockerfile.docente notebook >/dev/null
+    ok "mi_imagen_jupyterlab_docente:latest"
 
-info "hub, servicio de intercambio y backend…"
-"${COMPOSE[@]}" build >/dev/null
-ok "imágenes de compose"
+    info "hub, servicio de intercambio y backend…"
+    "${COMPOSE[@]}" build >/dev/null
+    ok "imágenes de compose"
 
-# Los contenedores de alumno y docente NO los levanta compose: los crea el Hub
-# al entrar cada persona. Así que reconstruir la imagen no basta: quien tenga uno
-# vivo sigue ejecutando el código viejo, y el arreglo que se acaba de instalar
-# parece no funcionar. Es la misma clase de fallo mudo que ya nos costó caro.
-#
-# Se pueden tirar sin miedo: el trabajo del alumno vive en su volumen
-# (ava-trabajo-<usuario>), no en el contenedor, y el Hub los da por desechables
-# (DockerSpawner.remove = True). Los apagados se borran aquí mismo, porque si no
-# reviven con la imagen vieja. Los que están en uso NO se tocan —puede haber
-# alguien en mitad de un ejercicio—, pero se avisa en vez de callar.
-viejos_parados=0
-viejos_vivos=""
-for c in $(docker ps -a --filter "name=^/jupyter-" --format '{{.Names}}'); do
-    img_c=$(docker inspect --format '{{.Image}}' "$c" 2>/dev/null)
-    caduco=true
-    for img in mi_imagen_jupyterlab:latest mi_imagen_jupyterlab_docente:latest; do
-        [ "$img_c" = "$(docker inspect --format '{{.Id}}' "$img" 2>/dev/null)" ] && caduco=false
+    # Los contenedores de alumno y docente NO los levanta compose: los crea el Hub
+    # al entrar cada persona. Así que reconstruir la imagen no basta: quien tenga uno
+    # vivo sigue ejecutando el código viejo, y el arreglo que se acaba de instalar
+    # parece no funcionar. Es la misma clase de fallo mudo que ya nos costó caro.
+    #
+    # Se pueden tirar sin miedo: el trabajo del alumno vive en su volumen
+    # (ava-trabajo-<usuario>), no en el contenedor, y el Hub los da por desechables
+    # (DockerSpawner.remove = True). Los apagados se borran aquí mismo, porque si no
+    # reviven con la imagen vieja. Los que están en uso NO se tocan —puede haber
+    # alguien en mitad de un ejercicio—, pero se avisa en vez de callar.
+    viejos_parados=0
+    viejos_vivos=""
+    for c in $(docker ps -a --filter "name=^/jupyter-" --format '{{.Names}}'); do
+        img_c=$(docker inspect --format '{{.Image}}' "$c" 2>/dev/null)
+        caduco=true
+        for img in mi_imagen_jupyterlab:latest mi_imagen_jupyterlab_docente:latest; do
+            [ "$img_c" = "$(docker inspect --format '{{.Id}}' "$img" 2>/dev/null)" ] && caduco=false
+        done
+        $caduco || continue
+        if [ -n "$(docker ps -q --filter "name=^/${c}$")" ]; then
+            viejos_vivos="$viejos_vivos $c"
+        else
+            docker rm -f "$c" >/dev/null 2>&1 && viejos_parados=$((viejos_parados + 1))
+        fi
     done
-    $caduco || continue
-    if [ -n "$(docker ps -q --filter "name=^/${c}$")" ]; then
-        viejos_vivos="$viejos_vivos $c"
-    else
-        docker rm -f "$c" >/dev/null 2>&1 && viejos_parados=$((viejos_parados + 1))
+    [ "$viejos_parados" -gt 0 ] && \
+        ok "$viejos_parados contenedor(es) con la imagen vieja retirados (renacen al entrar)"
+    if [ -n "$viejos_vivos" ]; then
+        aviso "hay sesiones abiertas con la imagen ANTERIOR:$viejos_vivos"
+        info "Siguen con el código viejo hasta que esa persona salga y vuelva a"
+        info "entrar desde Moodle. Su trabajo está a salvo (vive en su volumen)."
+        info "Si quieres forzarlo ahora mismo:"
+        info "    docker rm -f$viejos_vivos"
     fi
-done
-[ "$viejos_parados" -gt 0 ] && \
-    ok "$viejos_parados contenedor(es) con la imagen vieja retirados (renacen al entrar)"
-if [ -n "$viejos_vivos" ]; then
-    aviso "hay sesiones abiertas con la imagen ANTERIOR:$viejos_vivos"
-    info "Siguen con el código viejo hasta que esa persona salga y vuelva a"
-    info "entrar desde Moodle. Su trabajo está a salvo (vive en su volumen)."
-    info "Si quieres forzarlo ahora mismo:"
-    info "    docker rm -f$viejos_vivos"
+
+    # --- 4. arranque -------------------------------------------------------------
+    paso "4. Levantando el stack"
+
+    "${COMPOSE[@]}" up -d >/dev/null
+    ok "contenedores lanzados"
+
+    info "esperando a que la base de datos esté sana…"
+    for _ in $(seq 1 60); do
+        docker inspect --format '{{.State.Health.Status}}' postgres-db 2>/dev/null | grep -q healthy && break
+        sleep 2
+    done
+    docker inspect --format '{{.State.Health.Status}}' postgres-db 2>/dev/null | grep -q healthy \
+        && ok "PostgreSQL sano" \
+        || mal "PostgreSQL no llegó a estar sano"
+
+    # El esquema base lo aplica el propio Postgres la primera vez
+    # (database/schema_v2.sql va montado en docker-entrypoint-initdb.d), pero la
+    # migración v3 —la tabla de estudiantes— es posterior y hay que aplicarla
+    # aparte. Es idempotente: se puede correr siempre.
+    info "aplicando las migraciones…"
+    fallo_migracion=0
+    for m in database/migracion_v3.sql database/migracion_v4.sql; do
+        [ -f "$m" ] || continue
+        docker exec -i postgres-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -q -v ON_ERROR_STOP=1' \
+            < "$m" >/dev/null 2>&1 || { mal "falló $m"; fallo_migracion=1; }
+    done
+    [ "$fallo_migracion" -eq 0 ] && ok "esquema al día (v3 y v4)"
 fi
 
-# --- 4. arranque -------------------------------------------------------------
-paso "4. Levantando el stack"
-
-"${COMPOSE[@]}" up -d >/dev/null
-ok "contenedores lanzados"
-
-info "esperando a que la base de datos esté sana…"
-for _ in $(seq 1 60); do
-    docker inspect --format '{{.State.Health.Status}}' postgres-db 2>/dev/null | grep -q healthy && break
-    sleep 2
-done
-docker inspect --format '{{.State.Health.Status}}' postgres-db 2>/dev/null | grep -q healthy \
-    && ok "PostgreSQL sano" \
-    || mal "PostgreSQL no llegó a estar sano"
-
-# El esquema base lo aplica el propio Postgres la primera vez
-# (database/schema_v2.sql va montado en docker-entrypoint-initdb.d), pero la
-# migración v3 —la tabla de estudiantes— es posterior y hay que aplicarla
-# aparte. Es idempotente: se puede correr siempre.
-info "aplicando las migraciones…"
-fallo_migracion=0
-for m in database/migracion_v3.sql database/migracion_v4.sql; do
-    [ -f "$m" ] || continue
-    docker exec -i postgres-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -q -v ON_ERROR_STOP=1' \
-        < "$m" >/dev/null 2>&1 || { mal "falló $m"; fallo_migracion=1; }
-done
-[ "$fallo_migracion" -eq 0 ] && ok "esquema al día (v3 y v4)"
 
 # --- 5. ¿quedó funcionando? --------------------------------------------------
 paso "5. Comprobaciones"
