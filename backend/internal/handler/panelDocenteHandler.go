@@ -137,6 +137,14 @@ func (h *PanelDocenteHandler) FichaHandler(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "no se pudo leer la ficha"})
 		return
 	}
+	// El desglose por competencia de ESTA persona. Si falla no se tumba la
+	// ficha: el recorrido ejercicio a ejercicio sigue siendo util, y el panel
+	// ya sabe pintar la seccion vacia.
+	competencias, err := h.estudiantes.Competencias(curso, estudiante)
+	if err != nil {
+		log.Printf("[panel] competencias de %s: %v", estudiante, err)
+		competencias = nil
+	}
 	c.JSON(http.StatusOK, gin.H{"curso_id": curso, "student_id": estudiante,
-		"ejercicios": ejercicios})
+		"ejercicios": ejercicios, "competencias": competencias})
 }

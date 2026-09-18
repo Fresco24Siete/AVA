@@ -171,7 +171,12 @@ func (r *PanelDocenteRepository) PorCompetencia(curso string) ([]CompetenciaCurs
 	salida := []CompetenciaCurso{}
 	err := r.db.Select(&salida, `
 		SELECT c.id AS competencia_id, c.descripcion,
-		       COUNT(DISTINCT (ec.cuadernillo_id, ec.exercise_id))   AS ejercicios,
+		       -- Con FILTER: sin el, COUNT(DISTINCT (a,b)) cuenta la tupla
+		       -- (NULL, NULL) del LEFT JOIN y una competencia SIN ejercicios
+		       -- aparecia con 1. Es lo que el profesor vio en pantalla:
+		       -- "I1 (1), I2 (1) ... I7 (1)" con el mapeo entero vacio.
+		       COUNT(DISTINCT (ec.cuadernillo_id, ec.exercise_id))
+		           FILTER (WHERE ec.exercise_id IS NOT NULL)         AS ejercicios,
 		       COUNT(DISTINCT a.student_id)                          AS alumnos,
 		       COUNT(DISTINCT a.student_id) FILTER (
 		           WHERE a.validation_result = 'passed')             AS resolvieron

@@ -218,3 +218,67 @@ func (r *EstudiantesRepository) Ficha(curso, estudiante string) ([]EjercicioDeEs
 		 ORDER BY t.cuadernillo_id, MIN(t.orden) NULLS LAST, t.exercise_id`, curso, estudiante)
 	return salida, err
 }
+
+// CompetenciaDeEstudiante es una fila del desglose por competencia de UNA
+// persona. Es lo que el panel del curso ya mostraba agregado, pero por alumno.
+type CompetenciaDeEstudiante struct {
+	CompetenciaID string `db:"competencia_id" json:"competencia_id"`
+	Descripcion   string `db:"descripcion"    json:"descripcion"`
+	// Cuántos ejercicios de esta competencia existen en total.
+	Disenados int `db:"disenados" json:"ejercicios_disenados"`
+	// De esos, en cuántos llegó a intentar algo de verdad. Es el denominador
+	// honesto: medir sobre los diseñados castigaría a todo el mundo por los
+	// cuadernillos que el docente todavía no ha publicado.
+	Vistos int `db:"vistos" json:"ejercicios_vistos"`
+	// De los vistos, cuántos resolvió.
+	Resueltos int `db:"resueltos" json:"ejercicios_resueltos"`
+	// Intentos reales e intentos que acabaron en abandono. La diferencia entre
+	// "no lo intentó" y "lo intentó y se rindió" son dos conversaciones
+	// distintas con el estudiante, y sin esto se ven igual.
+	Intentos  int `db:"intentos"  json:"intentos"`
+	Abandonos int `db:"abandonos" json:"abandonos"`
+}
+
+// Competencias: el desglose por competencia de una persona.
+//
+// Existe porque faltaba justo la vista que el AVA promete: el panel del curso
+// decía "4 de 16 estudiantes resolvió alguno" y la ficha individual mostraba
+// ejercicio a ejercicio, así que no había forma de responder "este estudiante,
+// ¿en qué competencia va atascado?" — que es la pregunta del trabajo de grado.
+//
+// Los intentos que solo ejecutaron la plantilla sin tocarla (NotImplementedError)
+// no cuentan: no son un intento, son un "ejecuté la celda a ver qué pasaba". Es
+// el mismo criterio que usa Ficha, y tienen que coincidir o las dos secciones de
+// la misma página se contradicen.
+func (r *EstudiantesRepository) Competencias(curso, estudiante string) ([]CompetenciaDeEstudiante, error) {
+	salida := []CompetenciaDeEstudiante{}
+	err := r.db.Select(&salida, `
+	    WITH reales AS (
+	        SELECT a.cuadernillo_id, a.exercise_id, a.validation_result
+	          FROM exercise_attempts a
+	         WHERE a.course_id = $1 AND a.student_id = $2
+	           AND NOT EXISTS (SELECT 1 FROM attempt_errors e
+	                            WHERE e.attempt_id = a.id
+	                              AND e.error_type = 'NotImplementedError')
+	    )
+		SELECT c.id AS competencia_id, c.descripcion,
+		       -- El FILTER no sobra: sin el, COUNT(DISTINCT (a,b)) cuenta la
+		       -- tupla (NULL, NULL) que deja el LEFT JOIN cuando la competencia
+		       -- no tiene ningun ejercicio, y devuelve 1 en vez de 0.
+		       COUNT(DISTINCT (ec.cuadernillo_id, ec.exercise_id))
+		           FILTER (WHERE ec.exercise_id IS NOT NULL)              AS disenados,
+		       COUNT(DISTINCT (t.cuadernillo_id, t.exercise_id))
+		           FILTER (WHERE t.exercise_id IS NOT NULL)               AS vistos,
+		       COUNT(DISTINCT (t.cuadernillo_id, t.exercise_id)) FILTER (
+		           WHERE t.validation_result = 'passed')                  AS resueltos,
+		       COUNT(t.*)                                                 AS intentos,
+		       COUNT(t.*) FILTER (
+		           WHERE t.validation_result = 'sin_validar')             AS abandonos
+		  FROM competencias c
+		  LEFT JOIN ejercicio_competencias ec ON ec.competencia_id = c.id
+		  LEFT JOIN reales t ON t.cuadernillo_id = ec.cuadernillo_id
+		                    AND t.exercise_id    = ec.exercise_id
+		 GROUP BY c.id, c.descripcion
+		 ORDER BY c.id`, curso, estudiante)
+	return salida, err
+}

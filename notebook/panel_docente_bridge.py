@@ -1094,6 +1094,68 @@ def _html_ficha(base_url, sid, datos_panel, ficha, historial, aviso):
             texto += f' · <b class="mal">{atascados} atascado{"" if atascados == 1 else "s"}</b>'
         return texto
 
+    # --- Su progreso por competencia -------------------------------------
+    # El panel del curso ya mostraba las competencias, pero AGREGADAS: "4 de 16
+    # estudiantes resolvió alguno". Y esta ficha mostraba el recorrido ejercicio
+    # a ejercicio. Entre las dos no había forma de contestar "este estudiante,
+    # ¿en qué competencia va atascado?", que es la pregunta para la que existe
+    # todo esto.
+    #
+    # El denominador son los ejercicios que ha VISTO, no los diseñados: medir
+    # sobre el total castigaría a todo el mundo por los cuadernillos que el
+    # docente todavía no ha publicado. Los que le faltan por tocar se dicen
+    # aparte, que es otra información y no la misma.
+    def _tarjetas_competencia(comps):
+        con_actividad = [c for c in comps if c.get("ejercicios_vistos")]
+        sin_tocar = [c for c in comps
+                     if not c.get("ejercicios_vistos") and c.get("ejercicios_disenados")]
+        if not con_actividad:
+            if sin_tocar:
+                return ('<div class="caja vacia">Todavía no ha intentado ningún '
+                        'ejercicio, así que no hay nada que medir por competencia.</div>')
+            return '<div class="caja vacia">Sin datos de competencias.</div>'
+
+        tarjetas = ""
+        for c in con_actividad:
+            vistos = c.get("ejercicios_vistos", 0)
+            resueltos = c.get("ejercicios_resueltos", 0)
+            intentos = c.get("intentos", 0)
+            abandonos = c.get("abandonos", 0)
+            faltan = c.get("ejercicios_disenados", 0) - vistos
+            pct = int(100 * resueltos / vistos) if vistos else 0
+            color = VERDE if pct >= 70 else (AMBAR if pct >= 40 else ROJO)
+
+            # Los abandonos se destacan a propósito: un `sin_validar` es que se
+            # atascó y se rindió sin llegar a validar. No es lo mismo que fallar,
+            # y es la señal más accionable que produce el AVA.
+            detalle = f'{intentos} intento{"" if intentos == 1 else "s"}'
+            if abandonos:
+                detalle += (f' · <b class="mal">{abandonos} '
+                            f'abandono{"" if abandonos == 1 else "s"}</b>')
+            if faltan > 0:
+                detalle += f' · <span class="tenue">{faltan} sin tocar</span>'
+
+            tarjetas += (
+                f'<div class="comp"><div class="comp-id">'
+                f'{html.escape(c["competencia_id"])} · {vistos} '
+                f'ejercicio{"" if vistos == 1 else "s"} trabajado'
+                f'{"" if vistos == 1 else "s"}</div>'
+                f'<div class="comp-e"><b>{resueltos}</b> de {vistos} '
+                f'resuelto{"" if vistos == 1 else "s"}</div>'
+                f'<div class="barra"><div class="relleno" '
+                f'style="width:{pct}%;background:{color}"></div></div>'
+                f'<div class="comp-e">{detalle}</div>'
+                f'<div class="comp-d">{html.escape(c.get("descripcion", ""))}</div></div>')
+
+        resto = ""
+        if sin_tocar:
+            resto = ('<p class="sub2">Sin tocar todavía: '
+                     + ", ".join(f'<b>{html.escape(c["competencia_id"])}</b>'
+                                 for c in sin_tocar) + '.</p>')
+        return f'<div class="comps">{tarjetas}</div>{resto}'
+
+    competencias = _tarjetas_competencia((ficha or {}).get("competencias") or [])
+
     recorrido = (_desplegables(
         _grupos_por_cuadernillo(ejercicios, "cuadernillo_id", activo), activo,
         '<tr><th>Ejercicio</th><th>Estado</th><th class="num">Intentos</th>'
@@ -1109,6 +1171,12 @@ def _html_ficha(base_url, sid, datos_panel, ficha, historial, aviso):
 {banda}
 <h2>Sus cuadernillos</h2>
 {cuadernillos}
+<h2>Cómo va por competencia</h2>
+<p class="sub2">De los ejercicios de cada competencia que <b>ha llegado a
+intentar</b>, cuántos resolvió. Un <b>abandono</b> es que dejó errores sin
+llegar a ejecutar la celda de prueba: se atascó y no volvió. No es lo mismo que
+fallar, y suele ser lo que más conviene mirar.</p>
+{competencias}
 <h2>Su recorrido, ejercicio por ejercicio</h2>
 <p class="sub2">Un intento es cada vez que ejecutó una celda de prueba con algo
 escrito. Los errores son los de su último intento fallido.</p>
