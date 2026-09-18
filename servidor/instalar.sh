@@ -467,6 +467,40 @@ comp=$(docker exec postgres-db sh -c \
 [ "${comp:-0}" -ge 7 ] && ok "catálogo de competencias sembrado ($comp)" \
                        || aviso "el catálogo de competencias está vacío: cargar-competencias fallará"
 
+# El MAPEO ejercicio -> competencia, que es distinto del catálogo de arriba y se
+# olvidaba. Sin él, el panel del docente dice «0 ejercicios etiquetados con su
+# competencia» y no sirve para nada: es justo la pregunta que el AVA existe para
+# responder. Pasó en el curso real, con dos semanas y 686 intentos ya recogidos,
+# y nadie podía saberlo porque el comando que lo carga no lo ejecutaba nadie.
+#
+# Se carga aquí, en cada instalación y en cada actualización. Es idempotente:
+# reemplaza el mapeo de los cuadernillos que vengan en el archivo y no toca los
+# demás. Y los datos viejos se arreglan solos, porque la competencia no viaja en
+# cada intento: se resuelve por JOIN al consultar.
+rel=$(docker exec postgres-db sh -c \
+    'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -c "select count(*) from ejercicio_competencias"' 2>/dev/null || echo 0)
+if $solo_verificar; then
+    [ "${rel:-0}" -gt 0 ] && ok "mapeo de competencias cargado ($rel relaciones)" \
+                          || mal "el mapeo de competencias está VACÍO: el panel del docente no mostrará nada"
+elif [ -f .env ]; then
+    _tok=$(grep -m1 '^METRICS_API_TOKEN=' .env | cut -d= -f2-)
+    if [ -z "$_tok" ]; then
+        aviso "sin METRICS_API_TOKEN no se puede cargar el mapeo de competencias"
+    elif docker run --rm --network "${DOCKER_NETWORK_NAME:-moodle_jupyter_net}" \
+            -e METRICS_API_TOKEN="$_tok" --entrypoint cargar-competencias \
+            mi_imagen_jupyterlab_docente:latest >/dev/null 2>&1; then
+        rel=$(docker exec postgres-db sh -c \
+            'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -c "select count(*) from ejercicio_competencias"' 2>/dev/null || echo 0)
+        ok "mapeo de competencias cargado ($rel relaciones)"
+    else
+        aviso "no se pudo cargar el mapeo de competencias"
+        info "Inténtalo a mano y lee el error:"
+        info "    docker run --rm --network moodle_jupyter_net \\"
+        info "      -e METRICS_API_TOKEN=\$(grep ^METRICS_API_TOKEN= .env | cut -d= -f2-) \\"
+        info "      --entrypoint cargar-competencias mi_imagen_jupyterlab_docente:latest"
+    fi
+fi
+
 for img in mi_imagen_jupyterlab:latest mi_imagen_jupyterlab_docente:latest; do
     docker image inspect "$img" >/dev/null 2>&1 && ok "imagen $img" || mal "falta la imagen $img"
 done
