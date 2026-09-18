@@ -805,6 +805,32 @@ def _seccion_malentendidos(datos, activo=""):
         cuerpo, resumen)
 
 
+def _guia_competencias(comps):
+    """Los siete indicadores con su texto completo, a la vista.
+
+    Hasta ahora los códigos I1…I7 solo se leían pasando el ratón por encima
+    («Pasa el ratón para leer cuál es»). Un código no dice nada por sí solo: el
+    docente tiene que poder leer qué mide cada uno sin adivinar ni recordar, y
+    menos aún con el ratón en una pantalla que va a mirar en clase.
+
+    Se marca cuántos ejercicios tiene cada uno porque es la otra mitad del
+    contexto: un indicador con cero ejercicios no es que el curso vaya mal, es
+    que todavía no se ha diseñado nada para él.
+    """
+    if not comps:
+        return ""
+    filas = ""
+    for c in sorted(comps, key=lambda x: x.get("competencia_id", "")):
+        n = c.get("ejercicios_disenados", 0)
+        cuantos = (f'{n} ejercicio{"" if n == 1 else "s"}' if n
+                   else '<span class="tenue">sin ejercicios todavía</span>')
+        filas += (f'<tr><td class="mono"><b>{html.escape(c.get("competencia_id", ""))}</b></td>'
+                  f'<td>{html.escape(c.get("descripcion", ""))}</td>'
+                  f'<td class="num">{cuantos}</td></tr>')
+    return (f'<details class="caja guia"><summary>Qué mide cada código '
+            f'(I1 … I7)</summary><table>{filas}</table></details>')
+
+
 def _seccion_competencias(datos):
     comps = (datos or {}).get("competencias", [])
     if not comps:
@@ -933,6 +959,12 @@ ESTILO = f"""
  .gres{{margin-left:auto;font-size:13.5px;color:{GRIS};white-space:nowrap}}
  .gtabla{{overflow-x:auto}}
  .estrellas{{color:{AMBAR};letter-spacing:1px}}
+ .guia summary{{cursor:pointer;font-weight:600;color:#2a78d6;list-style:none}}
+ .guia summary::-webkit-details-marker{{display:none}}
+ .guia summary:before{{content:'▸ ';color:#8b94a1}}
+ .guia[open] summary:before{{content:'▾ '}}
+ .guia table{{margin-top:10px}}
+ .guia td{{vertical-align:top;padding:5px 10px}}
  .comps{{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));margin-bottom:12px}}
  .comp{{background:#fff;border:1px solid {BORDE};border-radius:8px;padding:14px 16px}}
  .comp-id{{font-size:12px;color:{GRIS};text-transform:uppercase;
@@ -1020,6 +1052,7 @@ sale.</p>
 <h2>Cómo va el grupo por competencia</h2>
 {_seccion_salud(datos)}
 {_seccion_competencias(datos)}
+{_guia_competencias((datos or {}).get('competencias', []))}
 """
     return _pagina("Tu curso", cuerpo)
 
@@ -1177,6 +1210,7 @@ intentar</b>, cuántos resolvió. Un <b>abandono</b> es que dejó errores sin
 llegar a ejecutar la celda de prueba: se atascó y no volvió. No es lo mismo que
 fallar, y suele ser lo que más conviene mirar.</p>
 {competencias}
+{_guia_competencias((ficha or {}).get('competencias') or [])}
 <h2>Su recorrido, ejercicio por ejercicio</h2>
 <p class="sub2">Un intento es cada vez que ejecutó una celda de prueba con algo
 escrito. Los errores son los de su último intento fallido.</p>
