@@ -212,7 +212,7 @@ def portada():
         'opacity:.82">Semana 4 · Unidad 4</div>'
         '<div style="font-size:26px;font-weight:700;margin:2px 0 6px">Repetir</div>'
         '<div style="font-size:14.5px;line-height:1.5;opacity:.94">Ciclos, contadores y acumuladores.<br>'
-        '<span style="opacity:.8">80 puntos · 90 XP · insignia «Quien automatiza»</span></div></div>')
+        '<span style="opacity:.8">65 puntos · 90 XP · insignia «Quien automatiza»</span></div></div>')
 
 
 # Alias: los cuadernillos 1 y 2 estrenaron dos nombres distintos para lo mismo

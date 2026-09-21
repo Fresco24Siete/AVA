@@ -4,7 +4,7 @@
 Curso 41333 Algoritmos y Programación · Ingeniería en IA · UIS 2026-2
 Unidad 3 — Operadores y estructuras condicionales.
 
-80 puntos de nbgrader en ocho ejercicios, 90 XP lúdicos y la insignia
+65 puntos de nbgrader en seis ejercicios, 90 XP lúdicos y la insignia
 «Quien decide». Todo lo que aparece aquí se apoya solo en lo de las semanas 1 y
 2: variables, tipos, entrada, salida, pseudocódigo y prueba de escritorio. No
 hay ciclos —son de la semana 4— ni listas ni funciones propias más allá de las
@@ -70,13 +70,14 @@ receta y empiezan a parecerse a algo que piensa.
 - Anidar condiciones sin perderte, y saber cuándo **no** conviene anidar.
 - Usar los operadores aritméticos —incluidos `div` y `mod`, que son nuevos— y
   saber en qué orden los evalúa la máquina.
-- Usar `round`, `abs`, `min`, `max` y `pow` sin buscarlas cada vez.
+- Usar `round`, `abs` y `math.sqrt` para las cuentas, y comparar decimales
+  sin que te traicione la coma.
 
 **Lo que NO se te pide todavía:** repetir algo muchas veces. Eso es la semana 4.
 Si un ejercicio te pide «para cada uno de los cien estudiantes», te equivocaste
 de cuadernillo.
 
-Este cuadernillo tiene **80 puntos** y **90 XP**. La insignia se llama
+Este cuadernillo tiene **65 puntos** y **90 XP**. La insignia se llama
 «Quien decide».
 """)
 
@@ -349,13 +350,10 @@ else:
 comparaciones y con `y` / `o`. El orden completo, de primero a último:
 
 1. Paréntesis `( )`
-2. `**` (potencia)
-3. `*`, `/`, `//`, `%`
-4. `+`, `-`
-5. Comparaciones: `<`, `<=`, `>`, `>=`, `==`, `!=`
-6. `not`
-7. `and`
-8. `or`
+2. `*`, `/`, `//`, `%`
+3. `+`, `-`
+4. Comparaciones: `<`, `<=`, `>`, `>=`, `==`, `!=`
+5. `not`, luego `and`, luego `or`
 
 Lo que se te va a olvidar es que **`and` va antes que `or`**. Ejecuta:
 """)
@@ -365,38 +363,36 @@ Lo que se te va a olvidar es que **`and` va antes que `or`**. Ejecuta:
     "(True or False) and False",    # con parentesis cambia todo
 )''')
 
-    c.md("""> **Consejo de oficio:** si tienes que pararte a pensar la precedencia, ponle
-> paréntesis. No cuestan nada y quien lea tu código —incluido tú dentro de tres
-> semanas— no tendrá que pararse a pensar.
+    c.md("""### 4F. Tres funciones para cuentas
 
-### 4F. Cinco funciones que te van a servir siempre
-
-Ninguna hay que instalarla: vienen con Python.
+Las decisiones de esta semana casi siempre comparan **números**, y tres
+funciones aparecen una y otra vez cuando esos números salen de un cálculo:
 """)
 
     c.code('''print("round(3.14159, 2) =", round(3.14159, 2))   # redondea a 2 decimales
-print("abs(-7)            =", abs(-7))            # valor absoluto: quita el signo
-print("min(4, 2, 9)       =", min(4, 2, 9))       # el menor
-print("max(4, 2, 9)       =", max(4, 2, 9))       # el mayor
-print("pow(2, 10)         =", pow(2, 10))         # 2 elevado a 10''')
+print("abs(-7)            =", abs(-7))            # distancia al cero, sin signo
 
-    c.md("""Para las de matemáticas —raíz cuadrada, seno, logaritmo— hay que pedirle a
-Python un módulo aparte. Se hace una sola vez, al principio del programa:
+import math
+print("math.sqrt(16)      =", math.sqrt(16))      # raiz cuadrada''')
+
+    c.md("""`round` es la que más vas a usar: el dinero se compara redondeado, no con sus
+catorce decimales. `abs` sirve para preguntar «¿se parecen?» sin que importe
+cuál es mayor: `abs(a - b) < 0.01` es *«a y b son practicamente el mismo
+numero»*, y así se comparan los decimales — **nunca** con `==`, porque
+`0.1 + 0.2` no da exactamente `0.3`.
+
+Para lo demás —raíces, senos, logaritmos— está `math`, que se pide una sola vez
+al principio del programa.
 """)
-
-    c.code('''import math
-
-print("math.sqrt(16) =", math.sqrt(16))    # raiz cuadrada
-print("math.pi       =", round(math.pi, 4))''')
 
     # =========================================================================
     # Bloque 5 — Ejercicios
     # =========================================================================
-    c.seccion(5, "Ocho ejercicios", 50, """Aquí se juega tu nota: **80 puntos** en ocho ejercicios, de menos a más.
+    c.seccion(5, "Seis ejercicios", 40, """Aquí se juega tu nota: **65 puntos** en seis ejercicios, de menos a más.
 
 Dos cosas antes de empezar. Si ejecutas una celda de ejercicio sin haberla
 tocado te va a salir `NotImplementedError`: no es un fallo, es la marca de «aquí
-falta tu parte». Y si te atascas, `pista("E4")` te da hasta tres ayudas
+falta tu parte». Y si te atascas, `pista("E2")` te da hasta tres ayudas
 escalonadas — pedirlas no resta puntos.""")
 
     # --- Ejercicio 1 ------------------------------------------------------
@@ -456,64 +452,12 @@ assert RESPUESTAS["e"] is True, "'not' le da la vuelta a False"''',
 
     # --- Ejercicio 2 ------------------------------------------------------
     c.ejercicio(
-        numero=2, competencias=['I3', 'I5'], titulo="Del español al operador", estrellas=1, puntos=5,
-        enunciado="""Cada frase de la izquierda se escribe con **un** operador de Python. Completa
-el diccionario.
-
-| Llave | La frase |
-|---|---|
-| `igual` | «¿son el mismo valor?» |
-| `distinto` | «¿son valores diferentes?» |
-| `residuo` | «lo que sobra al dividir» |
-| `division_entera` | «divide y descarta los decimales» |
-| `ambas` | «las dos condiciones se cumplen» |
-
-Escribe el operador entre comillas, tal cual se teclea: por ejemplo `">="`.""",
-        partida='''OPERADORES = {
-    "igual": ...,
-    "distinto": ...,
-    "residuo": ...,
-    "division_entera": ...,
-    "ambas": ...,
-}''',
-        solucion='''OPERADORES = {
-    "igual": "==",
-    "distinto": "!=",
-    "residuo": "%",
-    "division_entera": "//",
-    "ambas": "and",
-}''',
-        pruebas='''assert isinstance(OPERADORES, dict), "OPERADORES debe seguir siendo un diccionario"
-assert set(OPERADORES) == {"igual", "distinto", "residuo", "division_entera", "ambas"}, \\
-    "No cambies las cinco llaves"
-assert all(isinstance(v, str) for v in OPERADORES.values()), \\
-    "Cada operador va entre comillas, como texto"
-assert OPERADORES["igual"] != "=", \\
-    "Ojo: un solo = GUARDA un valor. Para comparar hacen falta dos"
-print("Ejercicio 2 verificado si los cinco operadores son los correctos.")''',
-        pruebas_ocultas='''assert OPERADORES["igual"] == "=="
-assert OPERADORES["distinto"] == "!="
-assert OPERADORES["residuo"] == "%"
-assert OPERADORES["division_entera"] == "//"
-assert OPERADORES["ambas"] == "and"''',
-        pistas=[
-            "Todos estan en la chuleta: ejecuta `chuleta_operadores()` en una celda "
-            "nueva y busca la columna de Python.",
-            "Cuidado con los dos que se parecen: `/` da decimales y `//` los descarta. "
-            "Y el residuo no es la division, es lo que SOBRA.",
-            "«las dos condiciones se cumplen» es un operador logico, no de comparacion: "
-            "se escribe con letras, no con simbolos.",
-        ],
-    )
-
-    # --- Ejercicio 3 ------------------------------------------------------
-    c.ejercicio(
-        numero=3, competencias=['I3'], titulo="Completa el Si en pseudocódigo", estrellas=2, puntos=10,
+        numero=2, competencias=['I3', 'I1'], titulo="Completa el Si en pseudocódigo", estrellas=2, puntos=10,
         enunciado="""El parqueadero de la UIS cobra **$1.200 por hora**, pero si el vehículo estuvo
 **más de 8 horas** hay tarifa plana de **$8.000**.
 
 Completa el algoritmo. Guarda el pseudocódigo **completo** en la variable
-`ALGORITMO_E3`, como texto entre triples comillas. La prueba lo va a **ejecutar**
+`ALGORITMO_E2`, como texto entre triples comillas. La prueba lo va a **ejecutar**
 de verdad, con el motor del curso.
 
 ```
@@ -527,9 +471,9 @@ FinAlgoritmo
 ```
 
 Con 5 horas debe salir 6000. Con 10 horas, 8000.""",
-        partida='''ALGORITMO_E3 = """
+        partida='''ALGORITMO_E2 = """
 """''',
-        solucion='''ALGORITMO_E3 = """
+        solucion='''ALGORITMO_E2 = """
 Algoritmo Parqueadero
     Definir horas Como Entero
     Definir total Como Real
@@ -542,16 +486,16 @@ Algoritmo Parqueadero
     Escribir total
 FinAlgoritmo
 """''',
-        pruebas='''assert isinstance(ALGORITMO_E3, str) and ALGORITMO_E3.strip(), \\
-    "ALGORITMO_E3 debe ser el pseudocodigo completo, como texto"
-_r5 = ps.ejecutar_pseudo(ALGORITMO_E3, entradas=["5"])
+        pruebas='''assert isinstance(ALGORITMO_E2, str) and ALGORITMO_E2.strip(), \\
+    "ALGORITMO_E2 debe ser el pseudocodigo completo, como texto"
+_r5 = ps.ejecutar_pseudo(ALGORITMO_E2, entradas=["5"])
 assert _r5.ok, "Tu algoritmo no se puede ejecutar. El motor dice: " + _r5.error_corto
 assert "6000" in _r5.salida, "Con 5 horas deben salir 6000 (5 x 1200)"
 print("Con 5 horas ->", _r5.salida.strip())''',
-        pruebas_ocultas='''_r10 = ps.ejecutar_pseudo(ALGORITMO_E3, entradas=["10"])
+        pruebas_ocultas='''_r10 = ps.ejecutar_pseudo(ALGORITMO_E2, entradas=["10"])
 assert _r10.ok, "Con 10 horas tu algoritmo falla: " + _r10.error_corto
 assert "8000" in _r10.salida, "Con 10 horas es tarifa plana: 8000"
-_r8 = ps.ejecutar_pseudo(ALGORITMO_E3, entradas=["8"])
+_r8 = ps.ejecutar_pseudo(ALGORITMO_E2, entradas=["8"])
 assert "9600" in _r8.salida, \\
     "Con 8 exactas todavia se cobra por hora: 8 x 1200 = 9600. La tarifa plana es a partir de MAS de 8"''',
         pistas=[
@@ -564,44 +508,9 @@ assert "9600" in _r8.salida, \\
         ],
     )
 
-    # --- Ejercicio 4 ------------------------------------------------------
+    # --- Ejercicio 3 ------------------------------------------------------
     c.ejercicio(
-        numero=4, competencias=['I3'], titulo="El mismo, en Python", estrellas=2, puntos=10,
-        enunciado="""Traduce el algoritmo del ejercicio 3 a Python, pero como **función**.
-
-`cobro(horas)` recibe el número de horas y **devuelve** el total a pagar:
-$1.200 por hora, o $8.000 planos si estuvo más de 8 horas.
-
-Devuelve un número, no un texto. Y usa `return`, no `print`.""",
-        partida='''def cobro(horas):
-    ...''',
-        solucion='''def cobro(horas):
-    if horas > 8:
-        return 8000
-    return horas * 1200''',
-        pruebas='''assert callable(cobro), "cobro debe ser una funcion definida con def"
-assert cobro(5) == 6000, "5 horas son 5 x 1200 = 6000"
-assert cobro(10) == 8000, "Mas de 8 horas es tarifa plana: 8000"
-print("cobro(5) =", cobro(5), "· cobro(10) =", cobro(10))''',
-        pruebas_ocultas='''assert cobro(8) == 9600, "Con 8 exactas todavia se cobra por hora: 9600"
-assert cobro(9) == 8000, "9 ya es mas de 8"
-assert cobro(1) == 1200
-assert cobro(0) == 0, "Cero horas, cero pesos"
-assert isinstance(cobro(5), (int, float)) and not isinstance(cobro(5), bool), \\
-    "cobro debe devolver un numero, no un texto ni un booleano"''',
-        pistas=[
-            "La estructura es la misma que en pseudocodigo. Solo cambian las palabras: "
-            "`Si` pasa a `if`, `Sino` a `else`, y el `FinSi` desaparece.",
-            "En Python el `if` lleva dos puntos al final y lo que va dentro se corre "
-            "cuatro espacios. Esa sangria ES la sintaxis.",
-            "`return` termina la funcion en el acto. Si la primera rama hace `return`, "
-            "lo de abajo solo se ejecuta cuando esa rama no se cumplio.",
-        ],
-    )
-
-    # --- Ejercicio 5 ------------------------------------------------------
-    c.ejercicio(
-        numero=5, competencias=['I3'], titulo="La cadena de notas", estrellas=2, puntos=10,
+        numero=3, competencias=['I3'], titulo="La cadena de notas", estrellas=2, puntos=10,
         enunciado="""En algunos sistemas la nota numérica se traduce a letra:
 
 | Nota | Letra |
@@ -650,21 +559,23 @@ assert letra(5.0) == "A"''',
         ],
     )
 
-    # --- Ejercicio 6 ------------------------------------------------------
+    # --- Ejercicio 4 ------------------------------------------------------
     c.ejercicio(
-        numero=6, competencias=['I3'], titulo="Precedencia", estrellas=3, puntos=10,
+        numero=4, competencias=['I3', 'I1'], titulo="Precedencia", estrellas=3, puntos=10,
         enunciado="""Cuatro expresiones. Predice el valor de cada una **sin ejecutarla** y guárdalo
 en `PRECEDENCIA`.
 
 | | Expresión | Tipo de respuesta |
 |---|---|---|
-| `p` | `2 + 3 * 4` | un número |
-| `q` | `(2 + 3) * 4` | un número |
-| `r` | `10 // 3 + 10 % 3` | un número |
-| `s` | `True or False and False` | `True` o `False` |
+| `p` | `10 - 2 * 3` | un número |
+| `q` | `(10 - 2) * 3` | un número |
+| `r` | `17 // 5 + 17 % 5` | un número |
+| `s` | `False or True and False` | `True` o `False` |
 
-Recuerda el orden: paréntesis, potencia, multiplicar y dividir, sumar y restar,
-comparar, `not`, `and`, `or`.""",
+Recuerda el orden: paréntesis, multiplicar y dividir, sumar y restar, comparar,
+`not`, `and`, `or`.
+
+Ninguna de las cuatro está resuelta más arriba: hay que razonarlas.""",
         partida='''PRECEDENCIA = {
     "p": ...,
     "q": ...,
@@ -672,34 +583,35 @@ comparar, `not`, `and`, `or`.""",
     "s": ...,
 }''',
         solucion='''PRECEDENCIA = {
-    "p": 14,
-    "q": 20,
-    "r": 4,
-    "s": True,
+    "p": 4,
+    "q": 24,
+    "r": 5,
+    "s": False,
 }''',
         pruebas='''assert isinstance(PRECEDENCIA, dict) and set(PRECEDENCIA) == set("pqrs"), \\
     "PRECEDENCIA debe tener exactamente las llaves p, q, r y s"
 assert isinstance(PRECEDENCIA["s"], bool), "s es una expresion logica: True o False"
 assert not isinstance(PRECEDENCIA["p"], bool), "p es un numero, no un booleano"
 print("Formato correcto. Los valores se revisan al calificar.")''',
-        pruebas_ocultas='''assert PRECEDENCIA["p"] == 14, "la multiplicacion va antes que la suma: 2 + 12"
-assert PRECEDENCIA["q"] == 20, "el parentesis manda: 5 * 4"
-assert PRECEDENCIA["r"] == 4, "10 // 3 es 3 y 10 % 3 es 1, asi que 3 + 1"
-assert PRECEDENCIA["s"] is True, \\
-    "'and' va antes que 'or', asi que se lee True or (False and False) = True or False"''',
+        pruebas_ocultas='''assert PRECEDENCIA["p"] == 4, "la multiplicacion va antes que la resta: 10 - 6"
+assert PRECEDENCIA["q"] == 24, "el parentesis manda: 8 * 3"
+assert PRECEDENCIA["r"] == 5, "17 // 5 es 3 y 17 % 5 es 2, asi que 3 + 2"
+assert PRECEDENCIA["s"] is False, \\
+    "'and' va antes que 'or': se lee False or (True and False) = False or False"''',
         pistas=[
             "Reescribe cada expresion poniendole los parentesis que la maquina pone "
             "sola. Cuando los veas, el resultado sale solo.",
             "En `r` hay dos operadores nuevos juntos: `//` descarta decimales y `%` da "
             "el residuo. Calculalos por separado antes de sumar.",
             "En `s`, `and` se evalua antes que `or`. Asi que la maquina lee "
-            "`True or (False and False)`, y a un `or` le basta con que una sea cierta.",
+            "`False or (True and False)`: primero resuelve el parentesis, y a un "
+            "`or` con las dos falsas no le queda nada que salvar.",
         ],
     )
 
-    # --- Ejercicio 7 ------------------------------------------------------
+    # --- Ejercicio 5 ------------------------------------------------------
     c.ejercicio(
-        numero=7, competencias=['I3', 'I4'], titulo="¿Puede matricular?", estrellas=3, puntos=15,
+        numero=5, competencias=['I3'], titulo="¿Puede matricular?", estrellas=3, puntos=15,
         enunciado="""El del gancho, ahora en serio.
 
 `matricula(aprobo, cupo, paz_y_salvo)` recibe tres booleanos y **devuelve un
@@ -751,9 +663,9 @@ assert isinstance(matricula(True, True, True), str), "Debe devolver texto"''',
         ],
     )
 
-    # --- Ejercicio 8 ------------------------------------------------------
+    # --- Ejercicio 6 ------------------------------------------------------
     c.ejercicio(
-        numero=8, competencias=['I3', 'I4'], titulo="El mismo algoritmo, en los dos idiomas", estrellas=4, puntos=15,
+        numero=6, competencias=['I3', 'I1'], titulo="El mismo algoritmo, en los dos idiomas", estrellas=4, puntos=15,
         enunciado="""El de cierre, y el más largo. Una tienda aplica descuentos por compra:
 
 | Compra | Descuento |
@@ -765,18 +677,18 @@ assert isinstance(matricula(True, True, True), str), "Debe devolver texto"''',
 Tienes que entregarlo **en los dos idiomas**, porque en un proyecto real primero
 se acuerda el algoritmo con quien no programa y después se escribe:
 
-1. `ALGORITMO_E8` — el pseudocódigo completo. Lee la compra, calcula el total a
+1. `ALGORITMO_E6` — el pseudocódigo completo. Lee la compra, calcula el total a
    pagar y lo escribe. La prueba lo ejecuta con el motor.
 2. `total_a_pagar(compra)` — la función de Python. Devuelve el número.
 
 Con 250000 se pagan 212500. Con 150000, 135000. Con 50000, 50000.""",
-        partida='''ALGORITMO_E8 = """
+        partida='''ALGORITMO_E6 = """
 """
 
 
 def total_a_pagar(compra):
     ...''',
-        solucion='''ALGORITMO_E8 = """
+        solucion='''ALGORITMO_E6 = """
 Algoritmo Descuento
     Definir compra Como Real
     Definir total Como Real
@@ -801,9 +713,9 @@ def total_a_pagar(compra):
     elif compra >= 100000:
         return compra * 0.90
     return compra''',
-        pruebas='''assert isinstance(ALGORITMO_E8, str) and ALGORITMO_E8.strip(), \\
-    "ALGORITMO_E8 debe traer el pseudocodigo completo"
-_a = ps.ejecutar_pseudo(ALGORITMO_E8, entradas=["250000"])
+        pruebas='''assert isinstance(ALGORITMO_E6, str) and ALGORITMO_E6.strip(), \\
+    "ALGORITMO_E6 debe traer el pseudocodigo completo"
+_a = ps.ejecutar_pseudo(ALGORITMO_E6, entradas=["250000"])
 assert _a.ok, "Tu pseudocodigo no ejecuta. El motor dice: " + _a.error_corto
 assert "212500" in _a.salida, "Con 250000 y 15% de descuento se pagan 212500"
 
@@ -811,10 +723,10 @@ assert callable(total_a_pagar), "total_a_pagar debe ser una funcion"
 assert abs(total_a_pagar(250000) - 212500) < 0.01, "250000 con 15% son 212500"
 assert abs(total_a_pagar(150000) - 135000) < 0.01, "150000 con 10% son 135000"
 assert abs(total_a_pagar(50000) - 50000) < 0.01, "Menos de 100000 no lleva descuento"
-print("Los dos idiomas coinciden. Ejercicio 8 verificado.")''',
-        pruebas_ocultas='''_b = ps.ejecutar_pseudo(ALGORITMO_E8, entradas=["150000"])
+print("Los dos idiomas coinciden.")''',
+        pruebas_ocultas='''_b = ps.ejecutar_pseudo(ALGORITMO_E6, entradas=["150000"])
 assert "135000" in _b.salida, "Con 150000 el pseudocodigo debe dar 135000"
-_c = ps.ejecutar_pseudo(ALGORITMO_E8, entradas=["50000"])
+_c = ps.ejecutar_pseudo(ALGORITMO_E6, entradas=["50000"])
 assert "50000" in _c.salida, "Con 50000 no hay descuento"
 assert abs(total_a_pagar(200000) - 170000) < 0.01, \\
     "200000 exactos YA llevan el 15%: la tabla dice '200.000 o mas'"
@@ -837,21 +749,17 @@ assert abs(total_a_pagar(99999) - 99999) < 0.01, "99999 no llega al primer escal
     c.seccion(6, "Habla con el asistente", 5, """Tienes **cinco preguntas** para todo este cuadernillo. Cinco, no cinco por
 ejercicio. Gástalas donde de verdad te atasques.""")
 
-    c.md("""### Presupuesto sugerido
+    c.md("""### En qué gastarlas
 
-| Ejercicio | Preguntas | Por qué |
-|---|---|---|
-| 1 y 2 (booleanos, operadores) | **0** | La chuleta y las tablas de verdad lo resuelven; ejecútalas otra vez |
-| 3 y 4 (parqueadero) | **0–1** | Si el motor te da un error de pseudocódigo, léelo: dice la línea y qué esperaba |
-| 5 (cadena de notas) | **0–1** | Si te falla, casi siempre es el orden de la cadena. Pregunta por eso, no por el código |
-| 6 (precedencia) | **0** | Ponle paréntesis y ejecútalo tú: la respuesta la tienes en una celda |
-| 7 (matrícula) | **1** | Aquí sí: el truco de descartar en vez de confirmar no es evidente |
-| 8 (los dos idiomas) | **1–2** | Guarda estas. Es el más largo y el único con dos entregas |
+Guárdalas para los dos últimos, que son los difíciles. Los primeros los resuelve
+releer la teoría: si te atascas en una predicción, ejecuta la expresión y mírala;
+si te atascas en pseudocódigo, el motor te dice la línea y qué esperaba. Ahí no
+hace falta gastar una pregunta.
 
 ### Cómo se pregunta bien
 
 Mal: «no me sale el 7».
-Bien: «en el ejercicio 7, con `matricula(False, True, False)` mi función
+Bien: «con `matricula(False, True, False)` mi función
 devuelve "Pendiente financiero" y esperaba "Falta el prerrequisito". ¿Qué tiene
 que ver el orden de mis `if`?»
 
@@ -866,7 +774,7 @@ puede responder de verdad; con la primera solo puede adivinar.
 
     c.md("""- ¿Sabrías explicarle a alguien de tu casa **por qué** `=` y `==` no son lo
   mismo, sin usar la palabra «programación»?
-- De los ocho ejercicios, ¿cuál te costó más? ¿Fue por la lógica o por la
+- De los seis ejercicios, ¿cuál te costó más? ¿Fue por la lógica o por la
   sintaxis? No es lo mismo, y saber cuál de los dos te frena cambia cómo
   estudias la semana que viene.
 - ¿Pusiste paréntesis donde dudabas, o los dejaste al azar y confiaste?

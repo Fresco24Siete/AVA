@@ -4,14 +4,15 @@
 Curso 41333 Algoritmos y Programación · Ingeniería en IA · UIS 2026-2
 Unidad 5 — Primera evaluación y consolidación del entorno Python.
 
-80 puntos de nbgrader en ocho ejercicios, 85 XP y la insignia «Media vuelta».
+50 puntos de nbgrader en cuatro ejercicios, 85 XP y la insignia «Media vuelta».
 
 Dos decisiones de contenido:
 
 - **La sesión 1 es la primera evaluación, así que aquí NO hay examen.** El
   cuadernillo trae la guía de repaso con la que llegar a él: el mapa de las
   cuatro semanas, la tabla de las tres estructuras y un autodiagnóstico por
-  ejes. Los cuatro primeros ejercicios son de repaso a propósito.
+  ejes. El primer ejercicio es de repaso a propósito; los otros tres son del
+  contenido nuevo de la sesión 2.
 - El temario de la sesión 2 dice «lenguaje compilado e interpretado». Como el
   profesor pidió que no haya comparaciones entre lenguajes ni temas de bajo
   nivel, aquí se cuenta **solo qué hace Python con tu archivo** —lee, comprueba,
@@ -75,7 +76,7 @@ con la que llegar a él, y el contenido nuevo de la segunda clase.
 - Explicar qué significa que Python decida el tipo **al ejecutar**, y qué
   problema te evita saberlo.
 
-Este cuadernillo tiene **80 puntos** y **85 XP**. La insignia se llama
+Este cuadernillo tiene **50 puntos** y **85 XP**. La insignia se llama
 «Media vuelta».
 """)
 
@@ -138,7 +139,7 @@ mientras todavía hay tiempo de arreglarlo.""")
 | Un ciclo que no para | Falta el paso, o el paso no acerca la condición a ser falsa |
 | `range(5)` | Da 0, 1, 2, 3, 4. El 5 **no** entra |
 | Contador o acumulador | ¿Cuántos? contador. ¿Cuánto suman? acumulador |
-| Precedencia | Paréntesis, potencia, `*` `/`, `+` `-`, comparar, `not`, `and`, `or` |
+| Precedencia | Paréntesis, `*` `/`, `+` `-`, comparar, `not`, `and`, `or` |
 """)
 
     # =========================================================================
@@ -206,7 +207,8 @@ nota = float(input("Tu nota: "))      # a decimal
 
 > **Y si el usuario escribe cualquier cosa,** `int("hola")` se estrella con un
 > `ValueError`. Es un error de **ejecución**: no lo ves hasta que ocurre. La
-> forma de blindarse es el ciclo de validación de la semana 4.
+> forma de blindarse es repetir la pregunta con un `while` hasta que el dato
+> sirva.
 
 ### 4D. Python decide el tipo al ejecutar
 
@@ -230,108 +232,49 @@ un tipo que no esperabas. Cuando eso pase, `type(variable)` es lo primero que
 hay que mirar.
 """)
 
-    # =========================================================================
-    c.seccion(5, "Ocho ejercicios", 45, """**80 puntos.** Los cuatro primeros son de repaso —uno por semana— y los
-cuatro últimos, del contenido nuevo. Si un ejercicio de repaso te cuesta, ese
-es el cuadernillo al que tienes que volver antes de la evaluación.""")
+    # --- mCP88 (I7): investigar y seleccionar fuentes confiables ------------
+    # Va como markdown con una fuente externa real, NO como ejercicio
+    # calificable: el encargo lo pide asi y con razon. No se mide con trazas de
+    # actividad, asi que I7 no aparecera nunca en competencias.json y su nivel
+    # sera siempre nulo. Es deliberado, no un olvido; esta dicho tambien en
+    # docs/modelo_microcompetencias.md, seccion "Lo que este modelo NO hace".
+    c.md("""### 4E. Compruébalo en la fuente, no en un blog
 
-    c.ejercicio(
-        numero=1, competencias=['I3'], titulo="Repaso 1 — los tres errores", estrellas=1, puntos=5,
-        enunciado="""Tres programas. Di qué tipo de error tiene cada uno: `"sintaxis"`,
-`"ejecucion"` o `"logica"` (sin tildes).
+Todo lo de esta sección lo puedes verificar tú, y conviene que lo hagas al menos
+una vez en el semestre. Python tiene documentación **oficial**, escrita por
+quien hace el lenguaje, y está en español:
 
-**A**
-```python
-edad = int(input("Edad: "))
-print("El año que viene tendras", edad + 1
-```
+**→ [Glosario de Python — «interpretado»](https://docs.python.org/es/3/glossary.html#term-interpreted)**
 
-**B**
-```python
-precio = 100
-iva = 19
-total = precio + iva / 100      # querian sumarle el 19%
-print(total)
-```
+Ábrelo y busca la entrada *interpretado*. Vas a ver que la propia documentación
+matiza lo que acabas de leer: Python compila a bytecode y ese bytecode se
+interpreta, así que la frontera entre «compilado» e «interpretado» no es la
+raya limpia que suele contarse.
 
-**C**
-```python
-notas = [4.0, 3.5]
-print(notas[5])
-```""",
-        partida='''ERRORES = {
-    "A": ...,
-    "B": ...,
-    "C": ...,
-}''',
-        solucion='''ERRORES = {
-    "A": "sintaxis",
-    "B": "logica",
-    "C": "ejecucion",
-}''',
-        pruebas='''assert isinstance(ERRORES, dict) and set(ERRORES) == {"A", "B", "C"}, \\
-    "ERRORES debe tener las llaves A, B y C"
-assert set(ERRORES.values()) <= {"sintaxis", "ejecucion", "logica"}, \\
-    "Usa solo: sintaxis, ejecucion o logica (sin tildes)"
-print("Formato correcto. Las respuestas se revisan al calificar.")''',
-        pruebas_ocultas='''assert ERRORES["A"] == "sintaxis", "Falta cerrar un parentesis: no arranca"
-assert ERRORES["B"] == "logica", "Corre perfecto y da 100.19 en vez de 119: miente"
-assert ERRORES["C"] == "ejecucion", "La lista tiene 2 elementos y pide el sexto"''',
-        pistas=[
-            "El orden de siempre: ¿arranca? ¿se estrella? ¿miente? Cada pregunta "
-            "descarta uno.",
-            "Solo uno de los tres termina sin ningun mensaje rojo. Ese es el de logica, "
-            "y es el peligroso.",
-            "En B, la precedencia manda: la division se hace antes que la suma, asi que "
-            "calcula 100 + 0.19 en vez del 19% de 100.",
-        ],
-    )
+**Por qué te lo pedimos.** En los próximos cuatro semestres vas a buscar
+respuestas de programación cientos de veces, y la diferencia entre resolver un
+problema en diez minutos o en dos horas casi siempre es la fuente. Tres señales
+de que una fuente aguanta:
 
-    c.ejercicio(
-        numero=2, competencias=['I3'], titulo="Repaso 2 — Entrada, Proceso, Salida", estrellas=1, puntos=5,
-        enunciado="""Un algoritmo calcula cuánto paga un estudiante de almuerzo al mes: recibe el
-precio del almuerzo y cuántos días comió, y responde el total.
-
-Clasifica cada elemento como `"entrada"`, `"proceso"` o `"salida"`.
-
-| Llave | Elemento |
+| Señal | Qué mirar |
 |---|---|
-| `precio` | El precio de un almuerzo |
-| `dias` | Los días que comió |
-| `multiplicar` | Multiplicar precio por días |
-| `total` | El total que se le muestra |""",
-        partida='''EPS = {
-    "precio": ...,
-    "dias": ...,
-    "multiplicar": ...,
-    "total": ...,
-}''',
-        solucion='''EPS = {
-    "precio": "entrada",
-    "dias": "entrada",
-    "multiplicar": "proceso",
-    "total": "salida",
-}''',
-        pruebas='''assert isinstance(EPS, dict) and set(EPS) == {"precio", "dias", "multiplicar", "total"}, \\
-    "No cambies las cuatro llaves"
-assert set(EPS.values()) <= {"entrada", "proceso", "salida"}, \\
-    "Usa solo: entrada, proceso o salida"
-print("Formato correcto. Las respuestas se revisan al calificar.")''',
-        pruebas_ocultas='''assert EPS["precio"] == "entrada"
-assert EPS["dias"] == "entrada"
-assert EPS["multiplicar"] == "proceso"
-assert EPS["total"] == "salida"''',
-        pistas=[
-            "Pregunta por cada uno: ¿esto lo RECIBE el algoritmo, lo HACE, o lo "
-            "ENTREGA?",
-            "Las entradas son datos que vienen de fuera y sin los cuales el algoritmo "
-            "no puede empezar.",
-            "Solo uno es un verbo. Los verbos son procesos.",
-        ],
-    )
+| **Quién la escribe** | ¿Hay autor o institución responsable? La documentación oficial y los libros del curso lo tienen; un foro anónimo, no |
+| **De cuándo es** | Python cambia. Una respuesta de 2011 puede ser correcta y estar obsoleta a la vez |
+| **Si se puede comprobar** | ¿Puedes ejecutar lo que dice y ver si pasa? Si no, desconfía |
+
+Esto no tiene nota en este cuadernillo. Tiene algo mejor: es lo que te va a
+sacar de los atascos cuando ya no haya cuadernillo.
+""")
+
+    # =========================================================================
+    c.seccion(5, "Cuatro ejercicios", 35, """**50 puntos.** El primero es de repaso y los tres últimos, del contenido
+nuevo de esta clase. Esta semana el cuadernillo es corto a propósito: el peso
+está en la evaluación, y repetir aquí lo que ya se evalúa aparte no ayuda a
+nadie.""")
+
 
     c.ejercicio(
-        numero=3, competencias=['I3'], titulo="Repaso 3 — la decisión", estrellas=2, puntos=10,
+        numero=1, competencias=['I3'], titulo="Repaso — la decisión", estrellas=2, puntos=10,
         enunciado="""La UIS cobra la matrícula según el estrato:
 
 | Estrato | Descuento |
@@ -371,74 +314,9 @@ assert abs(matricula(0, 1) - 0) < 0.01''',
         ],
     )
 
-    c.ejercicio(
-        numero=4, competencias=['I3'], titulo="Repaso 4 — la repetición", estrellas=2, puntos=10,
-        enunciado="""`cuantos_pares(hasta)` cuenta cuántos números pares hay desde 1 hasta `hasta`,
-los dos incluidos.
-
-`cuantos_pares(10)` es 5 (2, 4, 6, 8 y 10).
-`cuantos_pares(1)` es 0.
-
-Un número es par cuando su residuo entre 2 es cero.""",
-        partida='''def cuantos_pares(hasta):
-    ...''',
-        solucion='''def cuantos_pares(hasta):
-    cuenta = 0
-    for n in range(1, hasta + 1):
-        if n % 2 == 0:
-            cuenta = cuenta + 1
-    return cuenta''',
-        pruebas='''assert callable(cuantos_pares), "cuantos_pares debe ser una funcion"
-assert cuantos_pares(10) == 5, "Del 1 al 10 hay 5 pares"
-assert cuantos_pares(1) == 0, "El 1 no es par"
-assert cuantos_pares(2) == 1
-print("cuantos_pares(10) =", cuantos_pares(10))''',
-        pruebas_ocultas='''assert cuantos_pares(0) == 0, "Sin numeros, ningun par"
-assert cuantos_pares(100) == 50
-assert cuantos_pares(7) == 3, "2, 4 y 6"
-assert isinstance(cuantos_pares(10), int)''',
-        pistas=[
-            "Necesitas un contador: empieza en 0 antes del ciclo y sube de uno en uno "
-            "dentro.",
-            "`range(1, hasta + 1)` incluye el ultimo. Sin el +1 te dejas fuera el numero "
-            "que te dieron.",
-            "«Es par» se escribe `n % 2 == 0`. Ojo con los dos iguales: uno solo guarda.",
-        ],
-    )
 
     c.ejercicio(
-        numero=5, competencias=['I3'], titulo="La estructura mínima", estrellas=2, puntos=10,
-        enunciado="""Ordena las cuatro partes de un programa que pide dos notas y responde el
-promedio. Guarda el orden correcto en `ORDEN`, como lista de letras.
-
-| Letra | Línea |
-|---|---|
-| `A` | `print("Tu promedio es", promedio)` |
-| `B` | `nota1 = float(input("Primera nota: "))` |
-| `C` | `promedio = (nota1 + nota2) / 2` |
-| `D` | `nota2 = float(input("Segunda nota: "))` |
-
-Piensa en Entrada, Proceso, Salida.""",
-        partida='''ORDEN = [...]''',
-        solucion='''ORDEN = ["B", "D", "C", "A"]''',
-        pruebas='''assert isinstance(ORDEN, list), "ORDEN debe ser una lista de letras"
-assert len(ORDEN) == 4, f"Son cuatro lineas y pusiste {len(ORDEN)}"
-assert sorted(ORDEN) == ["A", "B", "C", "D"], "Usa cada letra exactamente una vez"
-assert ORDEN[-1] == "A", "La salida va al final: primero calcula, despues responde"
-print("Formato correcto. El orden se revisa al calificar.")''',
-        pruebas_ocultas='''assert ORDEN == ["B", "D", "C", "A"], \\
-    "Primero las dos entradas, despues el calculo, y al final la salida"''',
-        pistas=[
-            "Entrada, proceso, salida. ¿Cual de las cuatro lineas es el proceso?",
-            "No puedes calcular el promedio antes de tener las dos notas: la linea C "
-            "usa nota1 y nota2, asi que va despues de las dos.",
-            "Y no puedes mostrar el promedio antes de calcularlo. La salida siempre "
-            "cierra.",
-        ],
-    )
-
-    c.ejercicio(
-        numero=6, competencias=['I3'], titulo="input devuelve texto", estrellas=2, puntos=10,
+        numero=2, competencias=['I3'], titulo="input devuelve texto", estrellas=2, puntos=10,
         enunciado="""Este programa está mal y **no da error**: por eso es peligroso.
 
 ```python
@@ -476,7 +354,7 @@ assert siguiente_edad("7") == 8''',
     )
 
     c.ejercicio(
-        numero=7, competencias=['I3', 'I5'], titulo="¿De qué tipo resulta?", estrellas=3, puntos=15,
+        numero=3, competencias=['I3'], titulo="¿De qué tipo resulta?", estrellas=3, puntos=15,
         enunciado="""Python decide el tipo al ejecutar. Predice el tipo del **resultado** de cada
 expresión y escribe su nombre entre comillas: `"int"`, `"float"`, `"str"` o
 `"bool"`.
@@ -530,7 +408,7 @@ assert TIPOS["f"] == "float", "float() convierte a decimal, aunque el numero sea
     )
 
     c.ejercicio(
-        numero=8, competencias=['I3', 'I4'], titulo="Un programa completo", estrellas=4, puntos=15,
+        numero=4, competencias=['I3'], titulo="Un programa completo", estrellas=4, puntos=15,
         enunciado="""El de cierre junta todo: entrada, conversión, repetición, decisión y salida.
 
 `boletin(textos)` recibe una lista de notas **como texto** —tal cual llegarían
@@ -593,15 +471,12 @@ assert not boletin(["4.0"]).endswith("\\n"), "Sin salto de linea al final"''',
     # =========================================================================
     c.seccion(6, "Habla con el asistente", 5, """**Cinco preguntas** para todo el cuadernillo.""")
 
-    c.md("""### Presupuesto sugerido
+    c.md("""### En qué gastarlas
 
-| Ejercicio | Preguntas | Por qué |
-|---|---|---|
-| 1 a 4 (repaso) | **0** | Son de semanas que ya hiciste. Si fallas, vuelve a ese cuadernillo: es mejor inversión que una pregunta |
-| 5 (estructura mínima) | **0** | Entrada, proceso, salida. La respuesta está en la sección 4B |
-| 6 (input y tipos) | **0–1** | Si no ves por qué falla, pregunta por el TIPO, no por el código |
-| 7 (qué tipo resulta) | **0** | Ejecuta `ver_tipos(...)` y compruébalo tú. Está permitido |
-| 8 (programa completo) | **2–3** | Guarda casi todas aquí. Es el más largo del cuadernillo |
+En el repaso, ninguna: si fallas ahí, volver a ese cuadernillo es mejor
+inversión que una pregunta. En los de tipos tampoco hacen falta — ejecuta
+`ver_tipos(...)` y compruébalo tú, está permitido. Guarda casi todas para el
+último, que es el más largo.
 
 Y un consejo para la evaluación: las preguntas que **no** gastes aquí no se
 acumulan, pero el tiempo que ganes sí. Si un ejercicio de repaso te sale solo,

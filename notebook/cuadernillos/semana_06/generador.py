@@ -4,7 +4,7 @@
 Curso 41333 Algoritmos y Programación · Ingeniería en IA · UIS 2026-2
 Unidad 6 — Colecciones lineales, búsqueda y ordenamiento.
 
-80 puntos de nbgrader en ocho ejercicios, 95 XP y la insignia «Quien ordena».
+65 puntos de nbgrader en seis ejercicios, 95 XP y la insignia «Quien ordena».
 Es el más exigente de los seis, y a propósito: cierra la primera mitad.
 
 Dos límites que se respetan y se dicen en voz alta dentro del cuadernillo:
@@ -62,10 +62,11 @@ uno veinte pasos y el otro un millón.
     c.md("""## Al terminar este cuadernillo vas a poder…
 
 - Crear una **lista**, leer cualquier elemento por su **índice** y cambiarlo.
-- Recorrer una lista y una **cadena** de texto, y usar sus métodos más comunes.
+- Recorrer una lista entera, por índice y de forma directa.
 - Escribir una **búsqueda lineal** y una **búsqueda binaria**, y decir qué
   condición hay que cumplir para poder usar la segunda.
-- Escribir el ordenamiento por **selección** y el de **burbuja**.
+- Escribir el ordenamiento de **burbuja**, y leer el de **selección** para ver
+  que son la misma familia.
 - Explicar, con números en la mano, por qué un algoritmo puede ser mil veces más
   caro que otro dando el mismo resultado.
 
@@ -74,7 +75,7 @@ sueltas, no listas. Así que esta semana el pseudocódigo se lee y se escribe en
 papel, pero no lo ejecutes en el motor — no te va a funcionar y no es culpa
 tuya. Todo lo que se califica va en Python.
 
-Este cuadernillo tiene **80 puntos** y **95 XP**. La insignia se llama
+Este cuadernillo tiene **65 puntos** y **95 XP**. La insignia se llama
 «Quien ordena».
 """)
 
@@ -129,7 +130,7 @@ len(notas)  # 4    — cuántas hay
 > índice 4 **no existe** y pedirlo revienta el programa con `IndexError`. El
 > último índice siempre es `len(lista) - 1`.
 
-### 3B. Las listas se pueden cambiar; las cadenas no
+### 3B. Las listas se pueden cambiar
 
 Una lista es **mutable**: puedes cambiarle un elemento después de crearla.
 """)
@@ -138,29 +139,14 @@ Una lista es **mutable**: puedes cambiarle un elemento después de crearla.
 notas[2] = 3.9                    # el 2.8 se convierte en 3.9
 print("Ahora la lista es:", notas)''')
 
-    c.md("""Una **cadena** de texto se lee igual —`nombre[0]` es su primera letra— pero
-**no** se puede cambiar así: `nombre[0] = "X"` da error. Se dice que las cadenas
-son **inmutables**. Para «cambiarlas» se construye una nueva.
+    c.md("""Esa mutabilidad es justo lo que hace posible ordenar: los algoritmos de esta
+semana no construyen una lista nueva, **mueven los elementos de la que ya
+tienes**.
 
-### 3C. Los métodos que vas a usar
+De todo lo que se le puede pedir a una lista, esta semana solo necesitas una
+cosa, y ya la has visto: `len(lista)`, que dice cuántos elementos tiene.
 
-Un **método** es una función que va pegada al dato, con un punto:
-""")
-
-    c.code('''notas = [4.0, 3.5]
-
-notas.append(2.9)          # anade al final
-print("append  ->", notas)
-
-print("len     ->", len(notas))
-print("suma    ->", sum(notas))
-print("maximo  ->", max(notas))
-
-nombre = "Ana Maria"
-print("mayusculas ->", nombre.upper())
-print("cuantas letras ->", len(nombre))''')
-
-    c.md("""### 3D. Recorrer
+### 3C. Recorrer
 
 Con `for` y `range` ya sabes. Pero como la lista sabe cuántos elementos tiene,
 se puede recorrer **directamente**, que es más corto y más difícil de romper:
@@ -333,7 +319,7 @@ número que puedes calcular.
 """)
 
     # =========================================================================
-    c.seccion(5, "Ocho ejercicios", 55, """**80 puntos**, y el cuadernillo más exigente de los seis. Tómate el tiempo.""")
+    c.seccion(5, "Seis ejercicios", 45, """**65 puntos**, y el cuadernillo más exigente de los seis. Tómate el tiempo.""")
 
     c.ejercicio(
         numero=1, competencias=['I3'], titulo="Índices", estrellas=1, puntos=5,
@@ -387,40 +373,9 @@ assert INDICES["indice_ultimo"] == 4, "Cinco elementos, indices 0 a 4"''',
         ],
     )
 
-    c.ejercicio(
-        numero=2, competencias=['I3'], titulo="Recorrer y contar", estrellas=1, puntos=5,
-        enunciado="""`aprobadas(notas)` recibe una lista de números y devuelve **cuántos** llegan a
-3.0.
-
-`aprobadas([4.0, 2.5, 3.0, 1.8])` es 2 (el 4.0 y el 3.0).
-
-Recuerda: 3.0 exacto aprueba.""",
-        partida='''def aprobadas(notas):
-    ...''',
-        solucion='''def aprobadas(notas):
-    cuenta = 0
-    for nota in notas:
-        if nota >= 3.0:
-            cuenta = cuenta + 1
-    return cuenta''',
-        pruebas='''assert callable(aprobadas), "aprobadas debe ser una funcion"
-assert aprobadas([4.0, 2.5, 3.0, 1.8]) == 2
-assert aprobadas([]) == 0, "Una lista vacia no tiene ninguna aprobada"
-print("aprobadas([4.0, 2.5, 3.0, 1.8]) =", aprobadas([4.0, 2.5, 3.0, 1.8]))''',
-        pruebas_ocultas='''assert aprobadas([2.9]) == 0, "2.9 no llega a 3.0"
-assert aprobadas([3.0]) == 1, "3.0 exacto SI aprueba"
-assert aprobadas([5.0, 5.0, 5.0]) == 3
-assert isinstance(aprobadas([3.0]), int)''',
-        pistas=[
-            "Es un contador: se crea en 0 antes del ciclo y sube dentro.",
-            "Puedes recorrer la lista directamente con `for nota in notas`, sin "
-            "necesidad de indices, porque aqui solo te importa el valor.",
-            "El borde: la condicion es `>= 3.0`, no `> 3.0`. Un 3.0 exacto aprueba.",
-        ],
-    )
 
     c.ejercicio(
-        numero=3, competencias=['I3'], titulo="Buscar sin ordenar", estrellas=2, puntos=10,
+        numero=2, competencias=['I3'], titulo="Buscar sin ordenar", estrellas=2, puntos=10,
         enunciado="""Escribe `posicion_de(datos, buscado)`: la búsqueda lineal.
 
 Devuelve el **índice** donde está `buscado`, o `-1` si no está. Si aparece más
@@ -454,7 +409,7 @@ assert isinstance(posicion_de([1, 2], 2), int)''',
     )
 
     c.ejercicio(
-        numero=4, competencias=['I3', 'I4'], titulo="Buscar por la mitad", estrellas=3, puntos=10,
+        numero=3, competencias=['I3'], titulo="Buscar por la mitad", estrellas=3, puntos=10,
         enunciado="""Escribe `busqueda_binaria(datos, buscado)` sobre una lista **ya ordenada**.
 
 Devuelve el índice donde está, o `-1` si no está.
@@ -502,7 +457,7 @@ assert busqueda_binaria(_g, 999) == -1, "999 es impar: no esta en la lista"''',
     )
 
     c.ejercicio(
-        numero=5, competencias=['I3'], titulo="La precondición", estrellas=2, puntos=10,
+        numero=4, competencias=['I3'], titulo="La precondición", estrellas=2, puntos=10,
         enunciado="""La búsqueda binaria solo sirve si la lista está ordenada. Escribe la función
 que lo comprueba.
 
@@ -541,52 +496,9 @@ assert isinstance(esta_ordenada([1, 2]), bool), "Debe devolver True o False"''',
         ],
     )
 
-    c.ejercicio(
-        numero=6, competencias=['I3'], titulo="Ordenar por selección", estrellas=3, puntos=10,
-        enunciado="""Escribe `seleccion(datos)`: el ordenamiento por selección.
-
-Devuelve una lista **nueva** ordenada de menor a mayor, sin modificar la que te
-dieron. Empieza copiándola con `list(datos)`.
-
-La idea: para cada posición, busca el menor de lo que queda a su derecha y
-intercámbialos.
-
-Para intercambiar dos elementos: `datos[a], datos[b] = datos[b], datos[a]`.""",
-        partida='''def seleccion(datos):
-    ...''',
-        solucion='''def seleccion(datos):
-    datos = list(datos)
-    for i in range(len(datos)):
-        menor = i
-        for j in range(i + 1, len(datos)):
-            if datos[j] < datos[menor]:
-                menor = j
-        datos[i], datos[menor] = datos[menor], datos[i]
-    return datos''',
-        pruebas='''assert callable(seleccion), "seleccion debe ser una funcion"
-assert seleccion([5, 2, 9, 1]) == [1, 2, 5, 9]
-assert seleccion([]) == [], "Una lista vacia ya esta ordenada"
-_original = [3, 1, 2]
-seleccion(_original)
-assert _original == [3, 1, 2], "No modifiques la lista original: trabaja sobre una copia"
-print("seleccion([5, 2, 9, 1]) =", seleccion([5, 2, 9, 1]))''',
-        pruebas_ocultas='''assert seleccion([1]) == [1]
-assert seleccion([2, 1]) == [1, 2]
-assert seleccion([5, 4, 3, 2, 1]) == [1, 2, 3, 4, 5], "El peor caso: todo al reves"
-assert seleccion([1, 2, 3]) == [1, 2, 3], "Ya ordenada, se queda igual"
-assert seleccion([3, 3, 1]) == [1, 3, 3], "Con repetidos tambien"''',
-        pistas=[
-            "Son dos ciclos: el de fuera recorre las posiciones a llenar, el de dentro "
-            "busca el menor de lo que queda.",
-            "El de dentro empieza en `i + 1`, no en 0: lo de la izquierda ya esta "
-            "colocado y no hay que volver a mirarlo.",
-            "Guarda la POSICION del menor, no su valor: para intercambiar necesitas "
-            "saber donde esta, no cuanto vale.",
-        ],
-    )
 
     c.ejercicio(
-        numero=7, competencias=['I3', 'I4'], titulo="Burbuja, y cuánto cuesta", estrellas=3, puntos=15,
+        numero=5, competencias=['I3'], titulo="Burbuja, y cuánto cuesta", estrellas=3, puntos=15,
         enunciado="""`burbuja(datos)` devuelve una **tupla** con dos cosas: la lista ordenada y el
 número de **comparaciones** que hizo.
 
@@ -639,7 +551,7 @@ assert _o == [3, 1, 2], "No modifiques la lista original"''',
     )
 
     c.ejercicio(
-        numero=8, competencias=['I3', 'I4'], titulo="¿Cuál cuesta menos?", estrellas=4, puntos=15,
+        numero=6, competencias=['I3'], titulo="¿Cuál cuesta menos?", estrellas=4, puntos=15,
         enunciado="""El de cierre, y el que resume la semana. No se te pide escribir un algoritmo
 nuevo: se te pide **medir** y sacar la conclusión.
 
@@ -718,9 +630,9 @@ _c = comparar([1, 2, 3], 1)
 assert _c["pasos_lineal"] == 1, "El primero se encuentra en un paso"
 assert _c["mejor"] == "lineal", "Si la binaria no hace MENOS pasos, gana la lineal"''',
         pistas=[
-            "Son cuatro problemas pequenos y ya resolviste tres esta semana: la lineal "
-            "es el ejercicio 3, la binaria el 4 y el orden el 5. Copialos y anadeles el "
-            "contador.",
+            "Son cuatro problemas pequenos y los tres primeros ya los resolviste esta "
+            "semana: `posicion_de`, `busqueda_binaria` y `esta_ordenada`. Copialos y "
+            "anadeles el contador.",
             "Las dos busquedas cuentan pasos aunque NO encuentren el dato: la lineal "
             "cuenta cada elemento mirado y la binaria cada vuelta del while.",
             "La ultima llave tiene dos condiciones unidas: la lista tiene que estar "
@@ -733,21 +645,17 @@ assert _c["mejor"] == "lineal", "Si la binaria no hace MENOS pasos, gana la line
     c.seccion(6, "Habla con el asistente", 5, """**Cinco preguntas** para todo el cuadernillo. Este es el más difícil de los
 seis, así que administra bien.""")
 
-    c.md("""### Presupuesto sugerido
+    c.md("""### En qué gastarlas
 
-| Ejercicio | Preguntas | Por qué |
-|---|---|---|
-| 1 y 2 (índices, contar) | **0** | Ejecuta `ver_lista(...)` y mira los índices dibujados |
-| 3 (búsqueda lineal) | **0** | Es el mismo contador de la semana 4 con un `return` dentro |
-| 4 (búsqueda binaria) | **1–2** | Aquí sí. El movimiento de los límites es lo más difícil del cuadernillo |
-| 5 (precondición) | **0** | El truco es parar uno antes del final. Si te sale `IndexError`, ya sabes por qué |
-| 6 y 7 (ordenamientos) | **1** | Si te atascas, pregunta por los límites del ciclo de dentro |
-| 8 (comparar) | **1** | Reutiliza los tres anteriores: si esos te salieron, este es juntarlos |
+En los índices y en la búsqueda lineal, ninguna: ejecuta `ver_lista(...)` y
+mira dónde cae cada posición. Guárdalas para la binaria —el bucle que no
+termina es el error clásico y cuesta verlo solo—, para la burbuja, y para el
+último, que reutiliza los anteriores.
 
 ### Cómo se pregunta bien
 
 Mal: «la binaria no me funciona».
-Bien: «en el ejercicio 4, `busqueda_binaria([10,20,30], 30)` se queda colgado.
+Bien: «mi `busqueda_binaria([10,20,30], 30)` se queda colgada.
 Cuando no encuentro el dato hago `derecha = medio`. ¿Por qué eso no termina?»
 
 La segunda dice el caso exacto, qué escribiste y qué pasó. Con eso el tutor te
@@ -782,8 +690,7 @@ Lo que viene en la segunda mitad se construye entero encima de esto.
 | **Lista** | Una variable que guarda varios valores en orden |
 | **Índice** | La posición de un elemento. **Empieza en cero** |
 | **`IndexError`** | Pediste una posición que no existe |
-| **Mutable** | Que se puede cambiar después de creado. Las listas sí, las cadenas no |
-| **Método** | Una función pegada al dato, con un punto: `notas.append(4)` |
+| **Mutable** | Que se puede cambiar después de creado. Por eso se puede ordenar una lista en su sitio |
 | **Búsqueda lineal** | Mirar uno por uno. Funciona siempre |
 | **Búsqueda binaria** | Partir por la mitad. **Solo** sobre listas ordenadas |
 | **Precondición** | Lo que tiene que cumplirse para que un algoritmo sea válido |

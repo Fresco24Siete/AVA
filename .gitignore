@@ -2,3 +2,10 @@
 .env
 __pycache__/
 *.pyc
+
+# Residuo que dejan los propios ejercicios al ejecutarse (verificar.py corre
+# todas las celdas): un ejercicio escribe un archivo y otro guarda un algoritmo.
+# Son salida del alumno, no fuente del cuadernillo.
+bitacora_semana1.txt
+mi_algoritmo.fprg
+.DS_Store

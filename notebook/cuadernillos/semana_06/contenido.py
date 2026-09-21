@@ -258,7 +258,7 @@ def portada():
         'opacity:.82">Semana 6 · Unidad 6</div>'
         '<div style="font-size:26px;font-weight:700;margin:2px 0 6px">Buscar y ordenar</div>'
         '<div style="font-size:14.5px;line-height:1.5;opacity:.94">Listas, cadenas, busqueda y ordenamiento.<br>'
-        '<span style="opacity:.8">80 puntos · 95 XP · insignia «Quien ordena»</span></div></div>')
+        '<span style="opacity:.8">65 puntos · 95 XP · insignia «Quien ordena»</span></div></div>')
 
 
 # Alias: los cuadernillos 1 y 2 estrenaron dos nombres distintos para lo mismo

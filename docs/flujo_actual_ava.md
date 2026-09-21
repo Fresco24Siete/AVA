@@ -69,14 +69,24 @@ correspondencia no es una interpretación: es la misma frase.
 
 Cruzando §0.2 con el mapeo realmente cargado en producción:
 
-| Código | Oficial | ¿En alcance? | Ejercicios etiquetados hoy |
-|---|---|---|---|
-| I3 | mCC87 | Sí | **45** (73 % del total) |
-| I4 | mCC103 | Sí | **11** |
-| I5 | mCA14 | **No** | **6** ← etiquetados con algo fuera de alcance |
-| I1 | mCP17 | **Sí** | **0** ← en alcance, sin evidencia |
-| I7 | mCP88 | **Sí** | **0** ← en alcance, sin evidencia |
-| I2, I6 | mCC85, mCA65 | No | 0 |
+| Código | Oficial | ¿En alcance? | Al auditar (Fase 0) | Tras el recorte (Fase 5) |
+|---|---|---|---:|---:|
+| I3 | mCC87 | Sí | **45** (73 % del total) | **35** |
+| I4 | mCC103 | Sí | **11** | **3** ← solo en semanas 1-2 |
+| I5 | mCA14 | **No** | **6** ← fuera de alcance | **4** ← solo en semanas 1-2 |
+| I1 | mCP17 | **Sí** | **0** ← sin evidencia | **3** |
+| I7 | mCP88 | **Sí** | **0** | **0** ← no es calificable, a propósito |
+| I2, I6 | mCC85, mCA65 | No | 0 | 0 |
+
+La Fase 5 recortó las semanas 3 a 6 y las re-etiquetó según la planeación
+oficial: quitó mCC103 de las cuatro (la planeación no le da evidencia ahí),
+quitó las dos etiquetas de mCA14 que tenían, y le dio a mCP17 sus tres primeros
+ejercicios. Lo que queda de I4 e I5 está **todo** en las semanas 1 y 2, que se
+ajustan en la Fase 6 y no se podían tocar aquí porque ya tienen entregas.
+
+Ojo con I4: pasó de 11 ejercicios a 3, que es justo el mínimo de evidencia. La
+Fase 6 tiene que devolvérselos etiquetando `semana_01` y `semana_02`, o mCC103
+se queda sin poder medirse.
 
 Tres problemas, por orden de gravedad:
 
@@ -248,8 +258,8 @@ intento. Ver §8.1.
         No fallan, pero no aparecerán en el análisis por competencia.
 ```
 
-Hoy los seis cuadernillos salen sin avisos: los 47 ejercicios están etiquetados
-(con los problemas de alcance de §1).
+Hoy los seis cuadernillos salen sin avisos: los 37 ejercicios están etiquetados
+(eran 47 antes del recorte de la Fase 5).
 
 ---
 

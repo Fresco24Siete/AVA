@@ -273,8 +273,14 @@ Contra los datos de hoy:
 | I5 (mCA14) | 2.5 | **13 de 18** |
 
 O sea: con este mapeo, **I4 no se puede medir para dos tercios del curso**. No
-es un problema del umbral — es que I4 solo tiene 11 ejercicios repartidos en
-seis semanas. Se arregla en la Fase 5 reetiquetando, no bajando el mínimo.
+es un problema del umbral — es que I4 no tiene ejercicios suficientes. Se
+arregla reetiquetando, no bajando el mínimo.
+
+**Actualización tras la Fase 5:** el recorte quitó mCC103 de las semanas 3 a 6
+—la planeación oficial no le da evidencia ahí— y la dejó con **3 ejercicios**,
+todos en las semanas 1 y 2. Eso es exactamente el mínimo: un estudiante tiene
+que intentar los tres para recibir nivel. Devolvérselos es trabajo de la Fase 6,
+que reetiqueta `semana_01` (mCC103 + mCP88) y `semana_02` (mCC87 + mCC103).
 
 Bajar el mínimo a 1 daría un nivel a todo el mundo y sería un número inventado.
 
@@ -401,13 +407,15 @@ una transacción: un corte a medias sería peor que no tenerlo.
   solo escrito: `ponerNivel` deja el nivel en `NULL` con el motivo «no se mide
   con trazas de actividad» en cuanto `en_alcance` es falso.
 
-  No es una precaución teórica. Los **seis ejercicios etiquetados con I5
-  (mCA14)** llevan también la etiqueta I3, así que su tarjeta sería una recopia
-  de un subconjunto de las señales de I3 presentada como otra competencia. Con
-  un N3 verde encima, el panel estaría afirmando algo que este sistema no puede
-  saber — y al congelar un corte, ese número entraría en la evidencia del
-  estudio sin forma de distinguirlo de los legítimos. El arreglo de fondo es
-  quitar esas etiquetas, que es trabajo de la Fase 5.
+  No es una precaución teórica. Los ejercicios etiquetados con I5 (mCA14)
+  llevan también la etiqueta I3, así que su tarjeta sería una recopia de un
+  subconjunto de las señales de I3 presentada como otra competencia. Con un N3
+  verde encima, el panel estaría afirmando algo que este sistema no puede saber
+  — y al congelar un corte, ese número entraría en la evidencia del estudio sin
+  forma de distinguirlo de los legítimos.
+
+  La Fase 5 quitó las dos que había en las semanas 3 a 6. Quedan **cuatro**, en
+  las semanas 1 y 2, que se ajustan en la Fase 6.
 - **No pondera con pre/post-test ni evidencia complementaria.** Eso es la
   Actividad 3.1 del plan de grado y queda fuera.
 - **No toca la devolución de notas a Moodle.** Fuera de alcance, y además sería

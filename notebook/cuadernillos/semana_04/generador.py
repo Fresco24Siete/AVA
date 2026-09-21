@@ -4,7 +4,7 @@
 Curso 41333 Algoritmos y Programación · Ingeniería en IA · UIS 2026-2
 Unidad 4 — Estructuras repetitivas e integración del control de flujo.
 
-80 puntos de nbgrader en ocho ejercicios, 90 XP y la insignia «Quien automatiza».
+65 puntos de nbgrader en seis ejercicios, 90 XP y la insignia «Quien automatiza».
 
 Dos límites que se respetan a propósito y que hay que tener presentes al
 editarlo:
@@ -64,20 +64,19 @@ Secuencia, decisión y repetición. Tres estructuras. No hay una cuarta.
 
 - Escribir un ciclo `Mientras` en pseudocódigo y un `while` en Python, y saber
   **cuándo se detiene**.
-- Usar las tres variables que aparecen en casi todo ciclo: **contador**,
-  **acumulador** y **bandera** — y no confundirlas.
-- Usar `for` con `range()` cuando sabes de antemano cuántas vueltas hay.
-- Cortar o saltar una vuelta con `break` y `continue`, y saber por qué `pass`
-  existe.
+- Usar `for` con `range()` cuando sabes de antemano cuántas vueltas hay, y
+  predecir cuántas da antes de ejecutarlo.
+- Llevar un **contador**, un **acumulador** y una **bandera** dentro de un
+  ciclo, sin confundirlos.
+- Salir de un ciclo antes de tiempo con `break`, cuando ya encontraste lo que
+  buscabas.
 - Anidar dos ciclos sin perderte.
-- Validar una entrada repitiendo hasta que el usuario escriba algo válido.
-- Mirar dos soluciones al mismo problema y decir cuál hace **menos
-  operaciones** — y por qué eso importa fuera del salón.
+- Juntarlo todo: decidir dentro de repetir, en los dos idiomas.
 
 **Lo que NO se te pide todavía:** recorrer listas ni cadenas. Eso es la semana 6.
 Aquí el `for` va siempre con `range()`.
 
-Este cuadernillo tiene **80 puntos** y **90 XP**. La insignia se llama
+Este cuadernillo tiene **65 puntos** y **90 XP**. La insignia se llama
 «Quien automatiza».
 """)
 
@@ -261,49 +260,25 @@ print("---")
 for i in range(1, 6):
     print("range(1, 6) da:", i)''')
 
-    c.md("""> **Cuál usar.** ¿Sabes cuántas vueltas antes de empezar? `for`. ¿Depende de
-> algo que pase dentro —lo que escriba el usuario, si encontraste lo que
-> buscabas—? `while`.
+    c.md("""### 4C. Salir antes de tiempo: `break`
 
-### 4C. break, continue y pass
-
-Tres palabras que cambian el recorrido del ciclo:
-
-- **`break`** — sal del ciclo ya, aunque la condición siga siendo verdadera.
-- **`continue`** — sáltate el resto de esta vuelta y ve a la siguiente.
-- **`pass`** — no hagas nada. Existe porque Python no admite un bloque vacío:
-  es un relleno para cuando todavía no escribiste esa parte.
-
-Ejecuta y lee la salida con calma:
+A veces el ciclo ya hizo lo suyo y no tiene sentido seguir dando vueltas: lo
+encontraste, y lo que quede detrás ya no importa. `break` sale del ciclo en el
+acto, aunque la condición siga siendo verdadera.
 """)
 
-    c.code('''print("Con break: paro en cuanto encuentro el 3")
-for i in range(10):
+    c.code('''for i in range(10):
     if i == 3:
-        break
-    print("  ", i)
+        break          # en cuanto llega al 3, se sale
+    print("  mirando el", i)
 
-print("Con continue: me salto los pares")
-for i in range(6):
-    if i % 2 == 0:
-        continue
-    print("  ", i)''')
+print("Sali en el 3, sin mirar del 4 al 9")''')
 
-    c.md("""### 4D. Validar hasta que esté bien
+    c.md("""No es un atajo cualquiera: en la semana 6 vas a contar **cuántos pasos** da un
+algoritmo de búsqueda, y la cuenta solo sale bien si paras cuando encuentras.
+Buscar en una guía de teléfonos que ya encontraste es trabajo que nadie hace.
 
-El uso más honesto de un `while`: no dejar avanzar al programa hasta que el dato
-sirva. Aquí se usa una **bandera**, o directamente la condición:
-
-```python
-nota = -1
-while nota < 0 or nota > 5:
-    nota = float(input("Nota (0 a 5): "))
-```
-
-Mientras el usuario escriba disparates, vuelve a preguntar. En cuanto escriba
-algo entre 0 y 5, la condición deja de cumplirse y el programa sigue.
-
-### 4E. Ciclos anidados
+### 4D. Ciclos anidados
 
 Un ciclo dentro de otro. El de dentro da **todas** sus vueltas por **cada** vuelta
 del de fuera: dos ciclos de 3 vueltas son 9 pasadas, no 6.
@@ -315,7 +290,7 @@ del de fuera: dos ciclos de 3 vueltas son 9 pasadas, no 6.
     print("--- fin de la fila", fila)''')
 
     # =========================================================================
-    c.seccion(5, "Ocho ejercicios", 50, """**80 puntos**, de menos a más. Si te atascas, `pista("E5")` te da hasta tres
+    c.seccion(5, "Seis ejercicios", 45, """**65 puntos**, de menos a más. Si te atascas, `pista("E2")` te da hasta tres
 ayudas escalonadas y no resta puntos.
 
 Un aviso propio de esta semana: si una celda se queda con `[*]` y no termina,
@@ -369,55 +344,10 @@ assert VUELTAS["e"] == 4, "i va 0,1,2,3 y en la cuarta comprobacion i vale 4 y s
         ],
     )
 
-    c.ejercicio(
-        numero=2, competencias=['I3'], titulo="Contador, acumulador o bandera", estrellas=1, puntos=5,
-        enunciado="""Cada situación necesita una de las tres variables. Escribe `"contador"`,
-`"acumulador"` o `"bandera"`.
-
-| Llave | Situación |
-|---|---|
-| `cuantos` | Cuántos estudiantes aprobaron |
-| `suma` | La suma de todas las notas del curso |
-| `hubo_cero` | Si alguien sacó 0.0, aunque fuera una sola persona |
-| `intentos` | Cuántas veces el usuario escribió un dato inválido |
-| `promedio_total` | La suma de todos los pagos del mes |""",
-        partida='''TIPOS = {
-    "cuantos": ...,
-    "suma": ...,
-    "hubo_cero": ...,
-    "intentos": ...,
-    "promedio_total": ...,
-}''',
-        solucion='''TIPOS = {
-    "cuantos": "contador",
-    "suma": "acumulador",
-    "hubo_cero": "bandera",
-    "intentos": "contador",
-    "promedio_total": "acumulador",
-}''',
-        pruebas='''assert isinstance(TIPOS, dict), "TIPOS debe seguir siendo un diccionario"
-assert set(TIPOS) == {"cuantos", "suma", "hubo_cero", "intentos", "promedio_total"}, \\
-    "No cambies las cinco llaves"
-_v = {"contador", "acumulador", "bandera"}
-assert set(TIPOS.values()) <= _v, "Usa solo: contador, acumulador o bandera"
-print("Formato correcto. Las respuestas se revisan al calificar.")''',
-        pruebas_ocultas='''assert TIPOS["cuantos"] == "contador"
-assert TIPOS["suma"] == "acumulador"
-assert TIPOS["hubo_cero"] == "bandera"
-assert TIPOS["intentos"] == "contador"
-assert TIPOS["promedio_total"] == "acumulador"''',
-        pistas=[
-            "Hazte una sola pregunta por fila: ¿esto responde CUANTOS, responde CUANTO "
-            "suman, o responde SI paso algo?",
-            "Contar sube de uno en uno sin importar el valor. Acumular suma el valor que "
-            "llega. Si los dos te encajan, mira si el enunciado dice «cuántos» o «la suma».",
-            "Solo una de las cinco se contesta con si o no. Esa es la bandera.",
-        ],
-    )
 
     c.ejercicio(
-        numero=3, competencias=['I3'], titulo="Mientras, en pseudocódigo", estrellas=2, puntos=10,
-        enunciado="""Escribe el pseudocódigo completo en `ALGORITMO_E3`. El algoritmo:
+        numero=2, competencias=['I3'], titulo="Mientras, en pseudocódigo", estrellas=2, puntos=10,
+        enunciado="""Escribe el pseudocódigo completo en `ALGORITMO_E2`. El algoritmo:
 
 1. Lee un número entero `n`.
 2. Suma todos los enteros desde 1 hasta `n`.
@@ -427,9 +357,9 @@ Con `n = 5` debe escribir 15 (porque 1+2+3+4+5). Con `n = 10`, 55.
 
 Acuérdate de las tres piezas: arranque, condición y paso. Si te falta el paso,
 el motor te va a parar por ciclo infinito — y con razón.""",
-        partida='''ALGORITMO_E3 = """
+        partida='''ALGORITMO_E2 = """
 """''',
-        solucion='''ALGORITMO_E3 = """
+        solucion='''ALGORITMO_E2 = """
 Algoritmo Sumatoria
     Definir n Como Entero
     Definir total Como Entero
@@ -444,16 +374,16 @@ Algoritmo Sumatoria
     Escribir total
 FinAlgoritmo
 """''',
-        pruebas='''assert isinstance(ALGORITMO_E3, str) and ALGORITMO_E3.strip(), \\
-    "ALGORITMO_E3 debe traer el pseudocodigo completo, como texto"
-_r5 = ps.ejecutar_pseudo(ALGORITMO_E3, entradas=["5"])
+        pruebas='''assert isinstance(ALGORITMO_E2, str) and ALGORITMO_E2.strip(), \\
+    "ALGORITMO_E2 debe traer el pseudocodigo completo, como texto"
+_r5 = ps.ejecutar_pseudo(ALGORITMO_E2, entradas=["5"])
 assert _r5.ok, "Tu algoritmo no ejecuta. El motor dice: " + _r5.error_corto
 assert "15" in _r5.salida, "Con n = 5 el total es 15"
 print("Con n = 5 ->", _r5.salida.strip())''',
-        pruebas_ocultas='''_r10 = ps.ejecutar_pseudo(ALGORITMO_E3, entradas=["10"])
+        pruebas_ocultas='''_r10 = ps.ejecutar_pseudo(ALGORITMO_E2, entradas=["10"])
 assert _r10.ok, "Con n = 10 falla: " + _r10.error_corto
 assert "55" in _r10.salida, "Con n = 10 el total es 55"
-_r1 = ps.ejecutar_pseudo(ALGORITMO_E3, entradas=["1"])
+_r1 = ps.ejecutar_pseudo(ALGORITMO_E2, entradas=["1"])
 assert "1" in _r1.salida, "Con n = 1 el total es 1"''',
         pistas=[
             "Necesitas tres variables: la que lees (n), la que acumula (total) y la que "
@@ -465,94 +395,50 @@ assert "1" in _r1.salida, "Con n = 1 el total es 1"''',
         ],
     )
 
+
     c.ejercicio(
-        numero=4, competencias=['I3'], titulo="El mismo, con while", estrellas=2, puntos=10,
-        enunciado="""Traduce el ejercicio 3 a Python, como función.
+        numero=3, competencias=['I3'], titulo="El while, en Python", estrellas=2, puntos=10,
+        enunciado="""Ahora el mismo mecanismo, pero en Python y con un problema donde **no sabes
+cuántas vueltas hay** — que es exactamente cuando hace falta un `while` y no un
+`for`.
 
-`sumatoria(n)` recibe un entero y **devuelve** la suma de 1 hasta n. Usa
-`while` — el `for` viene en el ejercicio siguiente.
+Una deuda de `saldo` pesos crece un 10 % cada mes. `meses_hasta(saldo, tope)`
+debe devolver **cuántos meses** pasan hasta que el saldo alcanza o supera
+`tope`.
 
-`sumatoria(5)` debe devolver 15. `sumatoria(0)` debe devolver 0: si no hay
-números que sumar, la suma es cero, y el ciclo no debe dar ni una vuelta.""",
-        partida='''def sumatoria(n):
+`meses_hasta(100, 200)` devuelve 8: la deuda pasa de 100 a 110, 121, 133… y en
+el mes 8 llega a 214. Y si el saldo **ya** está en el tope o por encima, la
+respuesta es 0: no ha pasado ningún mes.""",
+        partida='''def meses_hasta(saldo, tope):
     ...''',
-        solucion='''def sumatoria(n):
-    total = 0
-    i = 1
-    while i <= n:
-        total = total + i
-        i = i + 1
-    return total''',
-        pruebas='''assert callable(sumatoria), "sumatoria debe ser una funcion"
-assert sumatoria(5) == 15, "1+2+3+4+5 son 15"
-assert sumatoria(10) == 55
-assert sumatoria(1) == 1
-print("sumatoria(5) =", sumatoria(5), "· sumatoria(10) =", sumatoria(10))''',
-        pruebas_ocultas='''assert sumatoria(0) == 0, "Sin numeros que sumar, el total es 0 y el ciclo no entra"
-assert sumatoria(100) == 5050, "El clasico: del 1 al 100 son 5050"
-assert isinstance(sumatoria(5), int), "Debe devolver un entero"''',
+        solucion='''def meses_hasta(saldo, tope):
+    meses = 0
+    while saldo < tope:
+        saldo = saldo * 1.10
+        meses = meses + 1
+    return meses''',
+        pruebas='''assert callable(meses_hasta), "meses_hasta debe ser una funcion"
+assert meses_hasta(100, 200) == 8, "De 100 al doble con 10% mensual son 8 meses"
+assert meses_hasta(100, 100) == 0, "Si ya llego al tope, no ha pasado ningun mes"
+print("meses_hasta(100, 200) =", meses_hasta(100, 200))''',
+        pruebas_ocultas='''assert meses_hasta(500, 400) == 0, "Si ya lo supera, tampoco pasa ningun mes"
+assert meses_hasta(1000, 2000) == 8, "El 10% es relativo: da igual la escala"
+assert meses_hasta(100, 110) == 1, "Un solo mes basta para llegar a 110"
+assert isinstance(meses_hasta(100, 200), int), "Se cuentan meses: es un entero"''',
         pistas=[
-            "La estructura es la misma del pseudocodigo. Cambian las palabras: "
-            "`Mientras ... Hacer` pasa a `while ...:` y el `FinMientras` desaparece "
-            "porque cierra la sangria.",
-            "Las dos variables (total e i) se crean ANTES del while. Si las creas dentro, "
-            "se reinician en cada vuelta y nunca acumulan nada.",
-            "El `return total` va FUERA del while, al final y sin sangria extra. Si lo "
-            "metes dentro, la funcion se sale en la primera vuelta.",
+            "Aqui no puedes usar `for`: no sabes cuantas vueltas hay hasta ejecutarlo. "
+            "Esa es la diferencia con el ejercicio anterior, y es la razon de que "
+            "`while` exista.",
+            "Dos variables antes del ciclo: el contador de meses en 0, y el saldo que "
+            "ya te llega como parametro. Dentro, el saldo crece y el contador sube.",
+            "Crecer un 10 % es multiplicar por 1.10, no sumar 10. Y la condicion se "
+            "comprueba ANTES de entrar: por eso un saldo que ya alcanzo el tope "
+            "devuelve 0 sin dar ni una vuelta.",
         ],
     )
 
     c.ejercicio(
-        numero=5, competencias=['I3'], titulo="Con for y range", estrellas=2, puntos=10,
-        enunciado="""Ahora el mismo problema, pero con `for` — y esta vez sabes de antemano cuántas
-vueltas hay, así que es el ciclo adecuado.
-
-`tabla(numero)` devuelve un **texto** con la tabla de multiplicar del 1 al 10,
-una línea por resultado, así:
-
-```
-3 x 1 = 3
-3 x 2 = 6
-...
-3 x 10 = 30
-```
-
-Sin línea en blanco al final. Para unir las líneas te sirve `"\\n"`, que es el
-salto de línea: `texto = texto + "3 x 1 = 3" + "\\n"`.""",
-        partida='''def tabla(numero):
-    ...''',
-        solucion='''def tabla(numero):
-    lineas = ""
-    for i in range(1, 11):
-        lineas = lineas + f"{numero} x {i} = {numero * i}"
-        if i < 10:
-            lineas = lineas + "\\n"
-    return lineas''',
-        pruebas='''assert callable(tabla), "tabla debe ser una funcion"
-_t = tabla(3)
-assert isinstance(_t, str), "tabla debe DEVOLVER texto, no imprimirlo"
-_filas = _t.split("\\n")
-assert len(_filas) == 10, f"La tabla tiene 10 lineas y la tuya tiene {len(_filas)}"
-assert _filas[0] == "3 x 1 = 3", f"La primera linea debe ser '3 x 1 = 3' y es '{_filas[0]}'"
-assert _filas[9] == "3 x 10 = 30", f"La ultima debe ser '3 x 10 = 30' y es '{_filas[9]}'"
-print(_t)''',
-        pruebas_ocultas='''_t5 = tabla(5).split("\\n")
-assert _t5[0] == "5 x 1 = 5" and _t5[9] == "5 x 10 = 50"
-_t0 = tabla(0).split("\\n")
-assert len(_t0) == 10 and _t0[0] == "0 x 1 = 0"
-assert not tabla(7).endswith("\\n"), "No dejes salto de linea al final"''',
-        pistas=[
-            "`range(1, 11)` da del 1 al 10. El 11 no entra: ese es el punto que hay que "
-            "tener claro con range.",
-            "Ve construyendo el texto vuelta a vuelta, empezando por una cadena vacia. "
-            "En cada vuelta le sumas la linea nueva.",
-            "El salto de linea va entre lineas, no despues de la ultima. Una forma: "
-            "anadirlo solo cuando `i < 10`.",
-        ],
-    )
-
-    c.ejercicio(
-        numero=6, competencias=['I3'], titulo="La bandera", estrellas=3, puntos=10,
+        numero=4, competencias=['I3'], titulo="La bandera", estrellas=3, puntos=10,
         enunciado="""`hubo_perdida(primera, ultima)` recorre los números enteros desde `primera`
 hasta `ultima` (los dos incluidos), tratándolos como notas, y devuelve `True` si
 **alguno** es menor que 3, o `False` si ninguno lo es.
@@ -591,7 +477,7 @@ assert isinstance(hubo_perdida(1, 5), bool), "Debe devolver True o False, no 1 n
     )
 
     c.ejercicio(
-        numero=7, competencias=['I3', 'I4'], titulo="Dos ciclos, uno dentro de otro", estrellas=3, puntos=15,
+        numero=5, competencias=['I3'], titulo="Dos ciclos, uno dentro de otro", estrellas=3, puntos=15,
         enunciado="""`escalera(altura)` devuelve un texto con una escalera de asteriscos:
 
 ```
@@ -641,7 +527,7 @@ assert not escalera(4).endswith("\\n"), "Sin salto de linea al final"''',
     )
 
     c.ejercicio(
-        numero=8, competencias=['I3', 'I4'], titulo="Todo junto, en los dos idiomas", estrellas=4, puntos=15,
+        numero=6, competencias=['I3'], titulo="Todo junto, en los dos idiomas", estrellas=4, puntos=15,
         enunciado="""El de cierre junta las tres estructuras: secuencia, decisión y repetición.
 
 Un profesor quiere, de las notas del 1 al `n` (tratando cada entero como una
@@ -649,19 +535,19 @@ nota), **cuántas aprobaron** —3 o más— y **cuánto suman todas**.
 
 Dos entregas:
 
-1. `ALGORITMO_E8` — el pseudocódigo. Lee `n`, y escribe **primero** la cantidad
+1. `ALGORITMO_E6` — el pseudocódigo. Lee `n`, y escribe **primero** la cantidad
    de aprobadas y **después** la suma total, en dos líneas.
 2. `resumen(n)` — la función de Python. Devuelve una **tupla** `(aprobadas, suma)`.
    Una tupla se escribe con paréntesis: `return (2, 7)`.
 
 Con `n = 5`: aprobaron 3 (el 3, el 4 y el 5) y suman 15.""",
-        partida='''ALGORITMO_E8 = """
+        partida='''ALGORITMO_E6 = """
 """
 
 
 def resumen(n):
     ...''',
-        solucion='''ALGORITMO_E8 = """
+        solucion='''ALGORITMO_E6 = """
 Algoritmo Resumen
     Definir n Como Entero
     Definir i Como Entero
@@ -692,9 +578,9 @@ def resumen(n):
         if i >= 3:
             aprobadas = aprobadas + 1
     return (aprobadas, suma)''',
-        pruebas='''assert isinstance(ALGORITMO_E8, str) and ALGORITMO_E8.strip(), \\
-    "ALGORITMO_E8 debe traer el pseudocodigo completo"
-_r = ps.ejecutar_pseudo(ALGORITMO_E8, entradas=["5"])
+        pruebas='''assert isinstance(ALGORITMO_E6, str) and ALGORITMO_E6.strip(), \\
+    "ALGORITMO_E6 debe traer el pseudocodigo completo"
+_r = ps.ejecutar_pseudo(ALGORITMO_E6, entradas=["5"])
 assert _r.ok, "Tu pseudocodigo no ejecuta. El motor dice: " + _r.error_corto
 assert "3" in _r.salida and "15" in _r.salida, \\
     "Con n = 5 debe escribir 3 (aprobadas) y 15 (suma)"
@@ -709,7 +595,7 @@ assert resumen(10) == (8, 55)
 assert resumen(0) == (0, 0), "Sin notas, cero y cero"
 assert isinstance(resumen(5), tuple) and len(resumen(5)) == 2, \\
     "Debe devolver una tupla de dos valores: (aprobadas, suma)"
-_r2 = ps.ejecutar_pseudo(ALGORITMO_E8, entradas=["10"])
+_r2 = ps.ejecutar_pseudo(ALGORITMO_E6, entradas=["10"])
 assert "8" in _r2.salida and "55" in _r2.salida, "Con n = 10 son 8 aprobadas y 55 de suma"''',
         pistas=[
             "Hazlo por partes: primero que cuente las aprobadas, comprueba que da bien, "
@@ -724,22 +610,19 @@ assert "8" in _r2.salida and "55" in _r2.salida, "Con n = 10 son 8 aprobadas y 5
     # =========================================================================
     c.seccion(6, "Habla con el asistente", 5, """**Cinco preguntas** para todo el cuadernillo.""")
 
-    c.md("""### Presupuesto sugerido
+    c.md("""### En qué gastarlas
 
-| Ejercicio | Preguntas | Por qué |
-|---|---|---|
-| 1 y 2 (vueltas, tipos de variable) | **0** | Ejecuta `vueltas(...)` y `las_tres_variables()` otra vez: la respuesta está ahí |
-| 3 y 4 (sumatoria) | **0–1** | Si el motor te habla de ciclo infinito, te falta el paso. Eso no necesita tutor |
-| 5 (tabla con for) | **0–1** | Casi siempre es el `range`: pregunta por eso |
-| 6 (bandera) | **1** | Aquí sí. El detalle de no ponerla nunca en False no es evidente |
-| 7 (anidados) | **1** | El de fuera cuenta filas, el de dentro columnas. Si no lo ves, pregunta |
-| 8 (todo junto) | **1–2** | Guarda estas. Es el más largo y tiene dos entregas |
+Los dos primeros no las necesitan: ejecuta `vueltas(...)` otra vez y la
+respuesta está ahí, y si el motor de pseudocódigo te habla de ciclo infinito ya
+te está diciendo que te falta el paso. Guárdalas para la bandera —el detalle de
+no ponerla nunca en `False` no es evidente— y para el último, que es el más
+largo y tiene dos entregas.
 
 ### Cómo se pregunta bien
 
 Mal: «mi ciclo no para».
-Bien: «en el ejercicio 4, con `sumatoria(5)` mi función se queda colgada. Tengo
-`total = total + i` dentro del while. ¿Qué me falta para que `i` cambie?»
+Bien: «mi función `meses_hasta(100, 200)` se queda colgada. Dentro del while
+tengo `meses = meses + 1`. ¿Qué me falta para que el saldo cambie?»
 
 La segunda dice qué probaste, qué pasó y qué crees que falla. Con eso el tutor
 te puede responder; con la primera solo puede adivinar.
@@ -752,7 +635,7 @@ te puede responder; con la primera solo puede adivinar.
   siempre? Si la respuesta es «porque se me olvidó algo», ¿qué algo?
 - De los dos ciclos, ¿tienes claro cuándo usar `while` y cuándo `for`? La
   pregunta que lo decide es una sola: ¿sabes cuántas vueltas antes de empezar?
-- El ejercicio 7 se podía resolver con `"*" * fila` en una línea. ¿Lo hiciste
+- La escalera se podía resolver con `"*" * fila` en una línea. ¿Lo hiciste
   con dos ciclos primero, o fuiste directo al atajo? Las dos respuestas están
   bien; solo conviene que sepas cuál elegiste.
 

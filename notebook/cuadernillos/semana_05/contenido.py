@@ -243,7 +243,7 @@ def portada():
         'opacity:.82">Semana 5 · Unidad 5</div>'
         '<div style="font-size:26px;font-weight:700;margin:2px 0 6px">Consolidar</div>'
         '<div style="font-size:14.5px;line-height:1.5;opacity:.94">Media vuelta: repaso de las cuatro semanas y Python por dentro.<br>'
-        '<span style="opacity:.8">80 puntos · 85 XP · insignia «Media vuelta»</span></div></div>')
+        '<span style="opacity:.8">50 puntos · 85 XP · insignia «Media vuelta»</span></div></div>')
 
 
 # Alias: los cuadernillos 1 y 2 estrenaron dos nombres distintos para lo mismo
