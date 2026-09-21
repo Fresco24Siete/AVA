@@ -79,14 +79,19 @@ Pero **la descripción del catálogo es la que el panel le enseña al docente**:
 se queda como está, la pantalla pondrá «álgebra lineal, cálculo diferencial e
 integral» encima de un ejercicio sobre el recibo del parqueadero.
 
-Hay que elegir una, y es decisión del curso, no técnica:
+**Decidido el 2026-09-21: se alinea el catálogo** al texto del encargo, con
+`database/migracion_v6.sql`, ya conectada al instalador. Es un `UPDATE` de un
+texto, acotado con un `LIKE` para que repetirla no haga nada, y con el `UPDATE`
+inverso escrito al final por si hay que volver atrás.
 
-- **Alinear el catálogo** al texto del encargo. Está escrita y probada en
-  `database/migracion_v6.sql`, **sin aplicar y sin conectar al instalador**: es
-  un `UPDATE` de un texto, acotado con un `LIKE` para que repetirla no haga
-  nada, y con el `UPDATE` inverso escrito al final por si hay que volver atrás.
-- **Quitar las siete etiquetas mCP17** y aceptar que el AVA no mide esa
-  microcompetencia, como pasa con mCC103. Mediría dos de cuatro.
+El motivo: los ejercicios etiquetados miden de verdad lo que el encargo
+describe —calcular una tarifa, aplicar un porcentaje, usar `div` y `mod`—, y la
+alternativa era quitar las siete etiquetas y dejar el AVA midiendo **dos
+microcompetencias de cuatro**, porque mCC103 ya está en cero.
+
+Si el curso prefiere conservar el texto literal del syllabus, la vuelta atrás
+es el `UPDATE` inverso del final de la migración más borrar las siete etiquetas
+`I1` de los generadores.
 
 Lo que no vale es dejarlo como está. La descripción no es decorativa: se pinta
 en la guía «Qué mide cada código» del docente

@@ -122,23 +122,22 @@ castiga a quien más trabaja— sino cobertura y coste normalizados.
 
 ## 5. Lo que queda pendiente, y es del curso
 
-Dos decisiones que no son técnicas y **no se han tomado por ti**:
+Una decisión tomada y una pendiente:
 
-1. **`mCP17` tiene dos definiciones que no coinciden.** El catálogo en la base
-   dice «álgebra lineal, cálculo diferencial e integral y métodos numéricos»; el
-   encargo dice «aplicar conocimientos matemáticos». Con la primera, ninguna de
-   las siete etiquetas puestas es legítima. `database/migracion_v6.sql` alinea la
-   descripción y está escrita y probada, **sin aplicar y sin conectar al
-   instalador**. La otra salida es quitar las siete etiquetas.
+1. ~~`mCP17` tiene dos definiciones que no coinciden.~~ **Resuelto el
+   2026-09-21:** se alinea el catálogo al texto del encargo con
+   `database/migracion_v6.sql`, ya en el bucle del instalador. La alternativa
+   era quitar las siete etiquetas y dejar el AVA midiendo dos microcompetencias
+   de cuatro. Reversible con el `UPDATE` inverso del final de la migración.
 2. **`mCC103` se quedó sin evidencia.** Ninguno de los 37 ejercicios pide
    «reconocer problemas de organizaciones tratables algorítmicamente». Medirla
    exige un ejercicio nuevo, no otra vuelta de etiquetas.
 
 Y dos cosas que el despliegue necesita saber:
 
-- **`database/migracion_v5.sql` no está aplicada a producción.** Está en el
-  bucle del instalador, así que el próximo despliegue la aplica. Es aditiva,
-  pero instala el trigger que limita a 2 competencias por ejercicio.
+- **`migracion_v5.sql` y `migracion_v6.sql` están en el bucle del instalador**,
+  así que el despliegue las aplica. La v5 es aditiva pero instala el trigger que
+  limita a 2 competencias por ejercicio; la v6 es un `UPDATE` de un texto.
 - **Reetiquetar no llega a la base con `git pull`.** `competencias.json` entra
   en la imagen del docente al construirla (`Dockerfile.docente:23`), no por bind
   mount. Hacen falta tres pasos: `git pull`, reconstruir la imagen, y

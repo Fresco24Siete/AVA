@@ -426,12 +426,18 @@ else
     # mete todos los cuadernillos en una sola transacción, un ejercicio con tres
     # etiquetas haría fallar la carga ENTERA, no solo ese ejercicio. Hoy el
     # mapeo cumple (32 con una, 15 con dos), así que está latente.
-    for m in database/migracion_v3.sql database/migracion_v4.sql database/migracion_v5.sql; do
+    #
+    # v6 alinea la descripción de mCP17 con lo que el AVA mide de verdad. Es un
+    # UPDATE de un texto, acotado con un LIKE para que repetirla no haga nada.
+    # Va DESPUÉS de la v2 a propósito: la v2 reescribe las descripciones con
+    # ON CONFLICT DO UPDATE, así que aplicarla antes no serviría de nada.
+    for m in database/migracion_v3.sql database/migracion_v4.sql \
+             database/migracion_v5.sql database/migracion_v6.sql; do
         [ -f "$m" ] || continue
         docker exec -i postgres-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -q -v ON_ERROR_STOP=1' \
             < "$m" >/dev/null 2>&1 || { mal "falló $m"; fallo_migracion=1; }
     done
-    [ "$fallo_migracion" -eq 0 ] && ok "esquema al día (v3, v4 y v5)"
+    [ "$fallo_migracion" -eq 0 ] && ok "esquema al día (v3, v4, v5 y v6)"
 fi
 
 
