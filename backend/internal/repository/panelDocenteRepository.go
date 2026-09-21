@@ -33,14 +33,31 @@ func NewPanelDocenteRepository(db *sqlx.DB) *PanelDocenteRepository {
 }
 
 // intentosReales es la base de casi todo: cada intento con su marca de stub.
+//
+// «Llevaba un NotImplementedError» NO basta para llamarlo plantilla, y creerlo
+// costaba caro: custom.js no vacía el buffer de errores del ejercicio hasta que
+// consigue ENVIAR un intento, así que el intento en el que el alumno por fin
+// resuelve arrastra el stub de cuando ejecutó la plantilla intacta —que es lo
+// que el propio cuadernillo le pide hacer—. Medido sobre la base de producción,
+// el criterio estricto marcaba 46 intentos como plantilla y solo 5 lo eran.
+//
+// Es plantilla si NO aprobó y TODOS sus errores son NotImplementedError. Mismo
+// criterio que EstudiantesRepository.Ficha y .Competencias; si divergen, dos
+// secciones del mismo panel dan números distintos del mismo ejercicio.
+//
+// Malentendidos() es la excepción deliberada: ver su comentario.
 const intentosReales = `
 	WITH t AS (
 	    SELECT a.id, a.student_id, a.cuadernillo_id, a.exercise_id,
 	           a.validation_result, a.attempt_at, a.received_at,
 	           a.orden, a.puntos_maximos,
-	           EXISTS (SELECT 1 FROM attempt_errors e
-	                    WHERE e.attempt_id = a.id
-	                      AND e.error_type = 'NotImplementedError') AS stub
+	           (a.validation_result <> 'passed'
+	            AND EXISTS (SELECT 1 FROM attempt_errors e
+	                         WHERE e.attempt_id = a.id
+	                           AND e.error_type = 'NotImplementedError')
+	            AND NOT EXISTS (SELECT 1 FROM attempt_errors e
+	                             WHERE e.attempt_id = a.id
+	                               AND e.error_type <> 'NotImplementedError')) AS stub
 	      FROM exercise_attempts a
 	     WHERE a.course_id = $1
 	)`

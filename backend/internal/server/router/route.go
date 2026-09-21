@@ -50,7 +50,11 @@ func ConfigureRouter(db *sqlx.DB) *gin.Engine {
 	//exercise inyection
 	exerciseRepository := repository.NewExerciseAttempsRepository(db)
 	attempRepository := repository.NewAttemptErrorRepository(db)
-	exerciseService := service.NewExerciseAttempsService(exerciseRepository, attempRepository)
+	// El repositorio de competencias entra aqui solo para AVISAR cuando llega
+	// telemetria de un ejercicio sin mapeo (ver avisarSiHuerfano). No filtra
+	// ni rechaza nada.
+	exerciseService := service.NewExerciseAttempsService(exerciseRepository, attempRepository,
+		repository.NewCompetenciasRepository(db))
 	exerciseHandler := handler.NewExerciseHandler(exerciseService)
 
 	//Cuadernillo inyection

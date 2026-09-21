@@ -181,14 +181,22 @@ type EjercicioDeEstudiante struct {
 }
 
 // Ficha: el recorrido de una persona, ejercicio a ejercicio.
+//
+// El criterio de `stub` es el mismo que el de Competencias, y tiene que serlo:
+// las dos las devuelve el MISMO handler y se pintan seguidas en la misma
+// página. Ver allí la explicación larga y las cifras que la justifican.
 func (r *EstudiantesRepository) Ficha(curso, estudiante string) ([]EjercicioDeEstudiante, error) {
 	salida := []EjercicioDeEstudiante{}
 	err := r.db.Select(&salida, `
 	    WITH t AS (
 	        SELECT a.*,
-	               EXISTS (SELECT 1 FROM attempt_errors e
-	                        WHERE e.attempt_id = a.id
-	                          AND e.error_type = 'NotImplementedError') AS stub
+	               (a.validation_result <> 'passed'
+	                AND EXISTS (SELECT 1 FROM attempt_errors e
+	                             WHERE e.attempt_id = a.id
+	                               AND e.error_type = 'NotImplementedError')
+	                AND NOT EXISTS (SELECT 1 FROM attempt_errors e
+	                                 WHERE e.attempt_id = a.id
+	                                   AND e.error_type <> 'NotImplementedError')) AS stub
 	          FROM exercise_attempts a
 	         WHERE a.course_id = $1 AND a.student_id = $2
 	    ),
@@ -247,9 +255,31 @@ type CompetenciaDeEstudiante struct {
 // ¿en qué competencia va atascado?" — que es la pregunta del trabajo de grado.
 //
 // Los intentos que solo ejecutaron la plantilla sin tocarla (NotImplementedError)
-// no cuentan: no son un intento, son un "ejecuté la celda a ver qué pasaba". Es
-// el mismo criterio que usa Ficha, y tienen que coincidir o las dos secciones de
-// la misma página se contradicen.
+// no cuentan: no son un intento, son un "ejecuté la celda a ver qué pasaba".
+//
+// Pero "llevaba un NotImplementedError" NO alcanza para declararlo plantilla, y
+// medirlo contra los datos reales lo dejó claro. custom.js acumula los errores
+// del ejercicio y solo vacía el buffer cuando consigue ENVIAR un intento
+// (custom.js:352 y :370). El recorrido normal del alumno es: ejecuta la celda de
+// solución con la plantilla intacta —que es lo que el propio cuadernillo le pide
+// hacer— y ahí se bufferiza el NotImplementedError; luego escribe su código y
+// ejecuta solución y prueba. Ese intento, que APRUEBA, arrastra el stub viejo.
+//
+// Con el criterio anterior se descartaba entero. En la base de producción eso
+// eran 18 intentos aprobados tirados a la basura, 16 de ellos sin un solo error
+// de verdad, y 7 ejercicios resueltos que el panel no le mostraba al docente
+// (145 en vez de 152). De los 46 intentos que el criterio viejo descartaba, solo
+// 5 eran plantilla de verdad: se equivocaba en el 89 % de los casos.
+//
+// El criterio correcto: un intento es plantilla cuando NO aprobó y TODOS sus
+// errores son NotImplementedError. Aprobar es prueba de que el alumno escribió
+// algo, y un error real conviviendo con el stub también.
+//
+// Ojo: Malentendidos() en panelDocenteRepository.go usa a propósito el criterio
+// estricto y NO debe alinearse con este. Allí la pregunta es "¿qué concepto hay
+// que explicar?", y un AssertionError que es consecuencia de la celda vacía no
+// es un malentendido. Aquí la pregunta es "¿cuánto cubrió?", y ahí un ejercicio
+// aprobado cuenta siempre.
 func (r *EstudiantesRepository) Competencias(curso, estudiante string) ([]CompetenciaDeEstudiante, error) {
 	salida := []CompetenciaDeEstudiante{}
 	err := r.db.Select(&salida, `
@@ -257,9 +287,15 @@ func (r *EstudiantesRepository) Competencias(curso, estudiante string) ([]Compet
 	        SELECT a.cuadernillo_id, a.exercise_id, a.validation_result
 	          FROM exercise_attempts a
 	         WHERE a.course_id = $1 AND a.student_id = $2
-	           AND NOT EXISTS (SELECT 1 FROM attempt_errors e
+	           -- Plantilla = no aprobó Y todos sus errores son el stub. Se
+	           -- conserva si aprobó, si trae algún error de verdad, o si no
+	           -- trae ninguno (fallar sin excepción sigue siendo intentarlo).
+	           AND (a.validation_result = 'passed'
+	                OR EXISTS (SELECT 1 FROM attempt_errors e
 	                            WHERE e.attempt_id = a.id
-	                              AND e.error_type = 'NotImplementedError')
+	                              AND e.error_type <> 'NotImplementedError')
+	                OR NOT EXISTS (SELECT 1 FROM attempt_errors e
+	                                WHERE e.attempt_id = a.id))
 	    )
 		SELECT c.id AS competencia_id, c.descripcion,
 		       -- El FILTER no sobra: sin el, COUNT(DISTINCT (a,b)) cuenta la
@@ -272,8 +308,16 @@ func (r *EstudiantesRepository) Competencias(curso, estudiante string) ([]Compet
 		       COUNT(DISTINCT (t.cuadernillo_id, t.exercise_id)) FILTER (
 		           WHERE t.validation_result = 'passed')                  AS resueltos,
 		       COUNT(t.*)                                                 AS intentos,
-		       COUNT(t.*) FILTER (
-		           WHERE t.validation_result = 'sin_validar')             AS abandonos
+		       -- Ejercicios abandonados, no eventos de abandono. Contar eventos
+		       -- repetía el error que el panel del alumno ya corrigió: cerrar la
+		       -- pestaña tres veces sumaba tres abandonos del mismo ejercicio.
+		       -- Y si acabó resolviéndolo, no lo abandonó.
+		       COUNT(DISTINCT (t.cuadernillo_id, t.exercise_id)) FILTER (
+		           WHERE t.validation_result = 'sin_validar'
+		             AND NOT EXISTS (SELECT 1 FROM reales r
+		                              WHERE r.cuadernillo_id = t.cuadernillo_id
+		                                AND r.exercise_id    = t.exercise_id
+		                                AND r.validation_result = 'passed'))  AS abandonos
 		  FROM competencias c
 		  LEFT JOIN ejercicio_competencias ec ON ec.competencia_id = c.id
 		  LEFT JOIN reales t ON t.cuadernillo_id = ec.cuadernillo_id

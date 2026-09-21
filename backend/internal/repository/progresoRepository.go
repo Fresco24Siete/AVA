@@ -104,17 +104,21 @@ func (r *ProgresoRepository) PorCompetencia(estudiante, curso string) ([]Resumen
 		       COUNT(DISTINCT (a.cuadernillo_id, a.exercise_id)) FILTER (
 		           WHERE a.validation_result = 'passed')  AS resueltos,
 		       COUNT(DISTINCT (a.cuadernillo_id, a.exercise_id)) AS intentados,
-		       -- Solo los errores de intentos en los que el alumno de verdad
-		       -- escribio algo. nbgrader deja un 'raise NotImplementedError' en
-		       -- cada celda de solucion, y recorrer el cuadernillo con
-		       -- Shift+Enter —que es lo que el material pide— lo dispara junto
-		       -- con el AssertionError de la prueba. Contarlos le decia al
-		       -- alumno 'te equivocaste 12 veces' por haber abierto el
-		       -- cuadernillo.
+		       -- Errores de verdad. nbgrader deja un 'raise NotImplementedError'
+		       -- en cada celda de solucion, y recorrer el cuadernillo con
+		       -- Shift+Enter —que es lo que el material pide— lo dispara.
+		       -- Contarlos le decia al alumno 'te equivocaste 12 veces' por
+		       -- haber abierto el cuadernillo.
+		       --
+		       -- Se descarta la FILA del stub, no el intento entero. Descartar
+		       -- el intento era el remedio anterior y se pasaba de largo: como
+		       -- custom.js no vacia el buffer del ejercicio hasta conseguir
+		       -- enviar, un fallo real llega acompanado del stub viejo, y
+		       -- entonces al alumno se le ocultaba tambien su error de verdad.
+		       -- Filtrando por error_type se cuenta exactamente lo que hay que
+		       -- contar, sin depender de con que venga acompanado.
 		       COUNT(e.id) FILTER (
-		           WHERE NOT EXISTS (SELECT 1 FROM attempt_errors s
-		                              WHERE s.attempt_id = a.id
-		                                AND s.error_type = 'NotImplementedError')
+		           WHERE e.error_type <> 'NotImplementedError'
 		       )                                          AS errores
 		FROM exercise_attempts a
 		JOIN ejercicio_competencias ec

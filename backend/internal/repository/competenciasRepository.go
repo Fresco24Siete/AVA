@@ -53,3 +53,23 @@ func (r *CompetenciasRepository) Reemplazar(mapeo map[string]map[string][]string
 
 	return total, tx.Commit()
 }
+
+// DeEjercicio devuelve las competencias que mide un ejercicio concreto.
+//
+// La competencia NO viaja dentro del intento: se resuelve por este par
+// (cuadernillo, ejercicio), que es la clave de negocio real. 'ejercicio_1'
+// existe en las seis semanas, así que el cuadernillo es parte de la clave, no
+// un adorno.
+//
+// Se consulta en la ingesta para poder AVISAR cuando un intento entra sin
+// mapeo. No sirve para rechazarlo: ver el comentario de avisarSiHuerfano en
+// exerciseAttempsService.go.
+func (r *CompetenciasRepository) DeEjercicio(cuadernillo, ejercicio string) ([]string, error) {
+	salida := []string{}
+	err := r.db.Select(&salida,
+		`SELECT competencia_id
+		   FROM ejercicio_competencias
+		  WHERE cuadernillo_id = $1 AND exercise_id = $2
+		  ORDER BY competencia_id`, cuadernillo, ejercicio)
+	return salida, err
+}

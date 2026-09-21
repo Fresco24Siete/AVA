@@ -163,6 +163,7 @@ def limpiar():
         delete from cuadernillo_ratings where course_id like '{PREFIJO}%';
         delete from cuadernillo_notas where course_id like '{PREFIJO}%';
         delete from estudiantes where course_id like '{PREFIJO}%';
+        delete from ejercicio_competencias where cuadernillo_id like '{PREFIJO}%';
     """)
 
 
@@ -567,6 +568,101 @@ def caso_12_estudiantes(tok_doc):
                   f"ejercicio_3={e3}")
 
 
+def caso_13_criterio_plantilla(tok_doc):
+    """Que cuenta como 'solo ejecuto la plantilla' y que no.
+
+    Es la prueba del criterio que se corrigio el 2026-09-21. custom.js acumula
+    los errores del ejercicio y NO vacia el buffer hasta conseguir enviar un
+    intento, asi que el intento en el que el alumno por fin resuelve llega
+    arrastrando el NotImplementedError de cuando ejecuto la plantilla intacta
+    —que es justo lo que el cuadernillo le pide hacer—.
+
+    El criterio viejo ('trae un NotImplementedError -> es plantilla') descartaba
+    esos intentos enteros. Sobre la base de produccion se equivocaba en 41 de 46
+    casos, y el panel del docente mostraba 145 ejercicios resueltos donde habia
+    152. Sin estas pruebas, volver al criterio viejo no rompe nada visible.
+    """
+    STUB = "NotImplementedError"
+    msg = "NotImplementedError: "
+
+    # 1. Aprobado que arrastra el stub viejo. Cuenta: aprobar demuestra que
+    #    escribio algo.
+    http("POST", "/api/exercises/attempts",
+         intento("ejercicio_stub_ok", "2026-09-21T10:00:00.000Z", "passed",
+                 [error_de("ejercicio_stub_ok", "2026-09-21T09:59:00.000Z", STUB, msg)]),
+         token=tokens[A])
+
+    # 2. Plantilla de verdad: fallo y su UNICO error es el stub. No cuenta.
+    http("POST", "/api/exercises/attempts",
+         intento("ejercicio_stub_puro", "2026-09-21T10:01:00.000Z", "failed",
+                 [error_de("ejercicio_stub_puro", "2026-09-21T10:01:00.000Z", STUB, msg)]),
+         token=tokens[A])
+
+    # 3. Fallo real que ademas arrastra el stub. Cuenta: hay un error de verdad.
+    http("POST", "/api/exercises/attempts",
+         intento("ejercicio_stub_mixto", "2026-09-21T10:02:00.000Z", "failed",
+                 [error_de("ejercicio_stub_mixto", "2026-09-21T10:01:30.000Z", STUB, msg),
+                  error_de("ejercicio_stub_mixto", "2026-09-21T10:02:00.000Z")]),
+         token=tokens[A])
+
+    st, f = http("GET", f"/internal/curso/{C1}/estudiante/{A}", token=tok_doc)
+    ej = {e["exercise_id"]: e for e in (f.get("ejercicios") or [])} if isinstance(f, dict) else {}
+
+    e1 = ej.get("ejercicio_stub_ok", {})
+    registrar("13a aprobado que arrastra el stub: cuenta como intento y como resuelto",
+              st == 200 and e1.get("intentos") == 1 and e1.get("resuelto") is True
+              and e1.get("solo_ejecuto_vacio") is False,
+              f"status={st} {e1}")
+
+    e2 = ej.get("ejercicio_stub_puro", {})
+    registrar("13b plantilla de verdad (fallo, solo stub): no cuenta como intento",
+              e2.get("intentos") == 0 and e2.get("solo_ejecuto_vacio") is True,
+              f"{e2}")
+
+    e3 = ej.get("ejercicio_stub_mixto", {})
+    registrar("13c fallo real con el stub pegado: cuenta, y se ve su error de verdad",
+              e3.get("intentos") == 1 and e3.get("solo_ejecuto_vacio") is False
+              and e3.get("ultimo_error") == "AssertionError",
+              f"{e3}")
+
+    # 4. Abandonos por EJERCICIO, no por evento, y quien acaba resolviendo no
+    #    abandono. Necesita mapeo, que es lo unico que mira la seccion de
+    #    competencias.
+    st_map, _ = http("POST", "/internal/competencias",
+                     {CUAD: {"ejercicio_abandonado": ["I3"], "ejercicio_recuperado": ["I3"]}},
+                     token=TOKEN_MAESTRO)
+    for i in range(3):
+        http("POST", "/api/exercises/attempts",
+             intento("ejercicio_recuperado", f"2026-09-21T11:0{i}:00.000Z", "sin_validar",
+                     [error_de("ejercicio_recuperado", f"2026-09-21T11:0{i}:00.000Z")]),
+             token=tokens[A])
+    http("POST", "/api/exercises/attempts",
+         intento("ejercicio_recuperado", "2026-09-21T11:30:00.000Z", "passed"), token=tokens[A])
+    for i in range(2):
+        http("POST", "/api/exercises/attempts",
+             intento("ejercicio_abandonado", f"2026-09-21T12:0{i}:00.000Z", "sin_validar",
+                     [error_de("ejercicio_abandonado", f"2026-09-21T12:0{i}:00.000Z")]),
+             token=tokens[A])
+
+    st, f = http("GET", f"/internal/curso/{C1}/estudiante/{A}", token=tok_doc)
+    comp = {c["competencia_id"]: c for c in (f.get("competencias") or [])} if isinstance(f, dict) else {}
+    i3 = comp.get("I3", {})
+    registrar("13d abandonos cuenta ejercicios, no eventos: 5 cierres de 2 ejercicios "
+              "y uno resuelto al final -> 1",
+              st_map == 200 and st == 200 and i3.get("abandonos") == 1,
+              f"mapeo={st_map} status={st} I3={i3}")
+
+    # 5. Un ejercicio SIN mapeo entra igual: nunca se rechaza telemetria por un
+    #    fallo de operacion del equipo. El aviso va al log, no al alumno.
+    st, _ = http("POST", "/api/exercises/attempts",
+                 intento("ejercicio_sin_mapeo", "2026-09-21T13:00:00.000Z", "passed"),
+                 token=tokens[A])
+    guardado = int(sql1("select count(*) from exercise_attempts "
+                        "where exercise_id='ejercicio_sin_mapeo'")[0])
+    registrar("13e ejercicio sin competencias mapeadas: se acepta y se guarda igual",
+              st == 201 and guardado == 1, f"status={st} guardado={guardado}")
+
+
 def caso_10_paralelo():
     N = 20
     fallos = {A: [], B: []}
@@ -630,6 +726,7 @@ def main():
         caso_8_mi_progreso()
         tok_doc = caso_9_panel_docente()
         caso_12_estudiantes(tok_doc)
+        caso_13_criterio_plantilla(tok_doc)
         caso_10_paralelo()
     finally:
         caso_11_limpieza(ajenos_antes)

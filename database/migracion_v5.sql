@@ -82,16 +82,40 @@ CREATE CONSTRAINT TRIGGER tope_competencias_por_ejercicio
 --
 -- Los intentos que solo ejecutaron la plantilla sin tocarla
 -- (NotImplementedError) no cuentan: no son un intento, son "ejecuté la celda a
--- ver qué pasaba". Es el mismo criterio que usa la ficha del docente, y tienen
--- que coincidir o dos secciones de la misma página se contradicen.
+-- ver qué pasaba".
+--
+-- CORREGIDO antes de aplicar nada (2026-09-21). La primera versión de esta
+-- vista descartaba el intento entero en cuanto llevara un NotImplementedError,
+-- y medido contra los datos reales resultó estar mal el 89 % de las veces.
+--
+-- El motivo está en custom.js: el buffer de errores del ejercicio solo se vacía
+-- cuando se consigue ENVIAR un intento (custom.js:352 y :370). El recorrido que
+-- el propio cuadernillo le pide al alumno —ejecutar las celdas en orden— dispara
+-- el NotImplementedError de la plantilla y lo deja en el buffer; cuando después
+-- escribe su código y ejecuta la prueba, ese intento APROBADO arrastra el stub
+-- viejo. En la base de producción eran 18 intentos aprobados, 16 de ellos sin un
+-- solo error de verdad. De los 46 intentos que el criterio viejo descartaba,
+-- solo 5 eran plantilla: los otros 41 eran trabajo real.
+--
+-- Criterio correcto: es plantilla si NO aprobó Y todos sus errores son
+-- NotImplementedError. Aprobar prueba que escribió algo; un error real
+-- conviviendo con el stub, también.
+--
+-- Este criterio es el mismo que usa EstudiantesRepository.Competencias, y tienen
+-- que coincidir o dos secciones de la misma página se contradicen. NO es el de
+-- Malentendidos(), que descarta en estricto a propósito porque allí la pregunta
+-- es otra: qué concepto explicar, no cuánto cubrió el alumno.
 CREATE OR REPLACE VIEW senales_competencia AS
 WITH reales AS (
     SELECT a.course_id, a.student_id, a.cuadernillo_id, a.exercise_id,
            a.validation_result, a.received_at
       FROM exercise_attempts a
-     WHERE NOT EXISTS (SELECT 1 FROM attempt_errors e
-                        WHERE e.attempt_id = a.id
-                          AND e.error_type = 'NotImplementedError')
+     WHERE a.validation_result = 'passed'
+        OR EXISTS (SELECT 1 FROM attempt_errors e
+                    WHERE e.attempt_id = a.id
+                      AND e.error_type <> 'NotImplementedError')
+        OR NOT EXISTS (SELECT 1 FROM attempt_errors e
+                        WHERE e.attempt_id = a.id)
 )
 SELECT t.course_id,
        t.student_id,
@@ -107,7 +131,21 @@ SELECT t.course_id,
        count(*) FILTER (WHERE t.validation_result = 'failed')               AS fallos,
        -- Un 'sin_validar' es que dejó errores y no llegó a ejecutar la prueba:
        -- se atascó y se rindió. No es lo mismo que fallar.
-       count(*) FILTER (WHERE t.validation_result = 'sin_validar')          AS abandonos,
+       --
+       -- Se cuentan EJERCICIOS abandonados, no eventos: el volcado al cerrar la
+       -- pestaña se dispara cada vez que el alumno cierra, y contar eventos
+       -- repetía el error que el panel del alumno ya corrigió (recargar tres
+       -- veces sumaba tres). Con AbandonosN3 = 3, tres cierres del mismo
+       -- ejercicio bastaban para sacar de N3 a alguien que lo resolvió. Y si
+       -- acabó resolviéndolo, no lo abandonó.
+       count(DISTINCT (t.cuadernillo_id, t.exercise_id)) FILTER (
+           WHERE t.validation_result = 'sin_validar'
+             AND NOT EXISTS (SELECT 1 FROM reales r
+                              WHERE r.course_id  = t.course_id
+                                AND r.student_id = t.student_id
+                                AND r.cuadernillo_id = t.cuadernillo_id
+                                AND r.exercise_id    = t.exercise_id
+                                AND r.validation_result = 'passed'))        AS abandonos,
        min(t.received_at)                                                   AS primer_intento,
        max(t.received_at)                                                   AS ultimo_intento
   FROM reales t

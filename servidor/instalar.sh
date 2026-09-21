@@ -415,12 +415,23 @@ else
     # aparte. Es idempotente: se puede correr siempre.
     info "aplicando las migraciones…"
     fallo_migracion=0
-    for m in database/migracion_v3.sql database/migracion_v4.sql; do
+    # v5 (competencias: en_alcance, tope por ejercicio, vista de señales y
+    # cortes). Hoy NO la lee nadie: el avance por competencia que ya muestra el
+    # panel sale de tablas de schema_v2. Entra por adelantado para que, cuando
+    # llegue el código que sí la usa, el despliegue no quede a medias.
+    #
+    # No puede perder telemetría: no toca exercise_attempts ni attempt_errors.
+    # Pero sí cambia un comportamiento, y conviene saberlo: instala el trigger
+    # que limita a 2 las competencias por ejercicio, y como cargar-competencias
+    # mete todos los cuadernillos en una sola transacción, un ejercicio con tres
+    # etiquetas haría fallar la carga ENTERA, no solo ese ejercicio. Hoy el
+    # mapeo cumple (32 con una, 15 con dos), así que está latente.
+    for m in database/migracion_v3.sql database/migracion_v4.sql database/migracion_v5.sql; do
         [ -f "$m" ] || continue
         docker exec -i postgres-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -q -v ON_ERROR_STOP=1' \
             < "$m" >/dev/null 2>&1 || { mal "falló $m"; fallo_migracion=1; }
     done
-    [ "$fallo_migracion" -eq 0 ] && ok "esquema al día (v3 y v4)"
+    [ "$fallo_migracion" -eq 0 ] && ok "esquema al día (v3, v4 y v5)"
 fi
 
 

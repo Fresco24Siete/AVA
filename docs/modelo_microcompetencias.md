@@ -1,7 +1,10 @@
 # Modelo de microcompetencias y nivel N1/N2/N3 (Fase 1)
 
-Diseño propuesto. **La migración no se ha aplicado a producción**: solo se ha
-probado en una base desechable (ver §6).
+**La migración no se ha aplicado a producción todavía**: solo probada en bases
+desechables (ver §7). Desde el 2026-09-21 está en el bucle de migraciones de
+`servidor/instalar.sh`, así que **el próximo despliegue la aplica**. Es aditiva
+—no toca `exercise_attempts` ni `attempt_errors`— y se comprobó que se puede
+aplicar repetidas veces sin efecto.
 
 ---
 
@@ -83,13 +86,71 @@ Amplía `errores_por_competencia` con lo que faltaba para poder graduar:
 | `resueltos` | De esos, cuántos pasó |
 | `intentos` | Ejecuciones reales de celda de prueba |
 | `fallos` | Las que dieron `failed` |
-| `abandonos` | Las que dieron `sin_validar`: dejó errores y no volvió |
+| `abandonos` | **Ejercicios** que dejó en `sin_validar` y nunca resolvió |
 | `primer_intento` / `ultimo_intento` | Para ver evolución |
 
 Los intentos que solo ejecutaron la plantilla sin tocarla
-(`NotImplementedError`) **no cuentan**: no son un intento. Es el mismo criterio
-que usa la ficha del docente; si no coincidieran, dos secciones de la misma
-página se contradirían.
+(`NotImplementedError`) **no cuentan**: no son un intento.
+
+Ese criterio rige, con la misma definición, en cuatro sitios — y tiene que ser
+la misma, porque los cuatro alimentan números que se ven juntos:
+
+| Dónde | Qué pinta |
+|---|---|
+| `senales_competencia` (esta vista) | el nivel N1/N2/N3 |
+| `EstudiantesRepository.Competencias` | «Cómo va por competencia» |
+| `EstudiantesRepository.Ficha` | «Su recorrido, ejercicio por ejercicio» |
+| `intentosReales` (panel del curso) | listado, en riesgo, por ejercicio |
+
+Las dos del medio las devuelve el **mismo handler** y se pintan **seguidas en
+la misma página**: si divergen, la pantalla se contradice a sí misma sobre el
+mismo ejercicio.
+
+`Malentendidos()` es la única excepción, y es deliberada: ver más abajo.
+
+#### Corrección del 2026-09-21: qué es «plantilla» exactamente
+
+La primera versión de esta vista descartaba el intento entero en cuanto
+arrastrara un `NotImplementedError`. Medido contra la base de producción,
+**ese criterio se equivocaba el 89 % de las veces**, y por un motivo que está
+en `custom.js`, no en la base.
+
+El buffer de errores de un ejercicio solo se vacía cuando se consigue **enviar**
+un intento (`custom.js:352` y `:370`). El recorrido que el propio cuadernillo le
+pide al alumno —ejecutar las celdas en orden— dispara el `NotImplementedError`
+de la plantilla y lo deja en el buffer. Cuando después escribe su código y
+ejecuta la prueba, **ese intento, que aprueba, arrastra el stub viejo**.
+
+Lo que el criterio viejo descartaba, sobre los datos reales:
+
+| | intentos |
+|---|---:|
+| Aprobados tirados a la basura | 18 (16 sin un solo error de verdad) |
+| Fallos reales que además traían el stub | 23 |
+| Plantilla de verdad | **5** |
+
+Y en el panel del docente, que ya usaba ese criterio: **145 ejercicios
+resueltos mostrados donde había 152**. Siete resueltos invisibles, repartidos
+entre cinco estudiantes.
+
+El criterio correcto, ya aplicado aquí y en
+`EstudiantesRepository.Competencias`: es plantilla si **no aprobó** y **todos**
+sus errores son `NotImplementedError`. Aprobar prueba que escribió algo; un
+error real conviviendo con el stub, también.
+
+`Malentendidos()` en `panelDocenteRepository.go` sigue usando el criterio
+estricto **a propósito**, y no debe alinearse con este: allí la pregunta es
+«¿qué concepto hay que explicar?», y un `AssertionError` que es consecuencia de
+una celda vacía no es un malentendido. Aquí la pregunta es «¿cuánto cubrió?».
+
+#### `abandonos` cuenta ejercicios, no eventos
+
+También corregido el mismo día. El volcado al cerrar la pestaña se dispara cada
+vez que el alumno cierra, así que contar eventos repetía el error que el panel
+del alumno ya había corregido («recargar la página tres veces sumaba tres»).
+Con `AbandonosN3 = 3`, **tres cierres del mismo ejercicio bastaban para sacar
+de N3 a alguien que acabó resolviéndolo**. Ahora se cuentan ejercicios
+distintos dejados en `sin_validar` que nunca llegaron a `passed`.
 
 ### 2.4 Tabla `corte_competencia`
 
@@ -213,9 +274,53 @@ Bajar el mínimo a 1 daría un nivel a todo el mundo y sería un número inventa
 
 ---
 
-## 4. Lo que el backend tiene que añadir (Fase 3-4)
+## 4. Instrumentación (Fase 3) — hecho
 
-No entra en esta fase, pero queda dicho para que el diseño se entienda entero:
+La Fase 3 pedía dos cosas: que `custom.js` resolviera la microcompetencia de
+cada celda calificable y la metiera en el payload, y que el backend la validara
+contra el catálogo al ingerir.
+
+**La primera se resolvió de otra manera, y es la decisión de §1.** La
+competencia no viaja con el intento: se resuelve por JOIN sobre el par
+`(cuadernillo_id, exercise_id)`. Así que no hubo nada que añadir al payload ni
+a `custom.js`. La cadena se verificó carácter a carácter, de punta a punta:
+
+```
+constructor.py    grade_id = "test_ejercicio_1"
+custom.js:59      quita "test_"         -> "ejercicio_1"
+metrics_bridge    no lo toca            -> "ejercicio_1"
+exercise_attempts .exercise_id          == ejercicio_competencias.exercise_id
+```
+
+Y contra la base de producción: de todos los intentos recogidos, **uno solo**
+no encuentra competencia, y es la fila conocida de cuadernillo `Fabio` (un
+alumno trabajando sobre una copia renombrada). El JOIN encaja.
+
+**La segunda sí hacía falta, y no como estaba escrita.** No hay tabla de
+ejercicios contra la que validar —el esquema declara a propósito que ejercicio
+y cuadernillo no son entidades propias— y lo único parecido a un catálogo es
+`ejercicio_competencias`. Usarlo para **rechazar** sería el peor error posible:
+un ejercicio se queda sin mapeo por un fallo de operación (nadie ejecutó
+`cargar-competencias` tras publicar una semana nueva), y rechazar convertiría
+un olvido del equipo en pérdida permanente del trabajo de un estudiante, que
+además no se enteraría.
+
+Así que se valida para **avisar**, no para rechazar
+(`service.avisarSiHuerfano`):
+
+- el intento se guarda siempre y responde 201, como antes;
+- si el par no tiene mapeo, queda una línea en el log del backend;
+- se avisa **una vez por par**, no una por intento: un cuadernillo sin mapeo
+  generaba cientos de líneas al día y el aviso se volvía ruido;
+- un fallo al consultar no se propaga: el intento ya está guardado.
+
+Antes esto fallaba en silencio absoluto. El intento se guardaba, el alumno
+recibía 201, y después desaparecía de todo análisis por competencia porque el
+JOIN es INNER. El handler ni siquiera importaba el paquete `log`. La fila de
+`Fabio` lleva desde el 2026-09-14 en la base y nadie lo supo hasta mirarlo a
+mano.
+
+## 5. Lo que falta (Fase 4)
 
 1. `service.NivelCompetencia(senales) → (nivel *int, motivo string)` con los
    umbrales de §3.3.
@@ -225,9 +330,17 @@ No entra en esta fase, pero queda dicho para que el diseño se entienda entero:
 4. En el panel: el nivel al lado de la barra que ya existe, y «sin evidencia
    suficiente» cuando `vistos < 3` — nunca un N1 fingido.
 
+Con un cuidado que hay que tener presente al pintar: los dos JOIN de
+`senales_competencia` son INNER, así que una competencia que el alumno no ha
+tocado **no produce fila**, no produce una fila con nivel `NULL`. Son cosas
+distintas para quien dibuja la pantalla, y `vistos = 0` es el caso más común al
+principio del semestre. El consumidor tiene que partir del catálogo de
+competencias y hacer LEFT JOIN contra la vista, que es exactamente lo que ya
+hace `EstudiantesRepository.Competencias`.
+
 ---
 
-## 5. Lo que este modelo NO hace
+## 6. Lo que este modelo NO hace
 
 - **No mide mCP88 (I7).** El encargo dice que no es calificable: se resuelve con
   celdas markdown y una fuente externa. Sin intentos no hay fallos, y sin fallos
@@ -241,7 +354,7 @@ No entra en esta fase, pero queda dicho para que el diseño se entienda entero:
 
 ---
 
-## 6. Pruebas hechas
+## 7. Pruebas hechas
 
 En una base **desechable**, no en producción:
 
@@ -253,3 +366,47 @@ En una base **desechable**, no en producción:
 - La vista cuenta bien: un ejercicio con dos etiquetas produce fila en las dos,
   y un `sin_validar` sale como abandono, no como fallo.
 - Contenedor de prueba eliminado. Producción intacta.
+
+Añadido el 2026-09-21, con los dos criterios corregidos:
+
+- `v5` aplicada **tres veces** seguidas: sigue siendo idempotente.
+- Sembrados los tres casos que motivaron la corrección del stub, la vista los
+  clasifica como debe:
+
+  | Caso sembrado | Esperado | Obtenido |
+  |---|---|---|
+  | Aprobado que arrastra el stub viejo | cuenta como visto y resuelto | ✔ |
+  | Plantilla de verdad (falló, solo stub) | no cuenta ni como visto | ✔ |
+  | Fallo real que además trae el stub | cuenta como visto y fallo | ✔ |
+
+  Resultado: `vistos 2, resueltos 1, fallos 1`. Con el criterio viejo habría
+  sido `vistos 0, resueltos 0` — o sea, no medía nada.
+
+- Sembrado el caso de abandonos: un ejercicio cerrado **tres veces** y resuelto
+  al final, más otro cerrado dos veces y nunca resuelto. Da `abandonos = 1`,
+  no 5.
+- Ingesta probada de punta a punta contra el backend real: un par con mapeo
+  entra sin avisos; un par huérfano enviado **tres veces** produce **un solo**
+  aviso en el log; un segundo par huérfano produce el suyo. Los cinco intentos
+  quedaron guardados: no se pierde telemetría.
+- `go build`, `go vet`, `go test ./...` y la suite de `custom.js` (15/15) en
+  verde tras los cambios.
+
+Y, porque nada de lo anterior era una prueba automática, **el criterio ahora
+está cubierto por la suite de integración** (`caso_13_criterio_plantilla` en
+`backend/tests/telemetria/prueba_backend.py`), que corre contra un backend y
+una base vivos:
+
+| Caso | Comprueba |
+|---|---|
+| 13a | Aprobado con el stub pegado → cuenta como intento y como resuelto |
+| 13b | Plantilla de verdad → no cuenta como intento, sale «solo ejecutó la celda vacía» |
+| 13c | Fallo real con el stub pegado → cuenta, y se ve su `AssertionError` |
+| 13d | Cinco cierres de dos ejercicios, uno resuelto al final → `abandonos = 1` |
+| 13e | Ejercicio sin mapeo → 201 y se guarda igual |
+
+**56/56 en verde**, incluidos los doce casos anteriores: el cambio de criterio
+en `Ficha()` no movió ninguno de los números que ya se comprobaban.
+
+Sin estas pruebas, volver al criterio viejo no rompía nada visible — que es
+exactamente como llegó a producción la primera vez.
