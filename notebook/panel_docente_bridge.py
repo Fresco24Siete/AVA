@@ -234,6 +234,26 @@ async def _backend(ruta):
                       "del disco y del intercambio está al día.")
 
 
+async def _backend_post(ruta, cuerpo):
+    """POST al backend con el token de docente. Devuelve (json, aviso)."""
+    if not TOKEN_DOCENTE:
+        return None, ("Esta parte no está configurada en el servidor: falta la "
+                      "credencial con la que el panel habla con la analítica.")
+    try:
+        resp = await AsyncHTTPClient().fetch(HTTPRequest(
+            f"{API}{ruta}", method="POST",
+            body=json.dumps(cuerpo).encode("utf-8"),
+            headers={"Authorization": f"Bearer {TOKEN_DOCENTE}",
+                     "Content-Type": "application/json"},
+            # Más holgado que los 4 s de la lectura: congelar un corte recorre a
+            # todo el grupo, una consulta por persona. Con 16 alumnos sobra.
+            request_timeout=30, connect_timeout=2))
+        return json.loads(resp.body.decode("utf-8")), None
+    except Exception as err:
+        log.warning("[panel-docente] no se pudo enviar a %s: %s", ruta, err)
+        return None, "No se pudo guardar. Inténtalo de nuevo en un momento."
+
+
 # --- Tiempo ----------------------------------------------------------------------
 
 def _epoch_exchange(ts):
@@ -973,6 +993,25 @@ ESTILO = f"""
  .comp-d{{font-size:13px;color:{GRIS};margin-top:9px;line-height:1.45}}
  .barra{{height:7px;background:#e9ecef;border-radius:4px;overflow:hidden}}
  .relleno{{height:100%;border-radius:4px}}
+ /* El nivel va arriba del todo y en grande porque es la conclusión; el resto
+    de la tarjeta son los números en los que se apoya. "Sin medir" se pinta
+    en gris y sin recuadro a propósito: tiene que leerse como una ausencia,
+    no como un cuarto nivel por debajo de N1. */
+ .nivel{{display:inline-block;font-size:19px;font-weight:700;line-height:1;
+   padding:5px 10px;border-radius:6px;color:#fff;margin-bottom:8px}}
+ .nivel.sinmedir{{background:none;color:#8b94a1;font-size:15px;font-weight:600;
+   padding:5px 0}}
+ .nivel-por{{font-size:13px;color:{GRIS};margin:-4px 0 10px;line-height:1.4}}
+ .semanas{{margin:0 0 14px;font-size:14px}}
+ .semanas a{{display:inline-block;padding:3px 9px;margin:0 5px 5px 0;
+   border:1px solid {BORDE};border-radius:999px;text-decoration:none;
+   color:{TINTA};background:#fff}}
+ .semanas a.puesto{{background:{TINTA};color:#fff;border-color:{TINTA}}}
+ /* Primer botón del panel: hasta ahora esta página solo leía. */
+ .btn{{padding:8px 14px;border:0;border-radius:6px;background:{TINTA};color:#fff;
+   font-size:14px;font-weight:600;cursor:pointer;margin-left:6px}}
+ .btn:hover{{opacity:.9}}
+ .btn:disabled{{opacity:.5;cursor:default}}
  .volver{{display:inline-block;margin-bottom:14px}}
 """
 
@@ -1053,13 +1092,70 @@ sale.</p>
 {_seccion_salud(datos)}
 {_seccion_competencias(datos)}
 {_guia_competencias((datos or {}).get('competencias', []))}
+
+<h2>Congelar un corte</h2>
+<p class="sub2">El nivel que ves es siempre el de <b>hoy</b>: cambia cada vez que
+alguien entrega. Un corte guarda una foto del grupo con la fecha, para poder
+comparar dos momentos del semestre. Guarda también con qué umbrales se calculó,
+así que si mañana se ajustan, el corte viejo se puede recalcular en vez de
+quedarse mintiendo.</p>
+<p class="sub2">Ponle un nombre que distinga el momento: <b>pre</b>, <b>post</b>,
+<b>corte 1</b>… Repetir un nombre <b>sobrescribe</b> ese corte.</p>
+<div class="caja">
+  <label for="corte-etiqueta">Nombre del corte:</label>
+  <input id="corte-etiqueta" type="text" maxlength="60" placeholder="pre"
+         style="padding:7px 10px;border:1px solid {BORDE};border-radius:6px;
+                font-size:14px;min-width:180px">
+  <button id="corte-btn" class="btn">Congelar el corte de hoy</button>
+  <!-- aria-live: el resultado se escribe por JS y sin esto un lector de
+       pantalla no anuncia nada. Quien no ve el span pulsa el botón y no se
+       entera de si se guardó. -->
+  <span id="corte-dice" class="sub2" style="margin-left:10px"
+        role="status" aria-live="polite"></span>
+</div>
+<script>
+(function () {{
+  var btn = document.getElementById("corte-btn");
+  var dice = document.getElementById("corte-dice");
+  if (!btn) return;
+  // El token va en la CABECERA. En el cuerpo no autentica: Jupyter mira la
+  // query y las cabeceras, nunca el JSON, y devuelve un 403 sin explicación.
+  function xsrf() {{
+    var m = document.cookie.match(/\\b_xsrf=([^;]+)/);
+    return m ? decodeURIComponent(m[1]) : "";
+  }}
+  btn.addEventListener("click", function () {{
+    var etiqueta = (document.getElementById("corte-etiqueta").value || "").trim();
+    if (!etiqueta) {{ dice.textContent = "Ponle un nombre al corte."; return; }}
+    btn.disabled = true;
+    dice.textContent = "Congelando…";
+    fetch("{raiz}/panel-docente/corte", {{
+      method: "POST",
+      credentials: "same-origin",
+      headers: {{"Content-Type": "application/json", "X-XSRFToken": xsrf()}},
+      body: JSON.stringify({{etiqueta: etiqueta}})
+    }}).then(function (r) {{ return r.json().then(function (j) {{
+        return {{ok: r.ok, cuerpo: j}}; }}); }})
+      .then(function (res) {{
+        btn.disabled = false;
+        dice.textContent = res.ok
+          ? ("Corte «" + etiqueta + "» guardado: " + res.cuerpo.filas + " filas.")
+          : (res.cuerpo.error || "No se pudo guardar.");
+      }})
+      .catch(function () {{
+        btn.disabled = false;
+        dice.textContent = "No se pudo guardar. Inténtalo otra vez.";
+      }});
+  }});
+}})();
+</script>
 """
     return _pagina("Tu curso", cuerpo)
 
 
 # --- Ficha de un estudiante --------------------------------------------------------
 
-def _html_ficha(base_url, sid, datos_panel, ficha, historial, aviso):
+def _html_ficha(base_url, sid, datos_panel, ficha, historial, aviso, semana=""):
     raiz = base_url.rstrip("/")
     persona = next((e for e in (datos_panel or {}).get("estudiantes", [])
                     if e.get("student_id") == sid), {})
@@ -1142,11 +1238,17 @@ def _html_ficha(base_url, sid, datos_panel, ficha, historial, aviso):
         con_actividad = [c for c in comps if c.get("ejercicios_vistos")]
         sin_tocar = [c for c in comps
                      if not c.get("ejercicios_vistos") and c.get("ejercicios_disenados")]
+        # Con un filtro puesto, "no ha intentado ningún ejercicio" es falso: lo
+        # cierto es "en esta semana". Y el recorrido de más abajo, que NO va
+        # filtrado, lo desmentiría en la misma página.
+        donde = f" en {html.escape(semana.replace('_', ' '))}" if semana else ""
         if not con_actividad:
             if sin_tocar:
                 return ('<div class="caja vacia">Todavía no ha intentado ningún '
-                        'ejercicio, así que no hay nada que medir por competencia.</div>')
-            return '<div class="caja vacia">Sin datos de competencias.</div>'
+                        f'ejercicio{donde}, así que no hay nada que medir por '
+                        'competencia.</div>')
+            return (f'<div class="caja vacia">Sin datos de competencias{donde}.'
+                    '</div>')
 
         tarjetas = ""
         for c in con_actividad:
@@ -1168,11 +1270,31 @@ def _html_ficha(base_url, sid, datos_panel, ficha, historial, aviso):
             if faltan > 0:
                 detalle += f' · <span class="tenue">{faltan} sin tocar</span>'
 
+            # El nivel lo calcula el backend (service.NivelCompetencia): aquí
+            # solo se pinta. `nivel` viene a null cuando no hay evidencia
+            # suficiente, y eso NO es un N1 — es que no se sabe. Pintarlo como
+            # si fuera el nivel más bajo sería mentir sobre el estudiante.
+            nivel = c.get("nivel")
+            motivo = html.escape(c.get("motivo_nivel", ""))
+            if nivel:
+                tinte = {3: VERDE, 2: AMBAR}.get(nivel, ROJO)
+                insignia = (f'<div class="nivel" style="background:{tinte}">'
+                            f'N{nivel}</div>')
+            else:
+                insignia = '<div class="nivel sinmedir">Sin medir</div>'
+                # La barra se apaga a gris cuando no hay nivel. Con dos de dos
+                # resueltos salía verde al 100 % justo debajo de «Sin medir», y
+                # una barra llena se lee como un veredicto: exactamente lo que
+                # aquí no hay.
+                color = "#c9ced6"
+
             tarjetas += (
                 f'<div class="comp"><div class="comp-id">'
                 f'{html.escape(c["competencia_id"])} · {vistos} '
                 f'ejercicio{"" if vistos == 1 else "s"} trabajado'
                 f'{"" if vistos == 1 else "s"}</div>'
+                f'{insignia}'
+                f'<div class="nivel-por">{motivo}</div>'
                 f'<div class="comp-e"><b>{resueltos}</b> de {vistos} '
                 f'resuelto{"" if vistos == 1 else "s"}</div>'
                 f'<div class="barra"><div class="relleno" '
@@ -1188,6 +1310,32 @@ def _html_ficha(base_url, sid, datos_panel, ficha, historial, aviso):
         return f'<div class="comps">{tarjetas}</div>{resto}'
 
     competencias = _tarjetas_competencia((ficha or {}).get("competencias") or [])
+
+    # Filtro por semana. Las semanas salen del recorrido (que NO va filtrado),
+    # no de una lista fija: así aparecen solas cuando el docente publica una
+    # nueva y no hay una segunda lista que mantener.
+    #
+    # Aviso que el propio panel da: una semana aporta dos o tres ejercicios por
+    # competencia, así que casi todo saldrá «sin medir». No es un fallo del
+    # filtro, es que un nivel de una semana suelta no significa nada. Sirve
+    # para mirar la actividad de esa semana.
+    semanas = sorted({e.get("cuadernillo_id") for e in ejercicios
+                      if e.get("cuadernillo_id")})
+    if semanas:
+        enlace = f'{raiz}/panel-docente/estudiante/{urllib.parse.quote(sid, safe="")}'
+        fichas_semana = (f'<a href="{enlace}" '
+                         f'class="{"" if semana else "puesto"}">Todo el curso</a>')
+        for w in semanas:
+            fichas_semana += (
+                f'<a href="{enlace}?semana={urllib.parse.quote(w, safe="")}" '
+                f'class="{"puesto" if semana == w else ""}">'
+                f'{html.escape(w.replace("_", " "))}</a>')
+        nota = ('' if not semana else
+                '<span class="tenue">· una sola semana casi nunca da evidencia '
+                'suficiente para un nivel</span>')
+        filtro_semana = f'<p class="semanas">{fichas_semana} {nota}</p>'
+    else:
+        filtro_semana = ""
 
     recorrido = (_desplegables(
         _grupos_por_cuadernillo(ejercicios, "cuadernillo_id", activo), activo,
@@ -1209,6 +1357,12 @@ def _html_ficha(base_url, sid, datos_panel, ficha, historial, aviso):
 intentar</b>, cuántos resolvió. Un <b>abandono</b> es que dejó errores sin
 llegar a ejecutar la celda de prueba: se atascó y no volvió. No es lo mismo que
 fallar, y suele ser lo que más conviene mirar.</p>
+<p class="sub2"><b>N3</b> resuelve casi todo lo que intenta, con pocos fallos y
+sin rendirse · <b>N2</b> resuelve, pero le cuesta o deja cosas a medias ·
+<b>N1</b> no llega a resolver la mayoría · <b>Sin medir</b> es que todavía no
+hay de dónde: con tan pocos ejercicios intentados un nivel sería ruido, y eso
+<b>no</b> es lo mismo que estar en N1. Cada tarjeta dice cuántos le faltan.</p>
+{filtro_semana}
 {competencias}
 {_guia_competencias((ficha or {}).get('competencias') or [])}
 <h2>Su recorrido, ejercicio por ejercicio</h2>
@@ -1232,13 +1386,65 @@ class FichaHandler(_BaseHandler):
     async def get(self, sid):
         sid = urllib.parse.unquote(sid)
         curso = urllib.parse.quote(CURSO, safe="")
+        # ?semana=semana_03 acota el desglose por competencia a esa semana.
+        # Se filtra antes de mandarlo: el backend lo mete en un WHERE, y un
+        # identificador de cuadernillo no tiene por qué traer nada más que esto.
+        semana = (self.get_argument("semana", "") or "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", semana or "x"):
+            semana = ""
+        ruta = f"/internal/curso/{curso}/estudiante/{urllib.parse.quote(sid, safe='')}"
+        if semana:
+            ruta += "?cuadernillo=" + urllib.parse.quote(semana, safe="")
         datos, aviso = await _backend(f"/internal/curso/{curso}/panel")
-        ficha, aviso2 = await _backend(
-            f"/internal/curso/{curso}/estudiante/{urllib.parse.quote(sid, safe='')}")
+        ficha, aviso2 = await _backend(ruta)
         historial, _ = _historial()
         self.set_header("Content-Type", "text/html; charset=utf-8")
         self.finish(_html_ficha(self.settings.get("base_url", "/"), sid, datos, ficha,
-                                historial, aviso or aviso2))
+                                historial, aviso or aviso2, semana))
+
+
+class CorteHandler(_BaseHandler):
+    """POST: congela el nivel del grupo tal y como está hoy.
+
+    Es el primer POST de este panel, que hasta ahora solo leía. La protección
+    es la misma que usa admin_bridge: @web.authenticated exige sesión, y el
+    XSRF lo comprueba la clase base de Jupyter con la cabecera X-XSRFToken que
+    manda el navegador. El token NO vale en el cuerpo: Jupyter mira la query y
+    las cabeceras, nunca el JSON, y responde un 403 sin explicación.
+    """
+
+    @web.authenticated
+    async def post(self):
+        try:
+            cuerpo = json.loads(self.request.body.decode("utf-8") or "{}")
+        except ValueError:
+            self.set_status(400)
+            self.finish(json.dumps({"error": "no se entendió la petición"}))
+            return
+        # Un JSON válido que no sea un objeto (una lista, un número) reventaba
+        # aquí con AttributeError y Tornado lo servía como un 500 con traza en
+        # el log. Un error del cliente no debe leerse como un fallo del
+        # servidor. Mismo criterio que metrics_bridge.py.
+        if not isinstance(cuerpo, dict):
+            self.set_status(400)
+            self.finish(json.dumps({"error": "no se entendió la petición"}))
+            return
+        etiqueta = (cuerpo.get("etiqueta") or "").strip()
+        if not etiqueta:
+            self.set_status(400)
+            self.finish(json.dumps({"error": "ponle un nombre al corte"},
+                                   ensure_ascii=False))
+            return
+
+        curso = urllib.parse.quote(CURSO, safe="")
+        datos, aviso = await _backend_post(f"/internal/curso/{curso}/corte",
+                                           {"etiqueta": etiqueta})
+        self.set_header("Content-Type", "application/json; charset=utf-8")
+        if datos is None:
+            self.set_status(502)
+            self.finish(json.dumps({"error": aviso}, ensure_ascii=False))
+            return
+        self.finish(json.dumps(datos, ensure_ascii=False))
 
 
 def load_jupyter_server_extension(nbapp):
@@ -1250,6 +1456,7 @@ def load_jupyter_server_extension(nbapp):
     nbapp.web_app.add_handlers(".*$", [
         (raiz + "/panel-docente", PanelDocenteHandler),
         (raiz + "/panel-docente/estudiante/([^/]+)", FichaHandler),
+        (raiz + "/panel-docente/corte", CorteHandler),
     ])
     log.info("[panel_docente_bridge] listo: panel del curso en %s/panel-docente",
              raiz)

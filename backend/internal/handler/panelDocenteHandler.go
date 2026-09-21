@@ -1,12 +1,16 @@
 package handler
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"regexp"
+	"strings"
+	"unicode/utf8"
 
 	"proxy-go/internal/middleware"
 	"proxy-go/internal/repository"
+	"proxy-go/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -137,14 +141,187 @@ func (h *PanelDocenteHandler) FichaHandler(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "no se pudo leer la ficha"})
 		return
 	}
+	// Acota a una semana ("?cuadernillo=semana_03"); vacío = todo el curso.
+	// Se valida con el mismo patrón que el curso porque es del mismo tipo:
+	// un identificador corto que acaba dentro de un WHERE.
+	cuadernillo := c.Query("cuadernillo")
+	if cuadernillo != "" && !cursoValido.MatchString(cuadernillo) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cuadernillo no válido"})
+		return
+	}
+
 	// El desglose por competencia de ESTA persona. Si falla no se tumba la
 	// ficha: el recorrido ejercicio a ejercicio sigue siendo util, y el panel
 	// ya sabe pintar la seccion vacia.
-	competencias, err := h.estudiantes.Competencias(curso, estudiante)
+	competencias, err := h.estudiantes.Competencias(curso, estudiante, cuadernillo)
 	if err != nil {
 		log.Printf("[panel] competencias de %s: %v", estudiante, err)
 		competencias = nil
 	}
+	ponerNivel(competencias)
+
 	c.JSON(http.StatusOK, gin.H{"curso_id": curso, "student_id": estudiante,
-		"ejercicios": ejercicios, "competencias": competencias})
+		"cuadernillo": cuadernillo,
+		"ejercicios":  ejercicios, "competencias": competencias})
+}
+
+// ponerNivel rellena el nivel N1/N2/N3 de cada competencia.
+//
+// Se calcula aquí y no en SQL porque los umbrales tienen que poder ajustarse
+// sin migrar la base (ver service.NivelCompetencia y
+// docs/modelo_microcompetencias.md §3).
+//
+// Recorre TODAS las filas, incluidas las que no tienen actividad: ahí
+// NivelCompetencia devuelve nil con el motivo «sin evidencia suficiente», que
+// es justo lo que el panel necesita para no inventarse un N1. Es el caso más
+// común al empezar el semestre, no un caso raro.
+//
+// Las competencias fuera de alcance no reciben nivel NUNCA, por muchas señales
+// que tengan. El AVA solo mide con trazas de actividad, y mCC85 no forma parte
+// del diseño mientras que mCA14 y mCA65 se evalúan por autorreporte y
+// coevaluación: un nivel calculado ahí a partir de fallos no mide la
+// competencia, mide otra cosa.
+//
+// Y no es hipotético: los seis ejercicios etiquetados con I5 (mCA14) llevan
+// TAMBIÉN la etiqueta I3, así que su tarjeta sería una recopia de un subconjunto
+// de las señales de I3 presentada como una competencia distinta. Pintarla con un
+// N3 verde sería afirmar algo que este sistema no puede saber, y al congelar un
+// corte ese número entraría en la evidencia del estudio sin forma de
+// distinguirlo de los legítimos.
+//
+// El motivo es distinto del de «sin evidencia suficiente» a propósito: aquel
+// dice «todavía no sé», este dice «esto no se mide así». Confundirlos haría
+// pensar que basta con que el alumno trabaje más.
+func ponerNivel(comps []repository.CompetenciaDeEstudiante) {
+	for i := range comps {
+		// nil = todavía no se sabe (falta la migración v5). No se da nivel
+		// igualmente, pero el motivo dice la verdad en vez de inventar una
+		// explicación pedagógica para lo que es un despliegue a medias.
+		if comps[i].EnAlcance == nil {
+			comps[i].Nivel = nil
+			comps[i].Motivo = "el nivel no está disponible todavía en este servidor"
+			continue
+		}
+		if !*comps[i].EnAlcance {
+			comps[i].Nivel = nil
+			comps[i].Motivo = "no se mide con trazas de actividad: " +
+				"esta competencia se evalúa por autorreporte y coevaluación"
+			continue
+		}
+		nivel, motivo := service.NivelCompetencia(service.SenalesCompetencia{
+			Vistos:    comps[i].Vistos,
+			Resueltos: comps[i].Resueltos,
+			Fallos:    comps[i].Fallos,
+			Abandonos: comps[i].Abandonos,
+		})
+		comps[i].Nivel = nivel
+		comps[i].Motivo = motivo
+	}
+}
+
+// CorteRequest es lo que manda el docente al congelar un corte.
+type CorteRequest struct {
+	// 'pre', 'post', 'corte 1'… Es la única forma de comparar dos momentos, así
+	// que se exige: un corte sin etiqueta no se puede contrastar con nada.
+	Etiqueta string `json:"etiqueta"`
+}
+
+// CorteHandler responde a POST /internal/curso/:curso/corte: congela el nivel
+// de todo el grupo tal y como está hoy.
+//
+// Existe porque el nivel que se ve en pantalla es siempre el de HOY, y el
+// estudio pre/post necesita poder decir «así estaba el grupo el 15 de
+// septiembre». Una vista no da eso.
+//
+// Lo escribe el docente con una acción explícita, nunca un GET: un efecto
+// secundario dentro de una consulta de lectura sería imposible de auditar
+// después, y aquí lo que se guarda es evidencia de una investigación.
+//
+// Se guarda el nivel JUNTO CON las señales y los umbrales que lo produjeron.
+// Si mañana se ajustan los umbrales, un corte viejo se puede recalcular en vez
+// de quedarse mintiendo con un número que ya no significa lo mismo.
+func (h *PanelDocenteHandler) CorteHandler(c *gin.Context) {
+	curso := c.Param("curso")
+	if !cursoValido.MatchString(curso) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "curso no válido"})
+		return
+	}
+	if !middleware.CursoAutorizado(c, curso) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ese curso no es el tuyo"})
+		return
+	}
+
+	var input CorteRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Sintaxis inválida en el cuerpo JSON"})
+		return
+	}
+	input.Etiqueta = strings.TrimSpace(input.Etiqueta)
+	if input.Etiqueta == "" {
+		c.JSON(http.StatusBadRequest,
+			gin.H{"error": "hace falta una etiqueta para el corte, por ejemplo 'pre' o 'post'"})
+		return
+	}
+	// Caracteres, no bytes: el formulario del panel limita con maxlength, que
+	// cuenta caracteres. Con len() una etiqueta de 60 con tildes se podía
+	// teclear entera y el servidor la rechazaba diciendo que pasaba de 60
+	// —contradiciendo lo que el docente acababa de contar en pantalla—.
+	if utf8.RuneCountInString(input.Etiqueta) > 60 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "la etiqueta no puede pasar de 60 caracteres"})
+		return
+	}
+
+	gente, err := h.estudiantes.Listar(curso)
+	if err != nil {
+		log.Printf("[corte] listar %s: %v", curso, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "no se pudo leer el listado del curso"})
+		return
+	}
+
+	// Los mismos umbrales con los que se pintó la pantalla, guardados con el
+	// corte para que sea reproducible.
+	umbrales, _ := json.Marshal(map[string]any{
+		"minimo_evidencia": service.MinimoEvidencia,
+		"cobertura_n3":     service.CoberturaN3,
+		"cobertura_n2":     service.CoberturaN2,
+		"costo_n3":         service.CostoN3,
+		"abandonos_n3":     service.AbandonosN3,
+	})
+
+	filas := []repository.FilaCorte{}
+	for _, p := range gente {
+		if p.Rol == "instructor" || p.Rol == "docente" {
+			continue // el nivel del docente no es un dato del estudio
+		}
+		// Se reutiliza EXACTAMENTE la consulta que alimenta la ficha, y no una
+		// propia: así el corte congela lo mismo que el docente estaba viendo.
+		// Dos consultas distintas para el mismo número acaban divergiendo, y un
+		// corte que no coincide con la pantalla no vale para nada.
+		comps, err := h.estudiantes.Competencias(curso, p.StudentID, "")
+		if err != nil {
+			log.Printf("[corte] competencias de %s: %v", p.StudentID, err)
+			c.JSON(http.StatusInternalServerError,
+				gin.H{"error": "no se pudo calcular el corte; no se guardó nada"})
+			return
+		}
+		ponerNivel(comps)
+		for _, k := range comps {
+			filas = append(filas, repository.FilaCorte{
+				StudentID: p.StudentID, CompetenciaID: k.CompetenciaID,
+				Nivel: k.Nivel, Vistos: k.Vistos, Resueltos: k.Resueltos,
+				Intentos: k.Intentos, Fallos: k.Fallos, Abandonos: k.Abandonos,
+				Umbrales: umbrales,
+			})
+		}
+	}
+
+	guardadas, err := h.estudiantes.GuardarCorte(curso, input.Etiqueta, filas)
+	if err != nil {
+		log.Printf("[corte] guardar %s/%s: %v", curso, input.Etiqueta, err)
+		c.JSON(http.StatusInternalServerError,
+			gin.H{"error": "no se pudo guardar el corte"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "corte congelado",
+		"etiqueta": input.Etiqueta, "filas": guardadas})
 }

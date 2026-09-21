@@ -164,6 +164,7 @@ def limpiar():
         delete from cuadernillo_notas where course_id like '{PREFIJO}%';
         delete from estudiantes where course_id like '{PREFIJO}%';
         delete from ejercicio_competencias where cuadernillo_id like '{PREFIJO}%';
+        delete from corte_competencia where course_id like '{PREFIJO}%';
     """)
 
 
@@ -663,6 +664,146 @@ def caso_13_criterio_plantilla(tok_doc):
               st == 201 and guardado == 1, f"status={st} guardado={guardado}")
 
 
+def caso_14_nivel_y_corte(tok_doc):
+    """El nivel N1/N2/N3 en la ficha, el filtro por semana y el corte.
+
+    Lo que más importa aquí no es que salga un número, es que NO salga cuando
+    no debe: sin evidencia suficiente el nivel va a null, y null tiene que
+    seguir siendo distinguible de N1 al pasar por JSON. Si algún día alguien
+    lo convierte en 0 o en 1 "para simplificar", esta prueba lo caza.
+    """
+    # Mapeo: I3 con cinco ejercicios en dos semanas, I4 con uno solo (para que
+    # se quede por debajo del mínimo de evidencia).
+    http("POST", "/internal/competencias",
+         {CUAD: {"ej_n1": ["I3"], "ej_n2": ["I3"], "ej_n3": ["I3"]},
+          "PRUEBA-semana_09": {"ej_n4": ["I3"], "ej_n5": ["I3"], "ej_solo": ["I4"]}},
+         token=TOKEN_MAESTRO)
+
+    def intentar(ex, resultado, cuad=CUAD, ts="2026-09-21T15:00:00.000Z", errores=None):
+        http("POST", "/api/exercises/attempts",
+             intento(ex, ts, resultado, errores, cuadernillo=cuad, student_id=B),
+             token=tokens[B])
+
+    # I3: resuelve los cinco. Tres con un fallo previo cada uno -> costo 0.6,
+    # por debajo de 2.0, y cobertura 1.00: N3.
+    for ex, cuad in (("ej_n1", CUAD), ("ej_n2", CUAD), ("ej_n3", CUAD),
+                     ("ej_n4", "PRUEBA-semana_09"), ("ej_n5", "PRUEBA-semana_09")):
+        intentar(ex, "passed", cuad)
+    for ex in ("ej_n1", "ej_n2", "ej_n3"):
+        intentar(ex, "failed", CUAD, "2026-09-21T14:00:00.000Z",
+                 [error_de(ex, "2026-09-21T14:00:00.000Z")])
+    # I4: un solo ejercicio visto -> por debajo del mínimo, sin nivel.
+    intentar("ej_solo", "passed", "PRUEBA-semana_09")
+
+    st, f = http("GET", f"/internal/curso/{C1}/estudiante/{B}", token=tok_doc)
+    comp = {c["competencia_id"]: c for c in (f.get("competencias") or [])} if isinstance(f, dict) else {}
+    i3, i4 = comp.get("I3", {}), comp.get("I4", {})
+
+    registrar("14a I3 con 5 de 5 resueltos y poco coste -> N3",
+              st == 200 and i3.get("nivel") == 3 and i3.get("ejercicios_vistos") == 5
+              and i3.get("fallos") == 3,
+              f"status={st} I3={i3}")
+
+    registrar("14b I4 con un solo ejercicio visto -> nivel null, y null NO es 1",
+              "nivel" in i4 and i4.get("nivel") is None
+              and "sin evidencia" in (i4.get("motivo_nivel") or ""),
+              f"I4={i4}")
+
+    registrar("14c toda competencia trae motivo, también las que no tiene tocadas",
+              all(c.get("motivo_nivel") for c in (f.get("competencias") or [])),
+              f"sin motivo: {[c['competencia_id'] for c in (f.get('competencias') or []) if not c.get('motivo_nivel')]}")
+
+    # 'fallos' no es 'intentos': alimentar la fórmula con el total infla el
+    # coste y baja de nivel a quien no debe.
+    registrar("14d fallos e intentos son cosas distintas",
+              i3.get("fallos") == 3 and i3.get("intentos") == 8,
+              f"fallos={i3.get('fallos')} intentos={i3.get('intentos')}")
+
+    # Filtro por semana: solo lo de semana_09.
+    st, f9 = http("GET", f"/internal/curso/{C1}/estudiante/{B}?cuadernillo=PRUEBA-semana_09",
+                  token=tok_doc)
+    c9 = {c["competencia_id"]: c for c in (f9.get("competencias") or [])} if isinstance(f9, dict) else {}
+    registrar("14e filtrando por semana solo cuentan los ejercicios de esa semana",
+              st == 200 and c9.get("I3", {}).get("ejercicios_vistos") == 2
+              and c9.get("I3", {}).get("ejercicios_disenados") == 2,
+              f"status={st} I3 en semana_09={c9.get('I3')}")
+
+    registrar("14f una sola semana casi nunca da evidencia: I3 pasa de N3 a sin medir",
+              c9.get("I3", {}).get("nivel") is None,
+              f"nivel={c9.get('I3', {}).get('nivel')}")
+
+    st, bad = http("GET", f"/internal/curso/{C1}/estudiante/{B}?cuadernillo=no%20vale!",
+                   token=tok_doc)
+    registrar("14g un cuadernillo con caracteres raros -> 400, no llega al WHERE",
+              st == 400, f"status={st} body={bad}")
+
+    # --- El corte ---
+    st, r = http("POST", f"/internal/curso/{C1}/corte", {"etiqueta": ""}, token=tok_doc)
+    registrar("14h corte sin etiqueta -> 400 (sin nombre no se puede comparar nada)",
+              st == 400, f"status={st} body={r}")
+
+    st, r = http("POST", f"/internal/curso/{C1}/corte", {"etiqueta": "pre"}, token=tok_doc)
+    filas = int(sql1(f"select count(*) from corte_competencia where course_id='{C1}' and etiqueta='pre'")[0])
+    nivel_i3 = sql1(f"select nivel from corte_competencia where course_id='{C1}' "
+                    f"and student_id='{B}' and competencia_id='I3' and etiqueta='pre'")
+    registrar("14i congelar el corte guarda una fila por persona y competencia, con el nivel",
+              st == 200 and filas > 0 and nivel_i3 and nivel_i3[0] == "3",
+              f"status={st} filas={filas} nivel_I3={nivel_i3}")
+
+    umbrales = sql1(f"select umbrales from corte_competencia where course_id='{C1}' "
+                    f"and etiqueta='pre' limit 1")
+    registrar("14j el corte guarda los umbrales con los que se calculó, o sería irreproducible",
+              umbrales and "cobertura_n3" in umbrales[0], f"umbrales={umbrales}")
+
+    # Repetir la misma etiqueta sobrescribe, no acumula: congelar 'pre' dos
+    # veces es un error de dedo, no un dato nuevo.
+    st, _ = http("POST", f"/internal/curso/{C1}/corte", {"etiqueta": "pre"}, token=tok_doc)
+    filas2 = int(sql1(f"select count(*) from corte_competencia where course_id='{C1}' and etiqueta='pre'")[0])
+    registrar("14k repetir la etiqueta sobrescribe el corte, no lo duplica",
+              st == 200 and filas2 == filas, f"antes={filas} despues={filas2}")
+
+    st, _ = http("POST", f"/internal/curso/{C2}/corte", {"etiqueta": "pre"}, token=tok_doc)
+    registrar("14l un docente no puede congelar el corte de otro curso -> 403", st == 403,
+              f"status={st}")
+
+    # --- Fuera de alcance ---
+    # I5 (mCA14) se evalua por autorreporte y coevaluacion, no con trazas. Por
+    # muchas senales que tenga, no puede recibir nivel: seria inventarse un dato
+    # y ademas quedaria congelado en el corte como evidencia del estudio.
+    http("POST", "/internal/competencias",
+         {"PRUEBA-semana_10": {"ej_fa1": ["I5"], "ej_fa2": ["I5"], "ej_fa3": ["I5"]}},
+         token=TOKEN_MAESTRO)
+    for ex in ("ej_fa1", "ej_fa2", "ej_fa3"):
+        http("POST", "/api/exercises/attempts",
+             intento(ex, "2026-09-21T16:00:00.000Z", "passed",
+                     cuadernillo="PRUEBA-semana_10", student_id=B),
+             token=tokens[B])
+
+    st, f = http("GET", f"/internal/curso/{C1}/estudiante/{B}", token=tok_doc)
+    comp = {c["competencia_id"]: c for c in (f.get("competencias") or [])} if isinstance(f, dict) else {}
+    i5 = comp.get("I5", {})
+    registrar("14m una competencia fuera de alcance NO recibe nivel, por muchas "
+              "señales que tenga",
+              st == 200 and i5.get("ejercicios_vistos") == 3
+              and i5.get("ejercicios_resueltos") == 3
+              and i5.get("nivel") is None
+              and "no se mide con trazas" in (i5.get("motivo_nivel") or ""),
+              f"status={st} I5={i5}")
+
+    registrar("14n el motivo distingue «fuera de alcance» de «sin evidencia»: "
+              "no son lo mismo y no se arreglan igual",
+              "sin evidencia" not in (i5.get("motivo_nivel") or ""),
+              f"motivo={i5.get('motivo_nivel')}")
+
+    # Y tampoco entra con nivel en el corte.
+    http("POST", f"/internal/curso/{C1}/corte", {"etiqueta": "post"}, token=tok_doc)
+    nivel_i5 = sql1(f"select coalesce(nivel::text,'NULO') from corte_competencia "
+                    f"where course_id='{C1}' and student_id='{B}' "
+                    f"and competencia_id='I5' and etiqueta='post'")
+    registrar("14o el corte guarda la fila fuera de alcance, pero con nivel nulo",
+              nivel_i5 and nivel_i5[0] == "NULO", f"nivel_I5_en_corte={nivel_i5}")
+
+
 def caso_10_paralelo():
     N = 20
     fallos = {A: [], B: []}
@@ -727,6 +868,7 @@ def main():
         tok_doc = caso_9_panel_docente()
         caso_12_estudiantes(tok_doc)
         caso_13_criterio_plantilla(tok_doc)
+        caso_14_nivel_y_corte(tok_doc)
         caso_10_paralelo()
     finally:
         caso_11_limpieza(ajenos_antes)

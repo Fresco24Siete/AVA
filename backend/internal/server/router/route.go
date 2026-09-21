@@ -119,6 +119,10 @@ func ConfigureRouter(db *sqlx.DB) *gin.Engine {
 		docente.POST("/notas", notasHandler.RegistrarHandler)
 		docente.GET("/curso/:curso/panel", panelDocenteHandler.PanelHandler)
 		docente.GET("/curso/:curso/estudiante/:estudiante", panelDocenteHandler.FichaHandler)
+		// Congelar el nivel del grupo tal y como esta hoy, para el estudio
+		// pre/post. Va en el grupo `docente` y no en `hub`: lo dispara el panel
+		// del docente, que manda su propio token, no el maestro.
+		docente.POST("/curso/:curso/corte", panelDocenteHandler.CorteHandler)
 	}
 
 	api := router.Group("/api")

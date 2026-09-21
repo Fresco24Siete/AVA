@@ -2,6 +2,8 @@ package repository
 
 import (
 	"fmt"
+	"log"
+	"sync"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -14,10 +16,52 @@ import (
 // panel del docente pueda listar a su gente por nombre y no por número.
 type EstudiantesRepository struct {
 	db *sqlx.DB
+
+	// Ver columnaEnAlcance.
+	unaVez       sync.Once
+	hayEnAlcance bool
 }
 
 func NewEstudiantesRepository(db *sqlx.DB) *EstudiantesRepository {
 	return &EstudiantesRepository{db: db}
+}
+
+// columnaEnAlcance devuelve el trozo de SELECT que lee competencias.en_alcance,
+// o un literal si la columna todavía no existe.
+//
+// Hace falta porque el orden de un despliegue no está garantizado: el instalador
+// levanta los contenedores y DESPUÉS aplica las migraciones, así que hay una
+// ventana en la que este backend corre contra una base sin la v5. Sin esto, la
+// consulta falla entera y el panel se queda sin la sección de competencias —que
+// hoy funciona— hasta que alguien mire el log.
+//
+// El literal es `false`, no `true`: si no se sabe si una competencia es medible,
+// lo honrado es no darle nivel. Mejor una pantalla que dice «no se mide con
+// trazas» de más que un N3 inventado de menos, sobre todo cuando ese número
+// puede acabar congelado en un corte del estudio.
+//
+// Se comprueba una sola vez: la columna no aparece ni desaparece sola, y hacerlo
+// en cada petición sería una consulta extra por carga del panel.
+func (r *EstudiantesRepository) columnaEnAlcance() string {
+	r.unaVez.Do(func() {
+		var existe bool
+		err := r.db.Get(&existe, `SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns
+			 WHERE table_name = 'competencias' AND column_name = 'en_alcance')`)
+		if err != nil {
+			log.Printf("[panel] no se pudo comprobar competencias.en_alcance: %v", err)
+			return
+		}
+		r.hayEnAlcance = existe
+		if !existe {
+			log.Println("[panel] competencias.en_alcance no existe todavía (falta la " +
+				"migración v5): ninguna competencia recibirá nivel hasta que se aplique")
+		}
+	})
+	if r.hayEnAlcance {
+		return "c.en_alcance"
+	}
+	return "NULL::boolean AS en_alcance"
 }
 
 // Ingreso es lo que el Hub sabe de una persona en el momento en que entra.
@@ -245,6 +289,35 @@ type CompetenciaDeEstudiante struct {
 	// distintas con el estudiante, y sin esto se ven igual.
 	Intentos  int `db:"intentos"  json:"intentos"`
 	Abandonos int `db:"abandonos" json:"abandonos"`
+	// Intentos que acabaron en 'failed'. NO es lo mismo que Intentos, y
+	// confundirlos rompe el nivel: el coste es fallos por ejercicio resuelto,
+	// así que alimentarlo con el total de intentos lo infla y baja a N2 a quien
+	// merece N3 —justo el error que la fórmula existe para no cometer—.
+	Fallos int `db:"fallos" json:"fallos"`
+
+	// Si el AVA puede medir esta competencia con trazas de actividad. Cuatro de
+	// las siete sí; mCC85 no forma parte del diseño, y mCA14 y mCA65 se evalúan
+	// por autorreporte y coevaluación. Darles un nivel a partir de fallos sería
+	// inventarse un dato —y peor aún si ese dato acaba congelado en un corte
+	// del estudio, indistinguible de los legítimos—.
+	//
+	// Sale de competencias.en_alcance (migración v5). Es un puntero porque hay
+	// TRES estados, no dos: sí, no, y «todavía no se puede saber» (nil) cuando
+	// la migración no está aplicada. Aplanarlo a false haría que el panel le
+	// dijera al docente que una competencia se evalúa por autorreporte cuando
+	// la verdad es que falta una migración: una explicación falsa es peor que
+	// ninguna. Ver columnaEnAlcance.
+	EnAlcance *bool `db:"en_alcance" json:"en_alcance"`
+
+	// El nivel NO sale de la consulta: lo calcula service.NivelCompetencia a
+	// partir de los campos de arriba, porque los umbrales deben poder ajustarse
+	// sin migrar la base. Por eso `db:"-"`.
+	//
+	// Nivel es un puntero porque nil significa "sin evidencia suficiente", que
+	// no es lo mismo que N1 y no puede confundirse con él: decirle al docente
+	// "N1" sobre alguien de quien no sabemos nada es peor que callarse.
+	Nivel  *int   `db:"-" json:"nivel"`
+	Motivo string `db:"-" json:"motivo_nivel"`
 }
 
 // Competencias: el desglose por competencia de una persona.
@@ -280,13 +353,23 @@ type CompetenciaDeEstudiante struct {
 // que explicar?", y un AssertionError que es consecuencia de la celda vacía no
 // es un malentendido. Aquí la pregunta es "¿cuánto cubrió?", y ahí un ejercicio
 // aprobado cuenta siempre.
-func (r *EstudiantesRepository) Competencias(curso, estudiante string) ([]CompetenciaDeEstudiante, error) {
+// El tercer argumento acota a un cuadernillo ("semana_03"); vacío = todo el
+// curso. Va como filtro y no como agrupación para no cambiar la forma de la
+// respuesta: el panel pide lo mismo con o sin semana.
+//
+// Aviso honesto sobre filtrar por semana: una semana aporta dos o tres
+// ejercicios por competencia, así que casi siempre quedará por debajo del
+// mínimo de evidencia y el nivel saldrá vacío. No es un fallo —es la respuesta
+// correcta—: un nivel calculado sobre dos ejercicios es ruido. El filtro sirve
+// para mirar la ACTIVIDAD de esa semana, no para graduar por semana.
+func (r *EstudiantesRepository) Competencias(curso, estudiante, cuadernillo string) ([]CompetenciaDeEstudiante, error) {
 	salida := []CompetenciaDeEstudiante{}
 	err := r.db.Select(&salida, `
 	    WITH reales AS (
 	        SELECT a.cuadernillo_id, a.exercise_id, a.validation_result
 	          FROM exercise_attempts a
 	         WHERE a.course_id = $1 AND a.student_id = $2
+	           AND ($3 = '' OR a.cuadernillo_id = $3)
 	           -- Plantilla = no aprobó Y todos sus errores son el stub. Se
 	           -- conserva si aprobó, si trae algún error de verdad, o si no
 	           -- trae ninguno (fallar sin excepción sigue siendo intentarlo).
@@ -297,7 +380,7 @@ func (r *EstudiantesRepository) Competencias(curso, estudiante string) ([]Compet
 	                OR NOT EXISTS (SELECT 1 FROM attempt_errors e
 	                                WHERE e.attempt_id = a.id))
 	    )
-		SELECT c.id AS competencia_id, c.descripcion,
+		SELECT c.id AS competencia_id, c.descripcion, `+r.columnaEnAlcance()+`,
 		       -- El FILTER no sobra: sin el, COUNT(DISTINCT (a,b)) cuenta la
 		       -- tupla (NULL, NULL) que deja el LEFT JOIN cuando la competencia
 		       -- no tiene ningun ejercicio, y devuelve 1 en vez de 0.
@@ -308,6 +391,8 @@ func (r *EstudiantesRepository) Competencias(curso, estudiante string) ([]Compet
 		       COUNT(DISTINCT (t.cuadernillo_id, t.exercise_id)) FILTER (
 		           WHERE t.validation_result = 'passed')                  AS resueltos,
 		       COUNT(t.*)                                                 AS intentos,
+		       COUNT(t.*) FILTER (
+		           WHERE t.validation_result = 'failed')                  AS fallos,
 		       -- Ejercicios abandonados, no eventos de abandono. Contar eventos
 		       -- repetía el error que el panel del alumno ya corrigió: cerrar la
 		       -- pestaña tres veces sumaba tres abandonos del mismo ejercicio.
@@ -319,10 +404,68 @@ func (r *EstudiantesRepository) Competencias(curso, estudiante string) ([]Compet
 		                                AND r.exercise_id    = t.exercise_id
 		                                AND r.validation_result = 'passed'))  AS abandonos
 		  FROM competencias c
+		  -- El filtro de semana va también aquí, no solo sobre los intentos:
+		  -- si no, "diseñados" seguiría contando los ejercicios de las otras
+		  -- semanas y la tarjeta diría "3 sin tocar" en una semana de dos.
 		  LEFT JOIN ejercicio_competencias ec ON ec.competencia_id = c.id
+		                    AND ($3 = '' OR ec.cuadernillo_id = $3)
 		  LEFT JOIN reales t ON t.cuadernillo_id = ec.cuadernillo_id
 		                    AND t.exercise_id    = ec.exercise_id
 		 GROUP BY c.id, c.descripcion
-		 ORDER BY c.id`, curso, estudiante)
+		 ORDER BY c.id`, curso, estudiante, cuadernillo)
 	return salida, err
+}
+
+// FilaCorte es una fila del corte que se congela: el nivel de una persona en
+// una competencia, junto con las señales y los umbrales que lo produjeron.
+type FilaCorte struct {
+	StudentID     string
+	CompetenciaID string
+	Nivel         *int
+	Vistos        int
+	Resueltos     int
+	Intentos      int
+	Fallos        int
+	Abandonos     int
+	Umbrales      []byte // JSON
+}
+
+// GuardarCorte congela un corte del curso entero.
+//
+// Todo en UNA transacción: un corte a medias —la mitad del grupo con los
+// números de hoy y la otra mitad sin escribir— sería peor que no tenerlo,
+// porque al compararlo con el siguiente nadie sabría qué parte es real.
+//
+// Vuelve a escribir sobre la misma etiqueta si ya existe. Congelar "pre" dos
+// veces el mismo día es un error de dedo, no un dato nuevo, y acumular las dos
+// versiones obligaría a adivinar cuál vale. Quien quiera conservar las dos usa
+// dos etiquetas.
+func (r *EstudiantesRepository) GuardarCorte(curso, etiqueta string, filas []FilaCorte) (int, error) {
+	tx, err := r.db.Beginx()
+	if err != nil {
+		return 0, fmt.Errorf("no se pudo iniciar la transacción: %w", err)
+	}
+	defer tx.Rollback()
+
+	for _, f := range filas {
+		if _, err := tx.Exec(`
+			INSERT INTO corte_competencia
+			    (course_id, student_id, competencia_id, etiqueta, nivel,
+			     vistos, resueltos, intentos, fallos, abandonos, umbrales)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+			ON CONFLICT (course_id, student_id, competencia_id, etiqueta)
+			DO UPDATE SET tomado_en = now(), nivel = EXCLUDED.nivel,
+			              vistos    = EXCLUDED.vistos,
+			              resueltos = EXCLUDED.resueltos,
+			              intentos  = EXCLUDED.intentos,
+			              fallos    = EXCLUDED.fallos,
+			              abandonos = EXCLUDED.abandonos,
+			              umbrales  = EXCLUDED.umbrales`,
+			curso, f.StudentID, f.CompetenciaID, etiqueta, f.Nivel,
+			f.Vistos, f.Resueltos, f.Intentos, f.Fallos, f.Abandonos, f.Umbrales,
+		); err != nil {
+			return 0, fmt.Errorf("guardar %s/%s: %w", f.StudentID, f.CompetenciaID, err)
+		}
+	}
+	return len(filas), tx.Commit()
 }

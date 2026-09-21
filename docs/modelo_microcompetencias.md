@@ -97,14 +97,19 @@ la misma, porque los cuatro alimentan números que se ven juntos:
 
 | Dónde | Qué pinta |
 |---|---|
-| `senales_competencia` (esta vista) | el nivel N1/N2/N3 |
-| `EstudiantesRepository.Competencias` | «Cómo va por competencia» |
+| `EstudiantesRepository.Competencias` | «Cómo va por competencia» **y el nivel N1/N2/N3** |
 | `EstudiantesRepository.Ficha` | «Su recorrido, ejercicio por ejercicio» |
 | `intentosReales` (panel del curso) | listado, en riesgo, por ejercicio |
+| `senales_competencia` (esta vista) | hoy **nada**: ver §5 |
 
-Las dos del medio las devuelve el **mismo handler** y se pintan **seguidas en
-la misma página**: si divergen, la pantalla se contradice a sí misma sobre el
-mismo ejercicio.
+Las dos primeras las devuelve el **mismo handler** y se pintan **seguidas en la
+misma página**: si divergen, la pantalla se contradice a sí misma sobre el mismo
+ejercicio.
+
+La vista comparte el criterio y tiene que seguir compartiéndolo, pero conviene
+saber que **hoy no la lee ningún código**: se quedó como consulta de análisis
+manual y como base del corte. Eso significa que ninguna prueba la cubre, así que
+si alguien cambia el criterio en un sitio y no en ella, nada lo avisará.
 
 `Malentendidos()` es la única excepción, y es deliberada: ver más abajo.
 
@@ -154,9 +159,9 @@ distintos dejados en `sin_validar` que nunca llegaron a `passed`.
 
 ### 2.4 Tabla `corte_competencia`
 
-El nivel vivo sale de la vista y refleja el estado de hoy. Para el estudio
-pre/post hace falta además poder decir *«así estaba el grupo el 15 de
-septiembre»*, y eso una vista no lo da.
+El nivel vivo refleja el estado de hoy y cambia cada vez que alguien entrega.
+Para el estudio pre/post hace falta además poder decir *«así estaba el grupo el
+15 de septiembre»*, y eso una consulta en vivo no lo da.
 
 Dos decisiones:
 
@@ -167,8 +172,9 @@ Dos decisiones:
   trigger ni ninguna consulta de lectura: un efecto secundario dentro de un GET
   sería imposible de auditar después.
 
-`nivel` admite `NULL`, que significa **«sin evidencia suficiente»** — y es
-distinto de estar en N1.
+`nivel` admite `NULL`, que significa **«no hay nivel»** — y es distinto de estar
+en N1. Son dos los casos que lo producen, y el motivo los distingue: que no haya
+evidencia suficiente todavía, o que la competencia esté fuera de alcance.
 
 ---
 
@@ -320,23 +326,67 @@ JOIN es INNER. El handler ni siquiera importaba el paquete `log`. La fila de
 `Fabio` lleva desde el 2026-09-14 en la base y nadie lo supo hasta mirarlo a
 mano.
 
-## 5. Lo que falta (Fase 4)
+## 5. El nivel en el panel (Fase 4) — hecho
 
 1. `service.NivelCompetencia(senales) → (nivel *int, motivo string)` con los
-   umbrales de §3.3.
-2. Exponerlo en `GET /internal/curso/:curso/estudiante/:e`, junto a lo que ya
-   devuelve.
-3. `POST /internal/curso/:curso/corte` para congelar un corte con su etiqueta.
-4. En el panel: el nivel al lado de la barra que ya existe, y «sin evidencia
-   suficiente» cuando `vistos < 3` — nunca un N1 fingido.
+   umbrales de §3.3. Cubierto por trece pruebas de frontera, porque un `>=`
+   donde iba un `>` mueve de nivel a estudiantes reales sin que nada falle.
+2. Expuesto en `GET /internal/curso/:curso/estudiante/:e`, que gana los campos
+   `nivel` y `motivo_nivel` junto a lo que ya devolvía.
+3. `POST /internal/curso/:curso/corte` congela un corte con su etiqueta.
+4. En el panel: la insignia de nivel encima de la barra, con el motivo debajo
+   en palabras que el docente pueda leer tal cual.
 
-Con un cuidado que hay que tener presente al pintar: los dos JOIN de
-`senales_competencia` son INNER, así que una competencia que el alumno no ha
-tocado **no produce fila**, no produce una fila con nivel `NULL`. Son cosas
-distintas para quien dibuja la pantalla, y `vistos = 0` es el caso más común al
-principio del semestre. El consumidor tiene que partir del catálogo de
-competencias y hacer LEFT JOIN contra la vista, que es exactamente lo que ya
-hace `EstudiantesRepository.Competencias`.
+### De dónde salen las señales, y por qué no de la vista
+
+El encargo decía «consultando el endpoint/vista de la Fase 1». **No se lee
+`senales_competencia`**: el nivel se calcula sobre lo que devuelve
+`EstudiantesRepository.Competencias`. Tres razones, y la primera manda:
+
+1. **La vista no está aplicada en producción.** Leer de ella habría dejado sin
+   funcionar el bloque de competencias —que hoy sí funciona— hasta el siguiente
+   despliegue. Así el nivel entra sin depender de la migración.
+2. **Los dos JOIN de la vista son INNER**, así que una competencia que el
+   alumno no ha tocado **no produce fila** — no produce fila con nivel `NULL`.
+   Son cosas distintas para quien dibuja la pantalla, y `vistos = 0` es el caso
+   más común al empezar el semestre. `Competencias` parte del catálogo y hace
+   LEFT JOIN, que es justo lo que hace falta.
+3. **La vista no tiene `disenados`**, el denominador de diseño que la tarjeta
+   ya mostraba («3 sin tocar»).
+
+`senales_competencia` sigue siendo útil para lo que se diseñó: mirar el curso
+entero de una vez. Las dos comparten el criterio de plantilla corregido en la
+Fase 3, y tienen que seguir compartiéndolo.
+
+Se añadió `fallos` a `Competencias`, que no lo tenía. **No es `intentos`**:
+el coste de la fórmula es fallos por ejercicio resuelto, así que alimentarlo
+con el total de intentos lo infla y baja a N2 a quien merece N3 — justo el
+error que la fórmula existe para no cometer.
+
+### El filtro por semana
+
+`?cuadernillo=semana_03` acota el desglose, y el panel lo ofrece como chips que
+salen solos de las semanas que el alumno tiene (no de una lista que mantener).
+
+Con un aviso que el propio panel da: **una semana casi nunca da evidencia
+suficiente**. Aporta dos o tres ejercicios por competencia, así que el nivel
+saldrá «sin medir» casi siempre. No es un fallo del filtro — un nivel calculado
+sobre dos ejercicios es ruido. El filtro sirve para mirar la actividad de esa
+semana, no para graduar por semana.
+
+Lo de «por grupo» del encargo ya estaba: cada curso es un `course_id` distinto y
+todas las consultas lo llevan en el WHERE; un docente solo puede pedir el suyo.
+
+### El corte
+
+Lo dispara el docente desde el panel del curso, con un nombre (`pre`, `post`,
+`corte 1`…). Repetir el nombre **sobrescribe**: congelar `pre` dos veces es un
+error de dedo, no un dato nuevo.
+
+Reutiliza `Competencias` persona a persona en vez de una consulta propia. Una
+consulta distinta para el mismo número acaba divergiendo, y **un corte que no
+coincide con lo que el docente estaba viendo no vale para nada**. Todo va en
+una transacción: un corte a medias sería peor que no tenerlo.
 
 ---
 
@@ -347,6 +397,17 @@ hace `EstudiantesRepository.Competencias`.
   esta fórmula no aplica. Queda `en_alcance = true` en el catálogo, pero su
   nivel será siempre `NULL`. **Hay que decidir por qué otra señal se mide**, o
   aceptar que no se mide.
+- **No da nivel a mCC85, mCA14 ni mCA65** (I2, I5, I6), y eso está cableado, no
+  solo escrito: `ponerNivel` deja el nivel en `NULL` con el motivo «no se mide
+  con trazas de actividad» en cuanto `en_alcance` es falso.
+
+  No es una precaución teórica. Los **seis ejercicios etiquetados con I5
+  (mCA14)** llevan también la etiqueta I3, así que su tarjeta sería una recopia
+  de un subconjunto de las señales de I3 presentada como otra competencia. Con
+  un N3 verde encima, el panel estaría afirmando algo que este sistema no puede
+  saber — y al congelar un corte, ese número entraría en la evidencia del
+  estudio sin forma de distinguirlo de los legítimos. El arreglo de fondo es
+  quitar esas etiquetas, que es trabajo de la Fase 5.
 - **No pondera con pre/post-test ni evidencia complementaria.** Eso es la
   Actividad 3.1 del plan de grado y queda fuera.
 - **No toca la devolución de notas a Moodle.** Fuera de alcance, y además sería
@@ -410,3 +471,35 @@ en `Ficha()` no movió ninguno de los números que ya se comprobaban.
 
 Sin estas pruebas, volver al criterio viejo no rompía nada visible — que es
 exactamente como llegó a producción la primera vez.
+
+### Fase 4 (2026-09-21)
+
+`service.NivelCompetencia` lleva trece casos de frontera
+(`nivelCompetencia_test.go`), que es donde vive el riesgo: un `>=` donde iba un
+`>` mueve de nivel a estudiantes reales sin que nada falle. Comprueban que
+`0.80` de cobertura entra en N3 y que un coste de exactamente `2.0` ya no,
+que tres abandonos justos sacan de N3, que no resolver nada no divide por cero,
+y —lo más importante— que **cero actividad devuelve «sin nivel», no N1**.
+
+Y `caso_14_nivel_y_corte` en la suite de integración, contra backend y base
+vivos:
+
+| Caso | Comprueba |
+|---|---|
+| 14a | Cinco de cinco resueltos con poco coste → N3 |
+| 14b | Un solo ejercicio visto → `nivel: null`, y null sigue siendo null al pasar por JSON |
+| 14c | Toda competencia trae motivo, también las que no ha tocado |
+| 14d | `fallos` e `intentos` son campos distintos y no se confunden |
+| 14e | Filtrando por semana solo cuentan los ejercicios de esa semana |
+| 14f | Una sola semana no da evidencia: pasa de N3 a «sin medir» |
+| 14g | Un cuadernillo con caracteres raros → 400, no llega al WHERE |
+| 14h–14l | El corte: sin etiqueta 400, guarda nivel y umbrales, repetir etiqueta sobrescribe, y no se puede congelar el corte de otro curso |
+
+**68/68 en verde**, incluidos los 56 anteriores.
+
+El HTML del panel se renderizó con datos sintéticos para los cinco casos (N3,
+N2, N1, sin medir, sin tocar) antes de darlo por bueno. Ahí salió un fallo que
+no habría dado la cara de otra forma: un `\b` sin escapar dentro del f-string
+del JavaScript se convertía en un **backspace real** en el regex de la cookie
+XSRF, así que el botón de congelar corte habría respondido 403 siempre. El
+barrido de caracteres de control sobre la página generada ahora sale limpio.
