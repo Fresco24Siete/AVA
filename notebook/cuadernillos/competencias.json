@@ -1,56 +1,36 @@
 {
  "semana_01": {
-  "ejercicio_1": [
-   "I3"
-  ],
-  "ejercicio_2": [
-   "I4"
-  ],
   "ejercicio_3": [
-   "I3"
-  ],
-  "ejercicio_4": [
    "I3"
   ],
   "ejercicio_5": [
    "I3",
-   "I5"
-  ],
-  "ejercicio_6": [
-   "I4"
+   "I1"
   ],
   "ejercicio_7": [
    "I3",
-   "I5"
+   "I1"
   ]
  },
  "semana_02": {
   "ejercicio_1": [
    "I3"
   ],
-  "ejercicio_2": [
-   "I3",
-   "I5"
-  ],
   "ejercicio_3": [
    "I3",
-   "I5"
+   "I1"
   ],
   "ejercicio_4": [
-   "I3"
+   "I1"
   ],
   "ejercicio_5": [
-   "I3"
-  ],
-  "ejercicio_6": [
    "I3"
   ],
   "ejercicio_7": [
    "I3"
   ],
   "ejercicio_8": [
-   "I3",
-   "I4"
+   "I3"
   ]
  },
  "semana_03": {

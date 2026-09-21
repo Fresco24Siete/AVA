@@ -52,9 +52,41 @@ puede medir cuatro con trazas:
 | I5 | mCA14 | no |
 | I6 | mCA65 | no |
 
-Hace falta marcarlo en la base y no solo saberlo: hoy hay **seis ejercicios
-etiquetados con I5 (mCA14)**, que se evalúa por autorreporte, y el panel no
-tiene cómo distinguirlos.
+Hace falta marcarlo en la base y no solo saberlo. Cuando esta columna se
+diseñó había **seis ejercicios etiquetados con I5 (mCA14)**, que se evalúa por
+autorreporte, y el panel no tenía cómo distinguirlos. Las Fases 5 y 6 los
+dejaron en **cero**, pero la columna sigue haciendo falta: es lo que impide que
+una etiqueta fuera de alcance vuelva a colarse sin que nadie lo note.
+
+### 2.1 bis Dos definiciones de mCP17, y no dicen lo mismo
+
+Salió al etiquetar, y hay que resolverlo porque decide si siete etiquetas son
+legítimas o son inventadas.
+
+| Fuente | Qué dice mCP17 |
+|---|---|
+| El catálogo, sembrado en la base (`schema_v2.sql:102`) | «Aplica conocimientos de **álgebra lineal, cálculo diferencial e integral y métodos numéricos** para solucionar problemas mediante programación.» |
+| El encargo, sección 2 | «**Aplicar conocimientos matemáticos** para la solución de problemas usando programación.» |
+
+Con la del encargo, calcular una tarifa de parqueadero, aplicar un porcentaje
+de descuento o corregir una media mal agrupada **sí** son mCP17. Con la del
+catálogo, **ninguna lo es** — y entonces mCP17 no la mide ni un solo ejercicio
+de las seis semanas, porque en un primer curso de programación no hay álgebra
+lineal ni cálculo.
+
+Se etiquetó con la del encargo, que es la instrucción más reciente y específica.
+Pero **la descripción del catálogo es la que el panel le enseña al docente**: si
+se queda como está, la pantalla pondrá «álgebra lineal, cálculo diferencial e
+integral» encima de un ejercicio sobre el recibo del parqueadero.
+
+Hay que elegir una, y es decisión del curso, no técnica:
+
+- **Alinear el catálogo** al texto del encargo (una línea en una migración), o
+- **quitar las siete etiquetas mCP17** y aceptar que el AVA no mide esa
+  microcompetencia.
+
+Mientras no se decida, las etiquetas están puestas y la descripción no coincide
+con ellas.
 
 ### 2.2 Tope de dos competencias por ejercicio
 
@@ -276,11 +308,22 @@ O sea: con este mapeo, **I4 no se puede medir para dos tercios del curso**. No
 es un problema del umbral — es que I4 no tiene ejercicios suficientes. Se
 arregla reetiquetando, no bajando el mínimo.
 
-**Actualización tras la Fase 5:** el recorte quitó mCC103 de las semanas 3 a 6
-—la planeación oficial no le da evidencia ahí— y la dejó con **3 ejercicios**,
-todos en las semanas 1 y 2. Eso es exactamente el mínimo: un estudiante tiene
-que intentar los tres para recibir nivel. Devolvérselos es trabajo de la Fase 6,
-que reetiqueta `semana_01` (mCC103 + mCP88) y `semana_02` (mCC87 + mCC103).
+**Actualización tras las Fases 5 y 6:** el recorte quitó mCC103 de las semanas
+3 a 6 —la planeación oficial no le da evidencia ahí— y la dejó con 3
+ejercicios en las semanas 1 y 2. Al revisar esos tres uno a uno para la Fase 6,
+**ninguno la medía**: dos eran residuo de ejercicios reemplazados sin actualizar
+la etiqueta, y el tercero emparejaba editor/terminal/intérprete/IDE con su
+definición.
+
+Así que mCC103 se queda en **cero ejercicios**, y no es un descuido: es que
+*«reconocer problemas de sistemas y organizaciones susceptibles de tratamiento
+algorítmico»* no se pide en ningún cuadernillo. Lo que se pide es escribir
+algoritmos, que es mCC87.
+
+Medirla exige un ejercicio nuevo —del tipo «aquí tienes tres situaciones de una
+organización: di cuál se puede resolver con un algoritmo y por qué»—, no otra
+vuelta de etiquetas. Está en [`flujo_actual_ava.md`](flujo_actual_ava.md) con
+el detalle.
 
 Bajar el mínimo a 1 daría un nivel a todo el mundo y sería un número inventado.
 

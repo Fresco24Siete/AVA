@@ -499,7 +499,7 @@ Tres reglas de la casa:
 
     # --- Ejercicio 1 ------------------------------------------------------
     c.ejercicio(
-        numero=1, competencias=['I3'], titulo="Tu ficha de estudiante", estrellas=1, puntos=3,
+        numero=1, competencias=[], titulo="Tu ficha de estudiante", estrellas=1, puntos=3,
         enunciado="""Una **variable** es un nombre que guarda un valor. Se crea con `=`, que aquí no
 significa «es igual a» sino «guarda esto»:
 
@@ -557,7 +557,7 @@ assert codigo > 0, "El codigo estudiantil es un numero positivo"''',
 
     # --- Ejercicio 2 ------------------------------------------------------
     c.ejercicio(
-        numero=2, competencias=['I4'], titulo="Cada herramienta con su oficio", estrellas=1, puntos=3,
+        numero=2, competencias=[], titulo="Cada herramienta con su oficio", estrellas=1, puntos=3,
         enunciado="""Vuelve a la sección 3 si hace falta. Completa el diccionario emparejando cada
 herramienta con **lo único que la distingue de las otras tres**.
 
@@ -658,7 +658,7 @@ assert TRAZA["b"] == 13, "la ultima linea le asigna a b el valor de suma"''',
     )
     # --- Ejercicio 4 ------------------------------------------------------
     c.ejercicio(
-        numero=4, competencias=['I3'], titulo="Diagnostica los tres", estrellas=2, puntos=3,
+        numero=4, competencias=[], titulo="Diagnostica los tres", estrellas=2, puntos=3,
         enunciado="""Tres programas, tres problemas distintos. **No los ejecutes**: diagnostícalos
 leyendo, que es lo que vas a tener que hacer toda tu vida profesional.
 
@@ -716,7 +716,7 @@ print("Ejercicio 4 superado: sabes distinguir los tres errores sin ejecutarlos."
 
     # --- Ejercicio 5 ------------------------------------------------------
     c.ejercicio(
-        numero=5, competencias=['I3', 'I5'], titulo="Caza el error que nadie te va a señalar", estrellas=3, puntos=4,
+        numero=5, competencias=['I3', 'I1'], titulo="Caza el error que nadie te va a señalar", estrellas=3, puntos=4,
         enunciado="""Abajo hay una función que debería calcular el promedio de tres notas. Corre sin
 quejarse. Y está mal.
 
@@ -778,7 +778,7 @@ pruebas en la vida real.
 
     # --- Ejercicio 6 ------------------------------------------------------
     c.ejercicio(
-        numero=6, competencias=['I4'], titulo="Crea un archivo con código", estrellas=3, puntos=4,
+        numero=6, competencias=[], titulo="Crea un archivo con código", estrellas=3, puntos=4,
         enunciado="""Hasta ahora todo lo que has hecho vive en la memoria y desaparece cuando se
 apaga el kernel. Vamos a dejar algo **escrito en el disco**.
 
@@ -859,7 +859,7 @@ la terminal y el explorador.
 
     # --- Ejercicio 7 ------------------------------------------------------
     c.ejercicio(
-        numero=7, competencias=['I3', 'I5'], titulo="Tu primer programa completo", estrellas=4, puntos=4,
+        numero=7, competencias=['I3', 'I1'], titulo="Tu primer programa completo", estrellas=4, puntos=4,
         enunciado="""El ejercicio final junta todo lo de hoy: variables, tipos, cálculo y texto.
 
 Escribe la función `ficha(nombre, notas)` que recibe:

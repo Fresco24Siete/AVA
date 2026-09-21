@@ -69,24 +69,79 @@ correspondencia no es una interpretación: es la misma frase.
 
 Cruzando §0.2 con el mapeo realmente cargado en producción:
 
-| Código | Oficial | ¿En alcance? | Al auditar (Fase 0) | Tras el recorte (Fase 5) |
-|---|---|---|---:|---:|
-| I3 | mCC87 | Sí | **45** (73 % del total) | **35** |
-| I4 | mCC103 | Sí | **11** | **3** ← solo en semanas 1-2 |
-| I5 | mCA14 | **No** | **6** ← fuera de alcance | **4** ← solo en semanas 1-2 |
-| I1 | mCP17 | **Sí** | **0** ← sin evidencia | **3** |
-| I7 | mCP88 | **Sí** | **0** | **0** ← no es calificable, a propósito |
-| I2, I6 | mCC85, mCA65 | No | 0 | 0 |
+| Código | Oficial | ¿En alcance? | Al auditar (Fase 0) | Tras el recorte (Fase 5) | Tras reetiquetar (Fase 6) |
+|---|---|---|---:|---:|---:|
+| I3 | mCC87 | Sí | **45** (73 % del total) | **35** | **30** |
+| I4 | mCC103 | Sí | **11** | **3** | **0** ← ver abajo |
+| I5 | mCA14 | **No** | **6** ← fuera de alcance | **4** | **0** ✔ |
+| I1 | mCP17 | **Sí** | **0** ← sin evidencia | **3** | **7** |
+| I7 | mCP88 | **Sí** | **0** | **0** | **0** ← no es calificable, a propósito |
+| I2, I6 | mCC85, mCA65 | No | 0 | 0 | 0 |
 
 La Fase 5 recortó las semanas 3 a 6 y las re-etiquetó según la planeación
-oficial: quitó mCC103 de las cuatro (la planeación no le da evidencia ahí),
-quitó las dos etiquetas de mCA14 que tenían, y le dio a mCP17 sus tres primeros
-ejercicios. Lo que queda de I4 e I5 está **todo** en las semanas 1 y 2, que se
-ajustan en la Fase 6 y no se podían tocar aquí porque ya tienen entregas.
+oficial. La Fase 6 hizo lo mismo con las semanas 1 y 2, que no se podían
+rediseñar porque ya están liberadas y `semana_01` tiene entregas.
 
-Ojo con I4: pasó de 11 ejercicios a 3, que es justo el mínimo de evidencia. La
-Fase 6 tiene que devolvérselos etiquetando `semana_01` y `semana_02`, o mCC103
-se queda sin poder medirse.
+Simulado contra la telemetría real de producción antes de aplicarlo:
+
+| | Antes | Después |
+|---|---:|---:|
+| mCC87 | 606 intentos | 420 |
+| mCC103 | 161 | **0** |
+| mCA14 *(fuera de alcance)* | 200 | **0** |
+| mCP17 | 0 | **253** |
+
+Y por estudiante: mCC87 la miden los 18; mCP17 pasa de inmedible a **9 de 18**
+con evidencia suficiente, y subirá al liberar la semana 3.
+
+### Cómo llega esto a producción (no basta con editar el JSON)
+
+Reetiquetar cambia `notebook/cuadernillos/competencias.json`, y ese archivo
+**entra en la imagen del docente al construirla**, no por bind mount:
+`notebook/Dockerfile.docente:23` lo copia a `/opt/plantillas/`. Así que hacen
+falta tres pasos, en este orden:
+
+1. `git pull` en el servidor.
+2. Reconstruir la imagen del docente (`servidor/instalar.sh` lo hace).
+3. Dentro del contenedor del docente, ejecutar `cargar-competencias`.
+
+Hasta el paso 3 la base sigue con el mapeo viejo. Y cuando se ejecute, el
+cambio es **retroactivo**: la competencia se resuelve por JOIN, así que los
+intentos ya recogidos se reclasifican solos, sin reprocesar nada. Simulado
+contra los datos reales antes de aplicarlo — las cifras están arriba.
+
+Un aviso para más adelante: esa retroactividad **no** alcanza a
+`corte_competencia`. Un corte congelado guarda su nivel y sus señales tal como
+estaban, con el mapeo de aquel día. Es lo que se quería —una foto no cambia—,
+pero significa que un corte tomado antes de reetiquetar no es comparable con
+uno tomado después. Hoy no hay ninguno congelado, así que no hay daño.
+
+### El agujero que queda: mCC103 no la mide nadie
+
+Es el hallazgo de la Fase 6 y no se puede arreglar etiquetando.
+
+mCC103 es *«reconocer problemas de sistemas y organizaciones susceptibles de
+tratamiento algorítmico»*. Revisados uno a uno los quince ejercicios de las
+semanas 1 y 2, **ninguno pide eso**: piden escribir algoritmos, trazar
+variables, convertir tipos y traducir entre pseudocódigo y Python. Reconocer
+una situación real como tratable algorítmicamente no se evalúa en ningún sitio.
+
+De las tres etiquetas mCC103 que había, solo una es residuo comprobable: la de
+`semana_01/ejercicio_2`, que se arrastró de un ejercicio anterior cuando ese
+hueco se rellenó con otro distinto. Hoy pide emparejar editor / terminal /
+intérprete / IDE con su definición — que no es reconocer un problema de una
+organización, por mucho que aparezca la palabra «sistema». Las otras dos no son
+residuo: se pusieron a propósito y siguen sin medir lo que la competencia dice.
+
+Se dejaron sin etiqueta en vez de repartirla a ciegas: un número que no
+significa lo que dice es peor que un hueco visible. `build.py` avisa en cada
+construcción de qué ejercicios van sin competencia.
+
+**Para medirla hace falta un ejercicio que hoy no existe**, del tipo «aquí
+tienes tres situaciones de una organización: di cuál se puede resolver con un
+algoritmo y por qué». Eso es contenido nuevo, no reetiquetado, y en `semana_01`
+además obligaría a re-liberar un cuadernillo con entregas.
+
 
 Tres problemas, por orden de gravedad:
 
