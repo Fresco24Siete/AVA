@@ -49,7 +49,22 @@ if es_instructor:
     c.NbGrader.logfile = '/home/jovyan/work/nbgrader/logs/nbgrader.log'
 
 # Plugin de exportación hacia backend Go
-c.ExportApp.plugin_class = 'api_export.ApiExportPlugin'
+# OBSOLETO (2026-09-20) — ver docs/flujos_obsoletos.md
+#
+# Registraba api_export.py como exportador de nbgrader. Dos motivos para
+# retirarlo:
+#
+#   1. Nadie ejecuta `nbgrader export`. La unica referencia en todo el
+#      repositorio era esta linea: el plugin se registraba y no se invocaba.
+#   2. Apuntaba a METRICS_API_URL = .../internal/metrics, una ruta que NO
+#      EXISTE en el backend. Si alguien lo hubiera ejecutado, habria fallado.
+#
+# Lo reemplaza registrar_notas.py -> POST /internal/notas, que es el camino
+# vivo: lo dispara admin_bridge.py envolviendo el Autograde de formgrader.
+# Confirmado en los logs de produccion, donde /internal/notas si aparece y
+# /internal/metrics no aparece nunca.
+#
+# c.ExportApp.plugin_class = 'api_export.ApiExportPlugin'
 
 # --- Delimitadores en español -------------------------------------------------
 # Sin esto, 'Generate' borra la celda de solución ENTERA y la reemplaza por el

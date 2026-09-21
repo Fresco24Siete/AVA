@@ -58,8 +58,13 @@ def _url_backend(tipo_evento):
     ruta = RUTAS_BACKEND.get(tipo_evento)
     if ruta is None:
         return None
-    # Base configurable; por defecto el servicio interno. Se acepta también la
-    # variable vieja STUDENT_METRICS_API_URL (se le quita el path si lo trae).
+    # Base configurable; por defecto el servicio interno.
+    #
+    # La rama de STUDENT_METRICS_API_URL es un resto (ver
+    # docs/flujos_obsoletos.md): desde el 2026-09-20 el Hub ya no exporta esa
+    # variable, asi que aqui siempre llega vacia y se cae al literal de abajo,
+    # que da exactamente la misma URL. Se deja porque un contenedor viejo que
+    # siga vivo contra el Hub nuevo pasa por aqui, y porque no cuesta nada.
     base = os.environ.get("STUDENT_METRICS_API_BASE")
     if not base:
         vieja = os.environ.get("STUDENT_METRICS_API_URL", "")

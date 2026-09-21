@@ -84,6 +84,9 @@ ARCHIVO_ESTADO = os.path.join(DIR_ESTADO, "estado.json")
 
 
 def _base_backend():
+    # Igual que en metrics_bridge: la rama de STUDENT_METRICS_API_URL es un
+    # resto y ya no se ejecuta, porque el Hub dejo de exportar esa variable el
+    # 2026-09-20 (ver docs/flujos_obsoletos.md). Resolvia a la misma URL.
     base = os.environ.get("TUTOR_API_BASE") or os.environ.get("STUDENT_METRICS_API_BASE")
     if not base:
         vieja = os.environ.get("STUDENT_METRICS_API_URL", "")

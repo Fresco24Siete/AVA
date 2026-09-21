@@ -422,12 +422,25 @@ async def auth_state_a_env(spawner, auth_state):
         spawner.environment['STUDENT_METRICS_API_BASE'] = os.environ.get(
             'STUDENT_METRICS_API_BASE', 'http://api_go:8080'
         )
-        # Compat: algunos consumidores viejos leen la URL completa.
-        spawner.environment['STUDENT_METRICS_API_URL'] = (
-            os.environ.get('STUDENT_METRICS_API_URL')
-            or os.environ.get('STUDENT_METRICS_EVENT_URL')
-            or 'http://api_go:8080/public/metrics/evento'
-        )
+        # OBSOLETO (2026-09-20) — ver docs/flujos_obsoletos.md
+        #
+        # Exportaba STUDENT_METRICS_API_URL con el valor por defecto
+        # http://api_go:8080/public/metrics/evento, una ruta que NO EXISTE en
+        # el backend: las de verdad son /api/exercises/attempts y
+        # /api/cuadernillos/ratings. Los unicos que la leian
+        # (metrics_bridge._url_backend y tutor_bridge) la usaban solo para
+        # deducir la base quitandole el path, y la base ya llega directa en
+        # STUDENT_METRICS_API_BASE, que se pone dos lineas mas arriba y siempre
+        # tiene valor. Asi que ese camino de respaldo no se ejecutaba nunca.
+        #
+        # STUDENT_METRICS_EVENT_URL, que aparecia como segunda alternativa, no
+        # la define nadie en todo el repositorio: solo se leia.
+        #
+        # spawner.environment['STUDENT_METRICS_API_URL'] = (
+        #     os.environ.get('STUDENT_METRICS_API_URL')
+        #     or os.environ.get('STUDENT_METRICS_EVENT_URL')
+        #     or 'http://api_go:8080/public/metrics/evento'
+        # )
 
         try:
             # El token va acotado a estudiante+curso (el cuadernillo lo resuelve
