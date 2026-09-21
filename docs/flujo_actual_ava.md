@@ -143,28 +143,55 @@ algoritmo y por qué». Eso es contenido nuevo, no reetiquetado, y en `semana_01
 además obligaría a re-liberar un cuadernillo con entregas.
 
 
-Tres problemas, por orden de gravedad:
+#### Los tres problemas que se encontraron al auditar, y qué pasó con cada uno
 
-1. **Seis ejercicios miden `mCA14`**, que el propio encargo excluye porque se
-   evalúa por autorreporte y coevaluación, no por trazas. Esas etiquetas no
-   deberían existir en el AVA.
-2. **`mCP17` no tiene ni un ejercicio**, y el encargo le da evidencia oficial en
-   la semana 3. Hoy la semana 3 está etiquetada I3+I4.
-3. **`mCC87` (I3) absorbe el 73 %** y está en *todos* los ejercicios de las
-   semanas 2 a 6. Con ese reparto, el análisis por competencia dice
-   aproximadamente lo mismo que la nota general: pierde poder de diagnóstico
-   justo en lo que motiva el trabajo.
+> Esto es la foto de la **Fase 0**, en pasado. El reparto de hoy es el de la
+> tabla de arriba.
 
-Reparto por cuadernillo (producción):
+1. **Seis ejercicios medían `mCA14`**, que el encargo excluye porque se evalúa
+   por autorreporte y coevaluación, no por trazas. → **Resuelto.** Quedan cero:
+   la Fase 5 quitó dos y la Fase 6 las cuatro restantes.
+2. **`mCP17` no tenía ni un ejercicio** pese a estar en alcance. → **Resuelto a
+   medias.** Hoy tiene siete, pero con la definición del encargo; con la del
+   catálogo no tendría ninguno (ver `modelo_microcompetencias.md` §2.1 bis).
+3. **`mCC87` (I3) absorbía el 73 %** y estaba en *todos* los ejercicios de las
+   semanas 2 a 6, con lo que el análisis por competencia decía casi lo mismo que
+   la nota general. → **Mejorado, no resuelto.** Sigue siendo la mayoría (30 de
+   37 etiquetas), porque es lo que los cuadernillos piden de verdad: escribir
+   algoritmos. Repartirlo a la fuerza sería volver al problema que esta
+   auditoría destapó.
 
-| | I3 | I4 | I5 | Ejercicios |
-|---|---|---|---|---|
-| semana_01 | 5 | 2 | 2 | 7 |
-| semana_02 | 8 | 1 | 2 | 8 |
-| semana_03 | 8 | 2 | 1 | 8 |
-| semana_04 | 8 | 2 | 0 | 8 |
-| semana_05 | 8 | 1 | 1 | 8 |
-| semana_06 | 8 | 3 | 0 | 8 |
+Reparto por cuadernillo, **al auditar** (Fase 0) y **hoy**:
+
+| | I3 | I4 | I5 | I1 | Sin etiqueta | Ejercicios |
+|---|---|---|---|---|---|---|
+| semana_01 | 5 → **3** | 2 → **0** | 2 → **0** | 0 → **2** | 0 → **4** | 7 |
+| semana_02 | 8 → **5** | 1 → **0** | 2 → **0** | 0 → **2** | 0 → **2** | 8 |
+| semana_03 | 8 → **6** | 2 → **0** | 1 → **0** | 0 → **3** | 0 | 8 → **6** |
+| semana_04 | 8 → **6** | 2 → **0** | 0 | 0 | 0 | 8 → **6** |
+| semana_05 | 8 → **4** | 1 → **0** | 1 → **0** | 0 | 0 | 8 → **4** |
+| semana_06 | 8 → **6** | 3 → **0** | 0 | 0 | 0 | 8 → **6** |
+
+#### Los seis ejercicios sin etiqueta, y por qué
+
+Cuatro de los seis **perdieron `mCC87`**, no `mCC103`, y conviene decir por qué
+uno a uno: ninguno pide identificar las variables de un problema para construir
+un algoritmo, que es lo que esa competencia describe.
+
+| Ejercicio | Qué pide | Por qué no es mCC87 |
+|---|---|---|
+| s01 «Tu ficha de estudiante» | Rellenar cuatro variables con el tipo correcto | Los nombres vienen dados; la única decisión es si lleva comillas |
+| s01 «Cada herramienta con su oficio» | Emparejar editor/terminal/intérprete/IDE | Vocabulario del entorno, no modelado |
+| s01 «Diagnostica los tres» | Clasificar tres errores en sintaxis/ejecución/lógica | Taxonomía de errores; no se construye ningún algoritmo |
+| s01 «Crea un archivo con código» | Escribir tres líneas a un fichero | El enunciado dicta los tres pasos y regala el `with` |
+| s02 «Cada símbolo con su significado» | Emparejar formas de diagrama | Vocabulario; el propio enunciado da los cinco valores |
+| s02 «Tipos y conversiones» | Convertir datos de un formulario | Conocimiento de tipos, no identificación de variables |
+
+**Consecuencia visible:** el panel del curso cuenta los ejercicios con intentos
+que no tienen competencia y los muestra en su sección de salud. Cuando se cargue
+este mapeo, ese contador pasará de 0 a 6 y el docente lo verá marcado. No es una
+avería: es el hueco declarado, y es preferible verlo a taparlo con una etiqueta
+que no significa nada.
 
 ---
 

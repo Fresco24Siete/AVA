@@ -81,12 +81,25 @@ integral» encima de un ejercicio sobre el recibo del parqueadero.
 
 Hay que elegir una, y es decisión del curso, no técnica:
 
-- **Alinear el catálogo** al texto del encargo (una línea en una migración), o
-- **quitar las siete etiquetas mCP17** y aceptar que el AVA no mide esa
-  microcompetencia.
+- **Alinear el catálogo** al texto del encargo. Está escrita y probada en
+  `database/migracion_v6.sql`, **sin aplicar y sin conectar al instalador**: es
+  un `UPDATE` de un texto, acotado con un `LIKE` para que repetirla no haga
+  nada, y con el `UPDATE` inverso escrito al final por si hay que volver atrás.
+- **Quitar las siete etiquetas mCP17** y aceptar que el AVA no mide esa
+  microcompetencia, como pasa con mCC103. Mediría dos de cuatro.
 
-Mientras no se decida, las etiquetas están puestas y la descripción no coincide
-con ellas.
+Lo que no vale es dejarlo como está. La descripción no es decorativa: se pinta
+en la guía «Qué mide cada código» del docente
+(`panelDocenteRepository.go:190`), en la tarjeta con la barra de progreso
+(`panel_docente_bridge.py:848`) y en el panel del **estudiante**, bajo «Qué has
+aprendido» (`progresoRepository.go:127`). Hoy esa pantalla pondría «álgebra
+lineal, cálculo diferencial e integral» encima de un ejercicio sobre el recibo
+del parqueadero.
+
+Y un detalle que importa si alguien lo arregla a mano en la base:
+`migracion_v2.sql:43-47` hace `ON CONFLICT (id) DO UPDATE SET descripcion =
+EXCLUDED.descripcion`, así que volver a pasar la v2 revierte el cambio. Por eso
+va como migración y por eso tiene que aplicarse después de la v2.
 
 ### 2.2 Tope de dos competencias por ejercicio
 
