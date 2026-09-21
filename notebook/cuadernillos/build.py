@@ -21,6 +21,9 @@ Qué hace y por qué en este orden:
 """
 import importlib.util
 import json
+import re
+import zlib
+import base64
 import os
 import sys
 
@@ -64,9 +67,43 @@ def _cargar(nombre, ruta):
     return modulo
 
 
+def _total_del_banner(nb):
+    """El total de puntos que la portada le pinta al estudiante, o None.
+
+    Vive en contenido.py, escrito a mano, mientras el de verdad lo suma el
+    constructor: dos copias del mismo numero. Se desincronizaron al recortar
+    las semanas 03-06 —el banner siguio diciendo 80 puntos cuando ya eran 65,
+    55, 50 y 65— y nadie lo vio porque el texto viaja COMPRIMIDO dentro de la
+    celda del motor, asi que un grep sobre el .ipynb no lo encuentra.
+    """
+    for celda in nb["cells"]:
+        fuente = "".join(celda.get("source", []))
+        for b64 in re.findall(r"b64decode\([\"']([A-Za-z0-9+/=]+)[\"']\)", fuente):
+            try:
+                texto = zlib.decompress(base64.b64decode(b64)).decode("utf-8", "replace")
+            except Exception:
+                continue
+            m = re.search(r"(\d+) puntos · \d+ XP", texto)
+            if m:
+                return int(m.group(1))
+    return None
+
+
 def validar(nb):
     """Revisa los contratos que el AVA da por supuestos. Devuelve lista de fallos."""
     fallos = []
+
+    # El banner de la portada contra la suma real de nbgrader.
+    declarado = _total_del_banner(nb)
+    if declarado is not None:
+        real = sum(c.get("metadata", {}).get("nbgrader", {}).get("points", 0)
+                   for c in nb["cells"]
+                   if c.get("metadata", {}).get("nbgrader", {}).get("grade"))
+        if declarado != int(real):
+            fallos.append(
+                f"la portada anuncia {declarado} puntos y los ejercicios suman "
+                f"{int(real)}: actualiza el total en contenido.py")
+
     ids = {}
     soluciones, pruebas = set(), set()
 
