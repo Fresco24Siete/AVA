@@ -38,19 +38,59 @@ def _plantillas():
     )
 
 
+def _mismo_contenido(a, b):
+    """¿La plantilla de la imagen y lo que hay en source/ son el mismo archivo?
+
+    Compara byte a byte los .ipynb. No vale con mirar fechas: `cp -n` conserva
+    la del origen, así que dos versiones distintas pueden tener la misma marca.
+    """
+    fa = os.path.join(a, "cuadernillo.ipynb")
+    fb = os.path.join(b, "cuadernillo.ipynb")
+    if not (os.path.isfile(fa) and os.path.isfile(fb)):
+        return None          # no se puede saber
+    try:
+        with open(fa, "rb") as x, open(fb, "rb") as y:
+            return x.read() == y.read()
+    except OSError:
+        return None
+
+
 def _listar():
     disponibles = _plantillas()
     if not disponibles:
         print(f"No hay plantillas en {PLANTILLAS}.")
         return 0
     print(f"Cuadernillos disponibles en la imagen (curso {CURSO}):\n")
+    desfasados = []
     for tarea in disponibles:
         destino = os.path.join(SOURCE, tarea)
         if not os.path.isdir(destino):
             estado = "sin sembrar"
         else:
-            estado = "ya en source/ (usa --forzar para reemplazarlo)"
+            igual = _mismo_contenido(os.path.join(PLANTILLAS, tarea), destino)
+            if igual is False:
+                estado = "DESACTUALIZADO  <-- source/ tiene otra versión"
+                desfasados.append(tarea)
+            elif igual is True:
+                estado = "al día"
+            else:
+                estado = "ya en source/ (no se pudo comparar)"
         print(f"  {tarea:16s} {estado}")
+
+    # El aviso que faltaba. Sin esto, el docente hace Generate, publica, y sigue
+    # publicándose la versión vieja sin que nada se lo diga: fue exactamente lo
+    # que pasó el 2026-09-22, cuando el profesor abrió la semana 3 en una
+    # reunión y le saltó un NameError que llevaba tres semanas corregido en el
+    # repositorio pero nunca había llegado a source/.
+    if desfasados:
+        print(f"\n  [AVISO] {len(desfasados)} cuadernillo(s) con una versión más "
+              f"nueva en la imagen que la que hay en source/:")
+        print(f"          {', '.join(desfasados)}")
+        print( "          Generate y publicar seguirán usando la VIEJA hasta que")
+        print( "          la reemplaces. Se guarda copia de la anterior:")
+        for t in desfasados:
+            print(f"              sembrar-cuadernillo {t} --forzar")
+
     print("\n  sembrar-cuadernillo <nombre> [--forzar]")
     return 0
 
