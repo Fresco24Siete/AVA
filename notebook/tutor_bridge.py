@@ -335,7 +335,21 @@ class TutorPreguntaHandler(_TutorHandlerBase):
             if resp.code >= 300:
                 cuerpo = (resp.body or b"")[:500].decode("utf-8", "replace")
                 log.error("[tutor_bridge] el backend rechazó la pregunta: %s %s", resp.code, cuerpo)
-                self._responder(502, {"error": "El tutor no está disponible en este momento."})
+                # Si el backend explica qué pasa, se le pasa al alumno tal cual.
+                # El mensaje genérico de antes ("no está disponible") sonaba a
+                # avería permanente incluso cuando era una saturación de Google
+                # que se pasa en un minuto: el alumno cerraba y no volvía.
+                detalle = ""
+                try:
+                    detalle = (json.loads(cuerpo) or {}).get("error", "")
+                except (ValueError, AttributeError):
+                    detalle = ""
+                self._responder(502, {
+                    "error": detalle or "El tutor no está disponible en este momento.",
+                    "restantes": ESTADO.restantes(cuadernillo),
+                    "usadas": ESTADO.usadas(cuadernillo),
+                    "max": MAX_PREGUNTAS,
+                })
                 return
 
             # El backend ha respondido de las dos formas: antes JSON con

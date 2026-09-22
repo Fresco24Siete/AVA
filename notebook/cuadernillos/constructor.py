@@ -19,11 +19,28 @@ el motor lúdico se incrustan dentro del propio notebook.
 """
 import base64
 import json
+import hashlib
 import os
 import zlib
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 RUTA_MOTOR = os.path.join(AQUI, "motor", "ava_motor.py")
+
+
+def huella(ejercicio, llave, valor):
+    """La huella de una respuesta correcta, calculada al CONSTRUIR.
+
+    Tiene que dar exactamente lo mismo que `ava_motor.huella`, que es la que
+    corre dentro del cuadernillo. No se importa de allí porque ava_motor trae
+    IPython y aquí, construyendo, no hay IPython.
+
+    Que sean dos copias no se deja al azar: backend/tests/telemetria/
+    prueba_huella.py comprueba que coinciden. Si se separaran, el cuadernillo
+    diría que TODAS las respuestas están mal y nadie entendería por qué.
+    """
+    return hashlib.sha256(
+        f"{ejercicio}|{llave}|{valor!r}".encode("utf-8")
+    ).hexdigest()[:16]
 RUTA_SVG = os.path.join(AQUI, "diagramas", "svg")
 
 # Delimitadores en español; deben coincidir con los de notebook/nbgrader_config.py.
@@ -190,6 +207,10 @@ class Cuadernillo:
             f'\nava = Motor(titulo={self.titulo!r}, meta_xp={self.meta_xp}, '
             f'insignia={self.insignia!r})\n'
             "quiz, ordenar, comprobar, pista = ava.quiz, ava.ordenar, ava.comprobar, ava.pista\n"
+            # revisar() y huella() NO se importan: el motor se incrusta con
+            # exec(), asi que sus funciones de nivel superior ya estan en el
+            # espacio global del cuadernillo. Un import fallaria, porque no
+            # existe ningun modulo 'ava_motor' que importar.
         )
         if self._pistas:
             # Las pistas viajan comprimidas y se registran aquí, no junto a cada

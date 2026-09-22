@@ -90,6 +90,8 @@ except ImportError:  # pragma: no cover - depende del entorno
     W = None
     HAY_WIDGETS = False
 
+import hashlib
+
 from IPython.display import HTML, display
 
 
@@ -414,3 +416,57 @@ class Motor:
                   f"<ul>{lista}</ul>{estado}"
                   + (f'<div style="margin-top:8px">{puente}</div>' if puente else ""),
                   "reto")
+
+
+# --- Corrección inmediata sin regalar la respuesta ---------------------------
+#
+# El problema que resuelve: en los ejercicios de PREDECIR (rellena un
+# diccionario con lo que crees que vale cada expresión) la prueba visible no
+# puede comprobar las respuestas, porque entonces las respuestas estarían
+# escritas en la celda que el alumno tiene delante. Así que solo validaban el
+# formato y decían «se revisan al calificar».
+#
+# El resultado lo dijo el profesor mirando la pantalla el 2026-09-22: «no me
+# dice si me quedó bien esta... hay personas que se quedan ahí, dicen: ¿será
+# que me quedaron bien o me quedaron mal?». Y tenía razón: el alumno sigue
+# adelante sin saber si va bien.
+#
+# La salida es comparar HUELLAS. En la celda solo viaja el sha256 de la
+# respuesta correcta, que no se puede deshacer, y el mensaje que orienta sin
+# decir el valor. El alumno sabe al instante CUÁL falló y por dónde mirar; la
+# respuesta no aparece en ninguna parte del cuadernillo.
+#
+# Ya se usaba en semana_01 (contenido.py:_corregir_4). Esto lo sube al motor
+# para que lo compartan las seis semanas en vez de reescribirlo en cada una.
+
+def huella(ejercicio, llave, valor):
+    """Huella estable de una respuesta. El ejercicio y la llave entran en la
+    mezcla para que la misma respuesta en dos sitios no dé la misma huella."""
+    return hashlib.sha256(
+        f"{ejercicio}|{llave}|{valor!r}".encode("utf-8")
+    ).hexdigest()[:16]
+
+
+def revisar(ejercicio, respuestas, esperado):
+    """Corrige un diccionario de respuestas y dice CUÁLES fallan, no cuáles son.
+
+    `esperado` es {llave: (huella, pista)}. Lanza AssertionError con las pistas
+    de las que estén mal, que es lo que el alumno ve al ejecutar la celda.
+    """
+    if not isinstance(respuestas, dict):
+        raise AssertionError("La respuesta debe ser un diccionario")
+
+    faltan = [k for k in esperado if k not in respuestas]
+    if faltan:
+        raise AssertionError(
+            "Faltan por responder: " + ", ".join(repr(k) for k in sorted(faltan)))
+
+    malas = [pista for llave, (h, pista) in esperado.items()
+             if huella(ejercicio, llave, respuestas[llave]) != h]
+
+    if malas:
+        raise AssertionError(
+            f"{len(malas)} de {len(esperado)} sin acertar todavía · "
+            + " · ".join(malas))
+
+    print(f"Las {len(esperado)} correctas.")

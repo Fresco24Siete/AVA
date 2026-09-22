@@ -26,7 +26,7 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 if os.path.dirname(AQUI) not in sys.path:
     sys.path.insert(0, os.path.dirname(AQUI))
 
-from constructor import Cuadernillo  # noqa: E402
+from constructor import Cuadernillo, huella  # noqa: E402
 
 MOTOR = os.path.join(os.path.dirname(AQUI), "motor")
 
@@ -357,7 +357,20 @@ assert set(INDICES) == {"primero", "tercero", "ultimo", "cuantos", "indice_ultim
     "No cambies las cinco llaves"
 assert isinstance(INDICES["cuantos"], int), "cuantos es un numero, sin comillas"
 assert isinstance(INDICES["indice_ultimo"], int), "indice_ultimo es un numero"
-print("Formato correcto. Los valores se revisan al calificar.")''',
+# Se corrige aqui mismo, contra huellas: el alumno sabe al instante cual
+# fallo y la respuesta no esta escrita en ninguna parte del cuadernillo.
+revisar("ejercicio_1", INDICES, {
+    "primero": ("9c58237a99158ea4",
+          "el indice 0 no es el primero por casualidad: cuenta desde ahi"),
+    "tercero": ("5d9c162e61f1ee26",
+          "si el 0 es el primero, ¿que indice le toca al tercero?"),
+    "ultimo": ("96fbf218dfc2bf94",
+          "el ultimo esta al final de la lista: mirala entera"),
+    "cuantos": ("807df0d0cd326132",
+          "`cuantos` es el total de elementos, no el ultimo indice"),
+    "indice_ultimo": ("659c2a0ff2b2e888",
+          "ojo: `len(lista)` y el indice del ultimo NO son el mismo numero"),
+})''',
         pruebas_ocultas='''assert INDICES["primero"] == "lunes", "El indice 0 es el PRIMERO"
 assert INDICES["tercero"] == "miercoles", "El indice 2 es el tercero, porque se cuenta desde 0"
 assert INDICES["ultimo"] == "viernes"

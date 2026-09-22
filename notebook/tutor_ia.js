@@ -65,19 +65,86 @@
     }
 
     // --- Contexto ------------------------------------------------------------
-    // Al tutor se le manda SOLO la pregunta del estudiante.
+    // Al tutor se le manda el ENUNCIADO del ejercicio en el que está el alumno y
+    // SU PROPIO CÓDIGO. Nunca la celda de prueba.
     //
-    // Antes se le enviaba también el enunciado, el código escrito y —esto era lo
-    // grave— la celda de prueba entera, con los assert que llevan la respuesta
-    // esperada. Un tutor que ve la respuesta puede regalarla, y de hecho se le
-    // estaba pidiendo que no lo hiciera solo por el prompt del sistema.
+    // Esa distinción es la que importa y por eso está escrita aquí. Al principio
+    // se mandaba todo, celda de prueba incluida, con los `assert` que llevan
+    // dentro la respuesta esperada: un tutor que ve la respuesta puede
+    // regalarla, y lo único que lo impedía era pedírselo por el prompt. Se quitó
+    // entero, y entonces el tutor pasó a no saber de qué se le hablaba — el
+    // profesor lo comprobó en una reunión el 2026-09-22: «él no tiene contexto
+    // sobre el ejercicio, toca que copie y pegue».
     //
-    // Quitarlo tiene un precio y conviene tenerlo presente: el tutor ya no
-    // puede decir "en tu línea 3 falta un paréntesis", porque no ve el código.
-    // A cambio responde antes (4.000 caracteres menos por pregunta), cuesta
-    // menos y no puede filtrar la solución. Si algún día se quiere devolver
-    // parte del contexto, que sea el enunciado y el código del alumno, nunca la
-    // celda de prueba.
+    // Así que vuelve solo la mitad segura:
+    //
+    //   SÍ  el enunciado en markdown (lo que el alumno ya está leyendo)
+    //   SÍ  el código que el alumno ha escrito (lo que el alumno ya escribió)
+    //   NO  la celda de prueba, ni sus asserts, ni las pruebas ocultas
+    //
+    // Ninguna de las dos cosas que se envían le dice al alumno nada que no
+    // tenga delante: sirven para que el tutor sepa de qué habla, no para darle
+    // información nueva. La celda de prueba sí lo haría, y por eso no viaja.
+    var LIMITE_CONTEXTO = 2500;
+
+    // El ejercicio es el par de celdas que nbgrader marca: la de solución
+    // (solution:true) y la de prueba (grade:true). Se busca hacia arriba desde
+    // donde está el cursor, que es donde el alumno está trabajando.
+    function celda_de_solucion_actual() {
+        var J = jup();
+        if (!J || !J.notebook) return null;
+        var celdas = J.notebook.get_cells();
+        var i = J.notebook.get_selected_index();
+        if (typeof i !== 'number' || i < 0) i = celdas.length - 1;
+
+        for (var k = i; k >= 0; k--) {
+            var ng = celdas[k] && celdas[k].metadata && celdas[k].metadata.nbgrader;
+            if (ng && ng.solution === true && ng.grade_id) return { celda: celdas[k], indice: k };
+        }
+        return null;
+    }
+
+    // El enunciado es la celda markdown inmediatamente anterior a la de
+    // solución: es como lo construye el constructor de cuadernillos.
+    function enunciado_de(indice) {
+        var J = jup();
+        var celdas = J.notebook.get_cells();
+        for (var k = indice - 1; k >= 0 && k >= indice - 3; k--) {
+            if (celdas[k].cell_type === 'markdown') {
+                return (celdas[k].get_text && celdas[k].get_text()) || '';
+            }
+        }
+        return '';
+    }
+
+    function contexto_del_ejercicio() {
+        try {
+            var actual = celda_de_solucion_actual();
+            if (!actual) return '';
+
+            var ng = actual.celda.metadata.nbgrader;
+            var codigo = (actual.celda.get_text && actual.celda.get_text()) || '';
+            var enunciado = enunciado_de(actual.indice);
+
+            // Cinturón: si por lo que sea acabáramos leyendo una celda de
+            // prueba, no se manda. Vale más quedarse sin contexto que filtrar
+            // la respuesta.
+            if (ng.grade === true || /^test_/.test(ng.grade_id || '')) return '';
+            if (/### INICIO PRUEBAS OCULTAS|assert /.test(codigo)) return '';
+
+            var partes = [];
+            if (enunciado) partes.push('ENUNCIADO DEL EJERCICIO:\n' + enunciado);
+            if (codigo) partes.push('CÓDIGO QUE LLEVA ESCRITO EL ALUMNO:\n' + codigo);
+            if (!partes.length) return '';
+
+            var ctx = partes.join('\n\n');
+            return ctx.length > LIMITE_CONTEXTO
+                ? ctx.slice(0, LIMITE_CONTEXTO) + '\n[...recortado]'
+                : ctx;
+        } catch (e) {
+            return '';   // sin contexto se responde peor, pero se responde
+        }
+    }
 
 
     // --- Transcripción (solo presentación) -----------------------------------
@@ -208,7 +275,11 @@
         pintar_mensajes();
         actualizar_contador();
 
-        var payload = { mensaje: texto, contexto: '', cuadernillo: cuadernillo_abierto() };
+        var payload = {
+            mensaje: texto,
+            contexto: contexto_del_ejercicio(),
+            cuadernillo: cuadernillo_abierto()
+        };
 
         try {
             var resp = await fetch(baseUrl() + 'tutor-ia/preguntar', {

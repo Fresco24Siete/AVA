@@ -26,7 +26,7 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 if os.path.dirname(AQUI) not in sys.path:
     sys.path.insert(0, os.path.dirname(AQUI))
 
-from constructor import Cuadernillo  # noqa: E402
+from constructor import Cuadernillo, huella  # noqa: E402
 
 MOTOR = os.path.join(os.path.dirname(AQUI), "motor")
 
@@ -390,7 +390,22 @@ la cuenta salga exacta.""",
     "TIPOS debe tener las seis llaves, de la a a la f"
 assert set(TIPOS.values()) <= {"int", "float", "str", "bool"}, \\
     "Usa solo: int, float, str o bool, entre comillas"
-print("Formato correcto. Los tipos se revisan al calificar.")''',
+# Se corrige aqui mismo, contra huellas: el alumno sabe al instante cual
+# fallo y la respuesta no esta escrita en ninguna parte del cuadernillo.
+revisar("ejercicio_3", TIPOS, {
+    "a": ("8a37d9fcc243af62",
+          "en `a`: dos enteros que se suman, ¿que puede salir?"),
+    "b": ("db69953c22532bb0",
+          "en `b` hay una `/`. Esa division tiene una regla propia: miralo en la seccion 4D"),
+    "c": ("d0e3731ba11761b2",
+          "en `c` el operador es `//`, que descarta los decimales"),
+    "d": ("32faabd1d354cf72",
+          "en `d` los dos lados son texto. `+` sobre texto no suma"),
+    "e": ("ddbed1d7432e5cc3",
+          "en `e` hay una comparacion, y una comparacion responde una pregunta de si o no"),
+    "f": ("bbd258c25868f9a7",
+          "en `f` mezcla un entero con un decimal: el resultado se queda con el mas ancho"),
+})''',
         pruebas_ocultas='''assert TIPOS["a"] == "int", "entero + entero da entero"
 assert TIPOS["b"] == "float", "la division / SIEMPRE da decimales, aunque salga exacta"
 assert TIPOS["c"] == "int", "// descarta decimales y devuelve entero"

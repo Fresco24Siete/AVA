@@ -22,7 +22,7 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 if os.path.dirname(AQUI) not in sys.path:
     sys.path.insert(0, os.path.dirname(AQUI))
 
-from constructor import Cuadernillo  # noqa: E402
+from constructor import Cuadernillo, huella  # noqa: E402
 
 MOTOR = os.path.join(os.path.dirname(AQUI), "motor")
 
@@ -434,7 +434,21 @@ escribe tu respuesta y deja que la prueba te corrija.
 assert set(RESPUESTAS) == set("abcde"), "Deja las cinco llaves: a, b, c, d, e"
 assert all(isinstance(v, bool) for v in RESPUESTAS.values()), \\
     "Cada respuesta es True o False, con mayuscula inicial y sin comillas"
-print("Formato correcto. Las respuestas se revisan al calificar.")''',
+
+# Se corrige aqui mismo, contra huellas: sabes cual fallaste al instante y la
+# respuesta no esta escrita en ninguna parte del cuadernillo.
+revisar("ejercicio_1", RESPUESTAS, {
+    "a": ("39be473ef01fdf30",
+          "en `a`: compara 3.4 con 3.0, y fijate en que el `>=` tambien acepta el empate"),
+    "b": ("44d3c36b11bc9796",
+          "en `b`: faltas vale 2. Preguntate si 2 supera a 3"),
+    "c": ("c73dc389c8561f84",
+          "en `c` hay un `and`: exige que se cumplan LAS DOS. Resuelvelas por separado"),
+    "d": ("76fbe1c53a721795",
+          "en `d` hay un `or`: le basta una. Mira si se cumple alguna de las dos"),
+    "e": ("f089a59a18219967",
+          "en `e`, `not` le da la vuelta. Mira primero cuanto vale becado"),
+})''',
         pruebas_ocultas='''assert RESPUESTAS["a"] is True, "3.4 si es mayor o igual que 3.0"
 assert RESPUESTAS["b"] is False, "2 no es mayor que 3"
 assert RESPUESTAS["c"] is True, "las dos se cumplen, asi que el 'and' se cumple"
@@ -592,7 +606,17 @@ Ninguna de las cuatro está resuelta más arriba: hay que razonarlas.""",
     "PRECEDENCIA debe tener exactamente las llaves p, q, r y s"
 assert isinstance(PRECEDENCIA["s"], bool), "s es una expresion logica: True o False"
 assert not isinstance(PRECEDENCIA["p"], bool), "p es un numero, no un booleano"
-print("Formato correcto. Los valores se revisan al calificar.")''',
+
+revisar("ejercicio_4", PRECEDENCIA, {
+    "p": ("f1b0ae33fa823af7",
+          "en `p`: resuelve primero la multiplicacion y despues la resta"),
+    "q": ("cd0714f92b7143e5",
+          "en `q` el parentesis va primero. Resuelvelo y multiplica lo que salga"),
+    "r": ("55e3aa7476da32aa",
+          "en `r`: `//` descarta los decimales y `%` da el residuo. Calculalos por separado antes de sumar"),
+    "s": ("a3ad79f6172d6261",
+          "en `s`, `and` va antes que `or`: ponle los parentesis que la maquina pone sola y vuelve a leerla"),
+})''',
         pruebas_ocultas='''assert PRECEDENCIA["p"] == 4, "la multiplicacion va antes que la resta: 10 - 6"
 assert PRECEDENCIA["q"] == 24, "el parentesis manda: 8 * 3"
 assert PRECEDENCIA["r"] == 5, "17 // 5 es 3 y 17 % 5 es 2, asi que 3 + 2"

@@ -25,7 +25,7 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 if os.path.dirname(AQUI) not in sys.path:
     sys.path.insert(0, os.path.dirname(AQUI))
 
-from constructor import Cuadernillo  # noqa: E402
+from constructor import Cuadernillo, huella  # noqa: E402
 
 MOTOR = os.path.join(os.path.dirname(AQUI), "motor")
 
@@ -328,7 +328,20 @@ Escribe un número entero en cada una.""",
 assert all(isinstance(v, int) and not isinstance(v, bool) for v in VUELTAS.values()), \\
     "Cada respuesta es un numero entero"
 assert all(v >= 0 for v in VUELTAS.values()), "Un ciclo no puede dar vueltas negativas"
-print("Formato correcto. Los valores se revisan al calificar.")''',
+# Se corrige aqui mismo, contra huellas: el alumno sabe al instante cual
+# fallo y la respuesta no esta escrita en ninguna parte del cuadernillo.
+revisar("ejercicio_1", VUELTAS, {
+    "a": ("1ec0db0710419a7b",
+          "en `a`: escribe los numeros que da `range(5)` y cuentalos"),
+    "b": ("aba2bfad9e908ad4",
+          "en `b`: `range(1,6)` arranca en 1 y el tope NO entra"),
+    "c": ("22348bd4dda64484",
+          "en `c` el paso es 2: ve saltando de dos en dos hasta pasarte del tope"),
+    "d": ("06e2ff5caaec2757",
+          "en `d` la condicion se comprueba ANTES de entrar. Mira cuanto vale i al empezar"),
+    "e": ("91c6d8aa669cf6e6",
+          "en `e` cuenta las veces que el cuerpo llega a ejecutarse, no las comprobaciones"),
+})''',
         pruebas_ocultas='''assert VUELTAS["a"] == 5, "range(5) da 0,1,2,3,4"
 assert VUELTAS["b"] == 5, "range(1,6) da 1,2,3,4,5"
 assert VUELTAS["c"] == 5, "range(0,10,2) da 0,2,4,6,8"
