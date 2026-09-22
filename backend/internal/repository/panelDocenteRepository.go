@@ -203,6 +203,9 @@ func (r *PanelDocenteRepository) PorCompetencia(curso string) ([]CompetenciaCurs
 		         ON a.cuadernillo_id = ec.cuadernillo_id
 		        AND a.exercise_id    = ec.exercise_id
 		        AND a.course_id      = $1
+		 -- Solo las que el AVA mide con trazas. Mismo filtro que la ficha del
+		 -- estudiante, y tiene que serlo: son dos secciones del mismo panel.
+		 WHERE `+filtroEnAlcance(r.db)+`
 		 GROUP BY c.id, c.descripcion
 		 ORDER BY c.id`, curso)
 	return salida, err

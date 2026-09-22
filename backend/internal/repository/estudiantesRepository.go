@@ -16,10 +16,6 @@ import (
 // panel del docente pueda listar a su gente por nombre y no por número.
 type EstudiantesRepository struct {
 	db *sqlx.DB
-
-	// Ver columnaEnAlcance.
-	unaVez       sync.Once
-	hayEnAlcance bool
 }
 
 func NewEstudiantesRepository(db *sqlx.DB) *EstudiantesRepository {
@@ -43,25 +39,66 @@ func NewEstudiantesRepository(db *sqlx.DB) *EstudiantesRepository {
 // Se comprueba una sola vez: la columna no aparece ni desaparece sola, y hacerlo
 // en cada petición sería una consulta extra por carga del panel.
 func (r *EstudiantesRepository) columnaEnAlcance() string {
-	r.unaVez.Do(func() {
-		var existe bool
-		err := r.db.Get(&existe, `SELECT EXISTS (
-			SELECT 1 FROM information_schema.columns
-			 WHERE table_name = 'competencias' AND column_name = 'en_alcance')`)
-		if err != nil {
-			log.Printf("[panel] no se pudo comprobar competencias.en_alcance: %v", err)
-			return
-		}
-		r.hayEnAlcance = existe
-		if !existe {
-			log.Println("[panel] competencias.en_alcance no existe todavía (falta la " +
-				"migración v5): ninguna competencia recibirá nivel hasta que se aplique")
-		}
-	})
-	if r.hayEnAlcance {
+	if hayEnAlcance(r.db) {
 		return "c.en_alcance"
 	}
 	return "NULL::boolean AS en_alcance"
+}
+
+// filtroEnAlcance es el mismo dato, pero como predicado de WHERE: sin alias,
+// porque un alias ahí no compila.
+func (r *EstudiantesRepository) filtroEnAlcance() string {
+	return filtroEnAlcance(r.db)
+}
+
+var (
+	unaVezAlcance sync.Once
+	columnaExiste bool
+)
+
+// hayEnAlcance dice si la migración v5 ya creó competencias.en_alcance.
+//
+// Es de paquete y no de un repositorio porque la pregunta es sobre el ESQUEMA,
+// y la usan dos: la ficha del estudiante y el panel del curso. Si cada uno
+// tuviera la suya podrían contestar distinto y el panel enseñaría una lista de
+// competencias en una sección y otra en la de al lado.
+//
+// Hace falta porque el orden de un despliegue no está garantizado: el
+// instalador levanta los contenedores y DESPUÉS aplica las migraciones, así que
+// hay una ventana en la que este backend corre contra una base sin la v5. Sin
+// esto la consulta falla entera y el panel se queda sin su sección.
+//
+// Se comprueba una sola vez: la columna no aparece ni desaparece sola.
+func hayEnAlcance(db *sqlx.DB) bool {
+	unaVezAlcance.Do(func() {
+		var existe bool
+		if err := db.Get(&existe, `SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns
+			 WHERE table_name = 'competencias' AND column_name = 'en_alcance')`); err != nil {
+			log.Printf("[panel] no se pudo comprobar competencias.en_alcance: %v", err)
+			return
+		}
+		columnaExiste = existe
+		if !existe {
+			log.Println("[panel] competencias.en_alcance no existe todavía (falta la " +
+				"migración v5): se mostrarán las siete competencias y ninguna " +
+				"recibirá nivel hasta que se aplique")
+		}
+	})
+	return columnaExiste
+}
+
+// filtroEnAlcance es el predicado que deja fuera del panel las competencias que
+// el AVA no puede medir con trazas.
+//
+// Devuelve IS NOT FALSE y no = TRUE a propósito: sin la migración el literal
+// sería NULL y un filtro estricto dejaría el panel entero en blanco. Ante la
+// duda se enseña de más, que es el fallo barato.
+func filtroEnAlcance(db *sqlx.DB) string {
+	if hayEnAlcance(db) {
+		return "c.en_alcance IS NOT FALSE"
+	}
+	return "TRUE"
 }
 
 // Ingreso es lo que el Hub sabe de una persona en el momento en que entra.
@@ -411,6 +448,11 @@ func (r *EstudiantesRepository) Competencias(curso, estudiante, cuadernillo stri
 		                    AND ($3 = '' OR ec.cuadernillo_id = $3)
 		  LEFT JOIN reales t ON t.cuadernillo_id = ec.cuadernillo_id
 		                    AND t.exercise_id    = ec.exercise_id
+		 -- Solo las que el AVA puede medir. El microcurriculo tiene siete, pero
+		 -- tres se evaluan por autorreporte y coevaluacion: ensenarlas en el
+		 -- panel con un hueco al lado no informa de nada, solo invita a
+		 -- preguntarse por que estan vacias. Ver filtroEnAlcance.
+		 WHERE `+r.filtroEnAlcance()+`
 		 GROUP BY c.id, c.descripcion
 		 ORDER BY c.id`, curso, estudiante, cuadernillo)
 	return salida, err

@@ -781,27 +781,29 @@ def caso_14_nivel_y_corte(tok_doc):
 
     st, f = http("GET", f"/internal/curso/{C1}/estudiante/{B}", token=tok_doc)
     comp = {c["competencia_id"]: c for c in (f.get("competencias") or [])} if isinstance(f, dict) else {}
-    i5 = comp.get("I5", {})
-    registrar("14m una competencia fuera de alcance NO recibe nivel, por muchas "
-              "señales que tenga",
-              st == 200 and i5.get("ejercicios_vistos") == 3
-              and i5.get("ejercicios_resueltos") == 3
-              and i5.get("nivel") is None
-              and "no se mide con trazas" in (i5.get("motivo_nivel") or ""),
-              f"status={st} I5={i5}")
+    registrar("14m una competencia fuera de alcance NO aparece en el panel, por "
+              "muchas señales que tenga",
+              st == 200 and "I5" not in comp,
+              f"status={st} devueltas={sorted(comp)}")
 
-    registrar("14n el motivo distingue «fuera de alcance» de «sin evidencia»: "
-              "no son lo mismo y no se arreglan igual",
-              "sin evidencia" not in (i5.get("motivo_nivel") or ""),
-              f"motivo={i5.get('motivo_nivel')}")
+    registrar("14n el panel enseña exactamente las cuatro que el AVA puede medir",
+              sorted(comp) == ["I1", "I3", "I4", "I7"],
+              f"devueltas={sorted(comp)}")
 
-    # Y tampoco entra con nivel en el corte.
+    # Los intentos de ese ejercicio SI se guardaron: lo que no aparece es la
+    # competencia en el panel, no el trabajo del alumno.
+    guardados = int(sql1("select count(*) from exercise_attempts "
+                         "where exercise_id like 'ej_fa%'")[0])
+    registrar("14n2 los intentos del ejercicio fuera de alcance sí se guardaron",
+              guardados == 3, f"guardados={guardados}")
+
+    # Y el corte tampoco arrastra filas que no se pueden medir.
     http("POST", f"/internal/curso/{C1}/corte", {"etiqueta": "post"}, token=tok_doc)
-    nivel_i5 = sql1(f"select coalesce(nivel::text,'NULO') from corte_competencia "
-                    f"where course_id='{C1}' and student_id='{B}' "
-                    f"and competencia_id='I5' and etiqueta='post'")
-    registrar("14o el corte guarda la fila fuera de alcance, pero con nivel nulo",
-              nivel_i5 and nivel_i5[0] == "NULO", f"nivel_I5_en_corte={nivel_i5}")
+    fuera = int(sql1(f"select count(*) from corte_competencia "
+                     f"where course_id='{C1}' and etiqueta='post' "
+                     f"and competencia_id in ('I2','I5','I6')")[0])
+    registrar("14o el corte no guarda filas de competencias fuera de alcance",
+              fuera == 0, f"filas fuera de alcance en el corte={fuera}")
 
 
 def caso_10_paralelo():

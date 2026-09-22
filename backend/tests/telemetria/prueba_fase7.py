@@ -230,10 +230,14 @@ def main():
            i3.get("ejercicios_vistos", 0) >= 4 and i3.get("ejercicios_resueltos", 0) >= 4,
            f"vistos={i3.get('ejercicios_vistos')} resueltos={i3.get('ejercicios_resueltos')}")
 
-        fuera = [c for c in comp.values() if not c.get("en_alcance")]
-        ok("8. las competencias fuera de alcance no reciben nivel",
-           all(c.get("nivel") is None for c in fuera) and fuera,
-           f"fuera de alcance: {[(c['competencia_id'], c.get('nivel')) for c in fuera]}")
+        # El panel enseña SOLO las que el AVA puede medir. Las otras tres del
+        # microcurriculo se evaluan por autorreporte y coevaluacion: ensenarlas
+        # con un hueco al lado no informa de nada, solo invita a preguntarse por
+        # que estan siempre vacias. El profesor pidio ver cuatro, no siete.
+        fuera = [c for c in comp.values() if c.get("en_alcance") is False]
+        ok("8. el panel solo enseña las competencias que el AVA puede medir",
+           len(comp) == 4 and not fuera and all(c.get("en_alcance") for c in comp.values()),
+           f"devueltas: {sorted(comp)}")
 
         # ------------------------------------------------------------------
         # 5. El filtro por semana acota, y avisa de que no hay evidencia.
