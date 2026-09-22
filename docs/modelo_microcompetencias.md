@@ -1,10 +1,12 @@
 # Modelo de microcompetencias y nivel N1/N2/N3 (Fase 1)
 
-**La migración no se ha aplicado a producción todavía**: solo probada en bases
-desechables (ver §7). Desde el 2026-09-21 está en el bucle de migraciones de
-`servidor/instalar.sh`, así que **el próximo despliegue la aplica**. Es aditiva
-—no toca `exercise_attempts` ni `attempt_errors`— y se comprobó que se puede
-aplicar repetidas veces sin efecto.
+**Aplicada en producción** (Hetzner, curso 36074) desde el despliegue del
+2026-09-21, junto con la v6. Va en el bucle de migraciones de
+`servidor/instalar.sh`. Es aditiva —no toca `exercise_attempts` ni
+`attempt_errors`— y se puede aplicar repetidas veces sin efecto.
+
+Para etiquetar un cuadernillo nuevo, la media página práctica está en
+[`etiquetar_cuadernillo_nuevo.md`](etiquetar_cuadernillo_nuevo.md).
 
 ---
 
