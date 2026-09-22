@@ -431,6 +431,30 @@ def _n(v, vacio="—"):
     return str(v) if v else f'<span class="tenue">{vacio}</span>'
 
 
+def _iniciales(nombre, sid):
+    texto = (nombre or sid or "").strip()
+    partes = texto.split()
+    if len(partes) >= 2:
+        return (partes[0][0] + partes[1][0]).upper()
+    elif partes and len(partes[0]) >= 2:
+        return partes[0][:2].upper()
+    return "??"
+
+
+def _avatar_color(sid):
+    paleta = [
+        ("#eff6ff", "#1d4ed8"),  # Azul
+        ("#fdf2f8", "#be185d"),  # Rosa
+        ("#eef2ff", "#4338ca"),  # Índigo
+        ("#f0fdf4", "#15803d"),  # Verde
+        ("#fffbeb", "#b45309"),  # Ámbar
+        ("#faf5ff", "#7e22ce"),  # Morado
+        ("#f0fdfa", "#0f766e"),  # Teal
+    ]
+    idx = sum(ord(c) for c in (sid or "x")) % len(paleta)
+    return paleta[idx]
+
+
 def _seccion_estudiantes(datos, historial, notas, raiz):
     lista = [e for e in (datos or {}).get("estudiantes", []) if e.get("rol") != "instructor"]
     docentes = [e for e in (datos or {}).get("estudiantes", []) if e.get("rol") == "instructor"]
@@ -441,44 +465,132 @@ def _seccion_estudiantes(datos, historial, notas, raiz):
         return ('<div class="caja vacia">Todavía no ha entrado ningún estudiante. '
                 'Aparecen aquí en cuanto entran desde Moodle, con su nombre.</div>')
 
-    # Entregas por alumno según el servicio: {sid: n tareas entregadas}
     entregadas = {}
     for tarea, h in (historial or {}).items():
         for sid in h.get("entregado", {}):
             entregadas[sid] = entregadas.get(sid, 0) + 1
+
     filas = ""
     for e in lista:
         sid = e["student_id"]
+        safe_id = re.sub(r"[^A-Za-z0-9_-]", "_", sid)
+        nombre = e.get("nombre") or sid
+        email = e.get("email") or ""
         ultimo_intento = _epoch_iso(e.get("ultimo_intento"))
         ultimo_ingreso = _epoch_iso(e.get("ultimo_ingreso"))
         ultimo = max(ultimo_intento, ultimo_ingreso)
+
         if e.get("ultimo_cuadernillo"):
-            donde = (f'{html.escape(_titulo(e["ultimo_cuadernillo"]))} '
-                     f'<span class="tenue">{_hace(ultimo_intento)}</span>')
+            donde = (f'<span class="badge-cuad">{html.escape(_titulo(e["ultimo_cuadernillo"]))}</span> '
+                     f'<span class="tenue chico">{_hace(ultimo_intento)}</span>')
         elif ultimo_ingreso:
-            donde = '<span class="tenue">entró, aún sin intentos</span>'
+            donde = '<span class="tenue chico">entró, aún sin intentos</span>'
         else:
-            donde = '<span class="tenue">nunca ha entrado</span>'
+            donde = '<span class="tenue chico">nunca ha entrado</span>'
+
+        atascados = e.get("ejercicios_atascados", 0)
+        badge_atascados = (f'<span class="pill pill-danger"><b>{atascados}</b> atascados</span>'
+                           if atascados else '<span class="tenue">—</span>')
+
+        bg_col, text_col = _avatar_color(sid)
+        inics = _iniciales(nombre, sid)
+        avatar = (f'<div class="avatar" style="background:{bg_col};color:{text_col}">'
+                  f'{html.escape(inics)}</div>')
+
         notas_alumno = [f"{ob:g}/{mx:g}" for (a, t), (ob, mx) in sorted(notas.items()) if a == sid]
-        filas += (
-            f'<tr><td>{_persona(sid, {sid: e.get("nombre", "")}, raiz)}'
-            f'<div class="tenue chico">{html.escape(e.get("email", ""))}</div></td>'
-            f'<td>{_hace(ultimo)}</td>'
-            f'<td>{donde}</td>'
-            f'<td class="num">{_n(e.get("ejercicios_resueltos"))}</td>'
-            f'<td class="num">{"<b class=mal>%d</b>" % e["ejercicios_atascados"] if e.get("ejercicios_atascados") else _n(0)}</td>'
-            f'<td class="num">{_n(entregadas.get(sid, 0))}</td>'
-            f'<td class="num">{html.escape(" · ".join(notas_alumno)) if notas_alumno else _n(0, "aún sin nota")}</td></tr>')
+        chips_notas = (f'<span class="badge-nota">{html.escape(" · ".join(notas_alumno))}</span>'
+                       if notas_alumno else '<span class="tenue chico">sin notas</span>')
+
+        n_entregas = entregadas.get(sid, 0)
+        entregas_badge = (f'<span class="badge-entregas">{n_entregas} entr.</span>'
+                          if n_entregas else '<span class="tenue chico">0 entr.</span>')
+
+        resueltos_val = e.get("ejercicios_resueltos", 0)
+
+        filas += f"""
+        <tr class="fila-estudiante" id="fila-{safe_id}"
+            data-sid="{html.escape(sid)}"
+            data-safeid="{safe_id}"
+            data-nombre="{html.escape(nombre.lower())}"
+            data-email="{html.escape(email.lower())}"
+            data-atascados="{atascados}"
+            data-entregas="{n_entregas}"
+            data-ingreso="{1 if ultimo else 0}"
+            onclick="toggleFilaEstudiante('{html.escape(sid)}', '{safe_id}', '{html.escape(nombre)}', event)">
+          <td>
+            <div class="estudiante-meta">
+              {avatar}
+              <div>
+                <div class="estudiante-nombre">{html.escape(nombre)}</div>
+                <div class="estudiante-sub">{html.escape(email or sid)}</div>
+              </div>
+            </div>
+          </td>
+          <td><div class="tiempo-rel">{_hace(ultimo)}</div></td>
+          <td>{donde}</td>
+          <td class="num"><span class="badge-resueltos"><b>{resueltos_val}</b> ej.</span></td>
+          <td class="num">{badge_atascados}</td>
+          <td class="num">{entregas_badge} {chips_notas}</td>
+          <td class="col-accion">
+            <button type="button" class="btn-desplegar" id="btn-toggle-{safe_id}"
+              onclick="toggleFilaEstudiante('{html.escape(sid)}', '{safe_id}', '{html.escape(nombre)}', event)">
+              <span>Ver detalle</span> <span class="arrow" id="arrow-{safe_id}">▾</span>
+            </button>
+          </td>
+        </tr>
+        <tr class="fila-detalle" id="det-row-{safe_id}" style="display:none">
+          <td colspan="7" class="celda-detalle" id="det-box-{safe_id}">
+          </td>
+        </tr>"""
+
     pie = ""
     if docentes:
-        pie = ('<p class="sub2 chico">Docentes del curso: '
+        pie = ('<div class="docentes-lista"><span class="docentes-label">Docentes del curso:</span> '
                + ", ".join(html.escape(d.get("nombre") or d["student_id"]) for d in docentes)
-               + "</p>")
-    return (f'<div class="caja"><table>'
-            '<tr><th>Estudiante</th><th>Última vez</th><th>Va por</th>'
-            '<th class="num">Resueltos</th><th class="num">Atascados</th>'
-            '<th class="num">Entregas</th><th class="num">Notas</th></tr>'
-            f'{filas}</table></div>{pie}')
+               + "</div>")
+
+    barra_herramientas = f"""
+    <div class="toolbar-estudiantes">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="filtro-busqueda-est" placeholder="Buscar por nombre, correo o ID..." oninput="filtrarEstudiantes()">
+      </div>
+      <div class="filter-pills" id="filtro-pills-est">
+        <button type="button" class="f-pill active" data-filtro="todos" onclick="setFiltroEstudiantes('todos', this)">Todos ({len(lista)})</button>
+        <button type="button" class="f-pill" data-filtro="atascados" onclick="setFiltroEstudiantes('atascados', this)">⚠️ Con atascados ({sum(1 for e in lista if e.get("ejercicios_atascados", 0) > 0)})</button>
+        <button type="button" class="f-pill" data-filtro="al_dia" onclick="setFiltroEstudiantes('al_dia', this)">✅ Al día</button>
+        <button type="button" class="f-pill" data-filtro="sin_actividad" onclick="setFiltroEstudiantes('sin_actividad', this)">⏳ Sin actividad</button>
+      </div>
+    </div>
+    """
+
+    return f"""
+    <div class="caja table-container">
+      {barra_herramientas}
+      <div class="table-responsive">
+        <table class="tabla-minimalista" id="tabla-estudiantes">
+          <thead>
+            <tr>
+              <th>Estudiante</th>
+              <th>Última actividad</th>
+              <th>Va por</th>
+              <th class="num">Resueltos</th>
+              <th class="num">Atascados</th>
+              <th class="num">Entregas / Notas</th>
+              <th class="col-accion">Detalle</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filas}
+          </tbody>
+        </table>
+      </div>
+      <div id="no-coincidencias-est" class="vacia" style="display:none; text-align:center; padding: 24px;">
+        No se encontraron estudiantes que coincidan con la búsqueda.
+      </div>
+    </div>
+    {pie}
+    """
 
 
 def _activo_actual():
@@ -599,20 +711,20 @@ def _seccion_ciclo(filas, hay_historial):
             f'<td class="num">{_pendientes(f["sin_recoger"])}</td>'
             f'<td class="num">{_n(f["recogidas"])}</td>'
             f'<td class="num">{_n(f["calificadas"])}</td>'
-            f'<td class="sig">{html.escape(f["siguiente"])}</td></tr>')
+            f'<td class="sig"><span class="badge-siguiente">{html.escape(f["siguiente"])}</span></td></tr>')
     nota = ("" if hay_historial else
-            '<p class="sub2 chico">El servicio de intercambio no respondió: las '
+            '<p class="sub2 chico" style="margin-top:10px">El servicio de intercambio no respondió: las '
             'columnas «Lo trajeron» y «Entregaron» no están disponibles.</p>')
-    return (f'<div class="caja"><table>'
-            '<tr><th>Cuadernillo</th><th>Generada</th><th>Publicada</th>'
+    return (f'<div class="caja table-responsive"><table class="tabla-minimalista">'
+            '<thead><tr><th>Cuadernillo</th><th>Generada</th><th>Publicada</th>'
             '<th class="num">Puntos</th>'
             '<th class="num" title="Alumnos que lo recibieron en su carpeta">Lo trajeron</th>'
             '<th class="num" title="Alumnos con intentos registrados">Trabajando</th>'
             '<th class="num" title="Alumnos que pulsaron Entregar">Entregaron</th>'
             '<th class="num" title="Entregas que Collect aún no trajo">Sin recoger</th>'
             '<th class="num">Recogidas</th><th class="num">Calificadas</th>'
-            '<th>Te toca</th></tr>'
-            f'{cuerpo}</table></div>{nota}')
+            '<th>Te toca</th></tr></thead><tbody>'
+            f'{cuerpo}</tbody></table></div>{nota}')
 
 
 def _quiza(n):
@@ -624,12 +736,12 @@ def _quiza(n):
 def _pendientes(n):
     if n is None:
         return '<span class="tenue" title="El servicio de intercambio no respondió">?</span>'
-    return f'<span class="mal">{n}</span>' if n else '<span class="tenue">—</span>'
+    return f'<span class="pill pill-danger"><b>{n}</b></span>' if n else '<span class="tenue">—</span>'
 
 
 def _paso(hecho):
-    return ('<span class="bien">sí</span>' if hecho
-            else '<span class="tenue">no</span>')
+    return ('<span class="pill pill-success">Sí</span>' if hecho
+            else '<span class="pill pill-neutral">No</span>')
 
 
 # Cómo se leen las respuestas del alumno. El orden de FRENOS_TEXTO es el mismo
@@ -929,90 +1041,342 @@ def _seccion_salud(datos):
             f'etiquetados con su competencia{aviso}</p>')
 
 
-ESTILO = f"""
- *{{box-sizing:border-box}}
- body{{margin:0;padding:34px 20px;background:#f7f8fa;color:{TINTA};
-   font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}}
- .marco{{max-width:1120px;margin:0 auto}}
- h1{{font-size:27px;margin:0 0 6px}}
- h2{{font-size:19px;margin:34px 0 6px}}
- .sub{{color:{GRIS};margin:0 0 8px;font-size:15px}}
- .sub2{{color:{GRIS};font-size:14.5px;margin:0 0 14px}}
- .chico{{font-size:12.5px}}
- a{{color:{AZUL};text-decoration:none;font-weight:600}}
- a:hover{{text-decoration:underline}}
- a.persona{{color:{TINTA}}}
- a.persona:hover{{color:{AZUL}}}
- .caja{{background:#fff;border:1px solid {BORDE};border-radius:8px;
-   overflow-x:auto}}
- .vacia{{padding:16px 18px;color:{GRIS}}}
- table{{width:100%;border-collapse:collapse;font-size:14.5px}}
- th{{text-align:left;font-size:12px;color:{GRIS};text-transform:uppercase;
-   letter-spacing:.04em;padding:11px 14px;border-bottom:1px solid {BORDE};
-   font-weight:600;white-space:nowrap}}
- td{{padding:12px 14px;border-bottom:1px solid {BORDE};vertical-align:top}}
- tr:last-child td{{border-bottom:none}}
- .num{{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}}
- .mono{{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13.5px}}
- .tenue{{color:#8b94a1}}
- .bien{{color:{VERDE};font-weight:600}}
- .pend{{color:{AMBAR};font-weight:600}}
- .mal{{color:{ROJO};font-weight:600}}
- .sig{{color:{TINTA};font-weight:600;white-space:nowrap}}
- .marca{{background:{AZUL};color:#fff;font-size:11px;padding:2px 7px;
-   border-radius:3px;margin-left:6px;white-space:nowrap}}
- .banda{{background:#fdf9ef;border-left:3px solid {AMBAR};padding:12px 16px;
-   border-radius:4px;margin-bottom:14px;font-size:14.5px}}
- .mensaje{{font-size:13px;margin-top:3px;max-width:52ch}}
- .grupos{{overflow:visible}}
- .grupo{{border-bottom:1px solid {BORDE}}}
- .grupo:last-child{{border-bottom:none}}
- .grupo>summary{{cursor:pointer;padding:12px 16px;display:flex;align-items:center;
-   gap:8px;flex-wrap:wrap;list-style:none;user-select:none}}
- .grupo>summary::-webkit-details-marker{{display:none}}
- .grupo>summary::before{{content:"▸";color:{GRIS};font-size:12px;width:10px}}
- .grupo[open]>summary::before{{content:"▾"}}
- .grupo>summary:hover{{background:#f7f8fa}}
- .grupo[open]>summary{{border-bottom:1px solid {BORDE}}}
- .gtit{{font-weight:650;color:{TINTA}}}
- .gcod{{font-size:12.5px}}
- .gres{{margin-left:auto;font-size:13.5px;color:{GRIS};white-space:nowrap}}
- .gtabla{{overflow-x:auto}}
- .estrellas{{color:{AMBAR};letter-spacing:1px}}
- .guia summary{{cursor:pointer;font-weight:600;color:#2a78d6;list-style:none}}
- .guia summary::-webkit-details-marker{{display:none}}
- .guia summary:before{{content:'▸ ';color:#8b94a1}}
- .guia[open] summary:before{{content:'▾ '}}
- .guia table{{margin-top:10px}}
- .guia td{{vertical-align:top;padding:5px 10px}}
- .comps{{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));margin-bottom:12px}}
- .comp{{background:#fff;border:1px solid {BORDE};border-radius:8px;padding:14px 16px}}
- .comp-id{{font-size:12px;color:{GRIS};text-transform:uppercase;
-   letter-spacing:.04em;margin-bottom:6px}}
- .comp-e{{font-size:15px;color:{TINTA};margin-bottom:8px}}
- .comp-d{{font-size:13px;color:{GRIS};margin-top:9px;line-height:1.45}}
- .barra{{height:7px;background:#e9ecef;border-radius:4px;overflow:hidden}}
- .relleno{{height:100%;border-radius:4px}}
- /* El nivel va arriba del todo y en grande porque es la conclusión; el resto
-    de la tarjeta son los números en los que se apoya. "Sin medir" se pinta
-    en gris y sin recuadro a propósito: tiene que leerse como una ausencia,
-    no como un cuarto nivel por debajo de N1. */
- .nivel{{display:inline-block;font-size:19px;font-weight:700;line-height:1;
-   padding:5px 10px;border-radius:6px;color:#fff;margin-bottom:8px}}
- .nivel.sinmedir{{background:none;color:#8b94a1;font-size:15px;font-weight:600;
-   padding:5px 0}}
- .nivel-por{{font-size:13px;color:{GRIS};margin:-4px 0 10px;line-height:1.4}}
- .semanas{{margin:0 0 14px;font-size:14px}}
- .semanas a{{display:inline-block;padding:3px 9px;margin:0 5px 5px 0;
-   border:1px solid {BORDE};border-radius:999px;text-decoration:none;
-   color:{TINTA};background:#fff}}
- .semanas a.puesto{{background:{TINTA};color:#fff;border-color:{TINTA}}}
- /* Primer botón del panel: hasta ahora esta página solo leía. */
- .btn{{padding:8px 14px;border:0;border-radius:6px;background:{TINTA};color:#fff;
-   font-size:14px;font-weight:600;cursor:pointer;margin-left:6px}}
- .btn:hover{{opacity:.9}}
- .btn:disabled{{opacity:.5;cursor:default}}
- .volver{{display:inline-block;margin-bottom:14px}}
+ESTILO = """
+  :root {
+    --bg-app: #f8fafc;
+    --surface: #ffffff;
+    --border: #e2e8f0;
+    --border-light: #f1f5f9;
+    --text-main: #0f172a;
+    --text-muted: #64748b;
+    --text-subtle: #94a3b8;
+    --primary: #2563eb;
+    --primary-light: #eff6ff;
+    --primary-hover: #1d4ed8;
+    --success: #16a34a;
+    --success-bg: #f0fdf4;
+    --success-border: #bbf7d0;
+    --warning: #d97706;
+    --warning-bg: #fffbeb;
+    --warning-border: #fde68a;
+    --danger: #dc2626;
+    --danger-bg: #fef2f2;
+    --danger-border: #fecaca;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 28px 20px 80px;
+    background: var(--bg-app); color: var(--text-main);
+    font: 14.5px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .marco { max-width: 1240px; margin: 0 auto; }
+  
+  /* Cabecera y acciones */
+  .top-header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 16px; flex-wrap: wrap; margin-bottom: 22px;
+  }
+  h1 { font-size: 26px; font-weight: 750; margin: 0 0 4px; color: var(--text-main); letter-spacing: -0.02em; }
+  .sub { color: var(--text-muted); font-size: 14px; margin: 0; }
+  .btn-top-action {
+    background: #ffffff; border: 1px solid var(--border); color: var(--text-main);
+    padding: 8px 14px; border-radius: 8px; font-size: 13.5px; font-weight: 600;
+    text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04); transition: all 0.15s ease;
+  }
+  .btn-top-action:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); text-decoration: none; }
+  
+  /* KPI Cards */
+  .kpi-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 14px; margin-bottom: 28px;
+  }
+  .kpi-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .kpi-card:hover { transform: translateY(-1px); box-shadow: 0 3px 6px rgba(0,0,0,0.05); }
+  .kpi-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .kpi-label { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+  .kpi-icon { font-size: 16px; }
+  .kpi-val { font-size: 24px; font-weight: 750; color: var(--text-main); line-height: 1.2; letter-spacing: -0.01em; }
+  .kpi-sub { font-size: 12.5px; color: var(--text-muted); margin-top: 5px; }
+  .kpi-card-danger { border-left: 4px solid var(--danger); }
+  .kpi-card-warning { border-left: 4px solid var(--warning); }
+  .kpi-card-success { border-left: 4px solid var(--success); }
+
+  /* Tabs principales */
+  .tabs-nav {
+    display: flex; gap: 6px; border-bottom: 1px solid var(--border);
+    margin-bottom: 24px; overflow-x: auto; padding-bottom: 2px;
+  }
+  .tab-btn {
+    background: none; border: none; padding: 10px 16px; font-size: 14px;
+    font-weight: 600; color: var(--text-muted); cursor: pointer;
+    border-radius: 8px 8px 0 0; border-bottom: 2px solid transparent;
+    transition: all 0.15s ease; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .tab-btn:hover { color: var(--text-main); background: #f1f5f9; }
+  .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); background: var(--primary-light); }
+  .tab-count {
+    background: #e2e8f0; color: var(--text-muted); font-size: 11px;
+    padding: 2px 7px; border-radius: 999px; font-weight: 700;
+  }
+  .tab-btn.active .tab-count { background: #dbeafe; color: #1e40af; }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; animation: fadeIn 0.15s ease; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  /* Cajas y tablas minimalistas */
+  .caja {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; overflow-x: auto; margin-bottom: 22px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+  }
+  .vacia { padding: 22px; color: var(--text-muted); font-size: 14px; }
+  h2 { font-size: 18px; font-weight: 700; margin: 28px 0 6px; color: var(--text-main); }
+  h2:first-child { margin-top: 0; }
+  .sub2 { color: var(--text-muted); font-size: 13.5px; margin: 0 0 14px; line-height: 1.5; }
+  .chico { font-size: 12px; }
+  a { color: var(--primary); text-decoration: none; font-weight: 600; }
+  a:hover { text-decoration: underline; }
+  
+  .table-responsive { overflow-x: auto; }
+  .tabla-minimalista { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .tabla-minimalista th {
+    text-align: left; font-size: 11px; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.05em; padding: 11px 16px;
+    border-bottom: 1px solid var(--border); font-weight: 700;
+    white-space: nowrap; background: #fafbfc;
+  }
+  .tabla-minimalista td { padding: 12px 16px; border-bottom: 1px solid var(--border-light); vertical-align: middle; }
+  .tabla-minimalista tr.fila-estudiante { cursor: pointer; transition: background-color 0.12s ease; }
+  .tabla-minimalista tr.fila-estudiante:hover { background-color: #f8fafc; }
+  .tabla-minimalista tr:last-child td { border-bottom: none; }
+  
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  .tenue { color: var(--text-subtle); }
+  
+  /* Pills y badges */
+  .pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
+    line-height: 1.35; white-space: nowrap;
+  }
+  .pill-success { background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); }
+  .pill-warning { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); }
+  .pill-danger { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger-border); }
+  .pill-neutral { background: #f1f5f9; color: var(--text-muted); border: 1px solid var(--border); }
+  
+  .badge-cuad { background: var(--primary-light); color: var(--primary); padding: 3px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .badge-resueltos { font-variant-numeric: tabular-nums; color: var(--text-main); font-size: 13.5px; }
+  .badge-nota { font-family: ui-monospace, monospace; font-size: 12px; background: #f8fafc; border: 1px solid var(--border); padding: 2px 7px; border-radius: 4px; color: var(--text-main); }
+  .badge-entregas { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+  .badge-siguiente { background: #f1f5f9; border: 1px solid var(--border); border-radius: 6px; padding: 4px 9px; font-size: 12px; font-weight: 600; color: var(--text-main); display: inline-block; }
+  .marca { background: var(--primary); color: #fff; font-size: 11px; padding: 2px 7px; border-radius: 4px; margin-left: 6px; font-weight: 600; white-space: nowrap; }
+  .banda { background: #fdf9ef; border-left: 3px solid var(--warning); padding: 12px 16px; border-radius: 6px; margin-bottom: 18px; font-size: 14px; }
+  
+  /* Toolbar Estudiantes */
+  .toolbar-estudiantes {
+    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+    gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border);
+    background: #fafbfc;
+  }
+  .search-box {
+    display: flex; align-items: center; gap: 8px; background: #ffffff;
+    border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 12px;
+    min-width: 260px; flex: 1; max-width: 380px; box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  }
+  .search-box input { border: none; outline: none; font-size: 13.5px; width: 100%; background: transparent; color: var(--text-main); }
+  .filter-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .f-pill {
+    background: #ffffff; border: 1px solid #cbd5e1; border-radius: 20px;
+    padding: 5px 12px; font-size: 12px; font-weight: 600; color: #475569;
+    cursor: pointer; transition: all 0.15s ease;
+  }
+  .f-pill:hover { border-color: #94a3b8; color: var(--text-main); }
+  .f-pill.active { background: var(--primary); border-color: var(--primary); color: #ffffff; }
+
+  /* Fila estudiante y avatar */
+  .estudiante-meta { display: flex; align-items: center; gap: 12px; }
+  .avatar {
+    width: 34px; height: 34px; border-radius: 50%; display: flex;
+    align-items: center; justify-content: center; font-size: 12px;
+    font-weight: 700; flex-shrink: 0;
+  }
+  .estudiante-nombre { font-weight: 650; color: var(--text-main); font-size: 14px; }
+  .estudiante-sub { color: var(--text-muted); font-size: 12px; font-family: ui-monospace, monospace; }
+  .tiempo-rel { font-size: 13px; color: var(--text-main); white-space: nowrap; }
+  .btn-desplegar {
+    background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px;
+    padding: 5px 10px; font-size: 12px; font-weight: 600; color: #334155;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+    transition: all 0.15s ease;
+  }
+  .btn-desplegar:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+  .btn-desplegar.open { background: var(--primary); border-color: var(--primary); color: #ffffff; }
+  .btn-desplegar .arrow { font-size: 10px; transition: transform 0.15s ease; }
+  .col-accion { text-align: right; width: 110px; }
+
+  /* Acordeón / Drill-down de estudiante */
+  .fila-detalle td {
+    background: #f8fafc; border-bottom: 2px solid #cbd5e1;
+    padding: 16px 20px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+  }
+  .drilldown-wrapper {
+    background: #ffffff; border: 1px solid var(--border);
+    border-radius: 10px; border-left: 4px solid var(--primary);
+    padding: 18px 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+  }
+  .drilldown-header {
+    display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid var(--border-light); padding-bottom: 12px;
+    margin-bottom: 14px; flex-wrap: wrap; gap: 10px;
+  }
+  .drilldown-title { font-size: 15.5px; font-weight: 700; color: var(--text-main); }
+  .drilldown-sid { font-size: 12.5px; color: var(--text-muted); margin-left: 8px; }
+  .drilldown-actions { display: flex; gap: 10px; align-items: center; }
+  .btn-link-out {
+    font-size: 12.5px; font-weight: 600; color: var(--primary);
+    padding: 4px 9px; border-radius: 5px; text-decoration: none;
+  }
+  .btn-link-out:hover { background: var(--primary-light); text-decoration: none; }
+  .btn-close-det {
+    background: none; border: 1px solid #cbd5e1; border-radius: 5px;
+    font-size: 12px; font-weight: 600; color: var(--text-muted);
+    padding: 4px 9px; cursor: pointer;
+  }
+  .btn-close-det:hover { background: #f1f5f9; color: var(--text-main); }
+
+  .sub-kpis { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .sub-kpi {
+    background: #f8fafc; border: 1px solid var(--border);
+    border-radius: 6px; padding: 7px 12px; font-size: 12.5px; color: #334155;
+  }
+  .sub-kpi .kpi-num { font-weight: 700; font-size: 14.5px; margin-right: 4px; color: var(--text-main); }
+  .sub-kpi.kpi-alerta { background: var(--danger-bg); border-color: var(--danger-border); color: #991b1b; }
+  .sub-kpi.kpi-alerta .kpi-num { color: var(--danger); }
+
+  .subtabs-nav {
+    display: flex; gap: 6px; border-bottom: 1px solid var(--border);
+    margin-bottom: 16px;
+  }
+  .subtab-btn {
+    background: none; border: none; padding: 8px 14px; font-size: 13px;
+    font-weight: 600; color: var(--text-muted); cursor: pointer;
+    border-radius: 6px 6px 0 0; border-bottom: 2px solid transparent;
+  }
+  .subtab-btn:hover { color: var(--text-main); }
+  .subtab-btn.active { color: var(--primary); border-bottom-color: var(--primary); background: var(--primary-light); }
+  
+  /* Subtab 1: Microcompetencias */
+  .comps-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px; margin-bottom: 6px;
+  }
+  .comp-card-mini {
+    background: #ffffff; border: 1px solid var(--border);
+    border-radius: 8px; padding: 13px 15px;
+  }
+  .comp-mini-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .comp-mini-id { font-weight: 700; font-size: 14.5px; color: var(--text-main); }
+  .comp-mini-reason { font-size: 12px; color: var(--text-muted); line-height: 1.35; margin-bottom: 10px; min-height: 32px; }
+  .comp-mini-bar-group { margin-bottom: 8px; }
+  .comp-mini-stats { display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 600; color: #334155; margin-bottom: 3px; }
+  .progress-bar-bg { background: #e2e8f0; border-radius: 999px; height: 6px; overflow: hidden; }
+  .progress-bar-fill { height: 100%; border-radius: 999px; }
+  .comp-mini-meta { font-size: 11px; color: var(--text-subtle); }
+  .comp-mini-desc { font-size: 11px; color: var(--text-muted); margin-top: 6px; line-height: 1.35; }
+  
+  /* Subtab 2: Cuadernillos tabla */
+  .tabla-sub { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .tabla-sub th { background: #fafbfc; padding: 9px 12px; font-size: 11px; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border); text-align: left; }
+  .tabla-sub td { padding: 10px 12px; border-bottom: 1px solid var(--border-light); vertical-align: middle; }
+
+  /* Subtab 3: Recorrido y Fallas */
+  .ejerc-filter-bar { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+  .ejerc-f-btn {
+    background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px;
+    padding: 4px 10px; font-size: 12px; font-weight: 600; color: #475569; cursor: pointer;
+  }
+  .ejerc-f-btn.active { background: #0f172a; color: #ffffff; border-color: #0f172a; }
+  .ejercicios-lista { display: flex; flex-direction: column; gap: 8px; }
+  .ejercicio-item {
+    background: #ffffff; border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 14px;
+  }
+  .ejercicio-item.atascado { border-left: 3px solid var(--danger); }
+  .ejercicio-item.amedias { border-left: 3px solid var(--warning); }
+  .ejercicio-item.resuelto { border-left: 3px solid var(--success); }
+  .ejercicio-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .ejercicio-cod { font-weight: 700; font-size: 13.5px; color: var(--text-main); }
+  .badge-semana { background: #f1f5f9; color: #475569; font-size: 11px; padding: 2px 7px; border-radius: 4px; margin-left: 6px; }
+  .ejercicio-meta { display: flex; align-items: center; gap: 10px; }
+  .ejercicio-intentos { font-size: 12px; color: var(--text-muted); }
+  
+  .error-box {
+    background: #0f172a; border-radius: 6px; padding: 10px 12px;
+    margin-top: 8px; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px;
+  }
+  .error-type { color: #f87171; font-weight: 700; margin-bottom: 4px; }
+  .error-code { color: #fecaca; margin: 0; white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: inherit; }
+
+  .detalle-loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 28px; color: var(--text-muted); font-size: 13.5px; }
+  .spinner { width: 18px; height: 18px; border: 2px solid #e2e8f0; border-top-color: var(--primary); border-radius: 50%; animation: spin 0.6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Desplegables de grupos */
+  .grupos { overflow: visible; }
+  .grupo { border-bottom: 1px solid var(--border); }
+  .grupo:last-child { border-bottom: none; }
+  .grupo>summary {
+    cursor: pointer; padding: 12px 16px; display: flex; align-items: center;
+    gap: 8px; flex-wrap: wrap; list-style: none; user-select: none;
+  }
+  .grupo>summary::-webkit-details-marker { display: none; }
+  .grupo>summary::before { content: "▸"; color: var(--text-muted); font-size: 12px; width: 10px; }
+  .grupo[open]>summary::before { content: "▾"; }
+  .grupo>summary:hover { background: #f8fafc; }
+  .grupo[open]>summary { border-bottom: 1px solid var(--border); }
+  .gtit { font-weight: 650; color: var(--text-main); font-size: 14.5px; }
+  .gcod { font-size: 12px; }
+  .gres { margin-left: auto; font-size: 13px; color: var(--text-muted); white-space: nowrap; }
+  .gtabla { overflow-x: auto; }
+  
+  .estrellas { color: var(--warning); letter-spacing: 1px; }
+  .guia summary { cursor: pointer; font-weight: 600; color: var(--primary); list-style: none; padding: 10px 14px; }
+  .guia summary::-webkit-details-marker { display: none; }
+  .guia summary:before { content: '▸ '; color: var(--text-muted); }
+  .guia[open] summary:before { content: '▾ '; }
+  .guia table { margin-top: 4px; }
+  .guia td { vertical-align: top; padding: 8px 12px; font-size: 13px; }
+
+  /* Competencias generales */
+  .comps { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); margin-bottom: 14px; }
+  .comp { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .comp-id { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; font-weight: 700; }
+  .comp-e { font-size: 14px; color: var(--text-main); margin-bottom: 8px; }
+  .comp-d { font-size: 12.5px; color: var(--text-muted); margin-top: 9px; line-height: 1.45; }
+  .barra { height: 7px; background: #e9ecef; border-radius: 4px; overflow: hidden; }
+  .relleno { height: 100%; border-radius: 4px; }
+  
+  .nivel { display: inline-block; font-size: 18px; font-weight: 700; line-height: 1; padding: 4px 9px; border-radius: 6px; color: #fff; margin-bottom: 8px; }
+  .nivel.sinmedir { background: none; color: var(--text-subtle); font-size: 14px; font-weight: 600; padding: 4px 0; }
+  .nivel-por { font-size: 12.5px; color: var(--text-muted); margin: -4px 0 10px; line-height: 1.4; }
+  .semanas { margin: 0 0 14px; font-size: 13.5px; }
+  .semanas a { display: inline-block; padding: 3px 10px; margin: 0 5px 5px 0; border: 1px solid var(--border); border-radius: 999px; text-decoration: none; color: var(--text-main); background: #fff; }
+  .semanas a.puesto { background: var(--text-main); color: #fff; border-color: var(--text-main); }
+  
+  .btn { padding: 8px 16px; border: 0; border-radius: 6px; background: var(--text-main); color: #fff; font-size: 13.5px; font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
+  .btn:hover { opacity: .9; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .volver { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 14px; font-size: 13.5px; }
+  .docentes-lista { margin-top: 14px; font-size: 12.5px; color: var(--text-muted); }
+  .docentes-label { font-weight: 600; }
 """
 
 
@@ -1031,125 +1395,524 @@ def _html_panel(base_url, datos=None, aviso=None):
     nombres = (datos or {}).get("nombres") or {}
     ultima = max((e["cuando"] for e in entregas), default=0)
     raiz = base_url.rstrip("/")
-    n_est = len([e for e in (datos or {}).get("estudiantes", []) if e.get("rol") != "instructor"])
+    
+    lista_estudiantes = [e for e in (datos or {}).get("estudiantes", []) if e.get("rol") != "instructor"]
+    total_estudiantes = len(lista_estudiantes)
+    activos_recientes = sum(1 for e in lista_estudiantes if _epoch_iso(e.get("ultimo_intento")) or _epoch_iso(e.get("ultimo_ingreso")))
+    total_atascados = sum(e.get("ejercicios_atascados", 0) for e in lista_estudiantes)
+    estudiantes_con_atascados = sum(1 for e in lista_estudiantes if e.get("ejercicios_atascados", 0) > 0)
+    
+    por_calificar = sum(1 for e in entregas if not e["calificada"][0] or e["calificada"][1])
+    sin_recoger = sum(f.get("sin_recoger") or 0 for f in ciclo)
+    total_pendientes_entrega = por_calificar + sin_recoger
 
-    banda_analitica = (f'<div class="banda">{html.escape(aviso)}</div>'
-                       if aviso else "")
-    cabecera = (
-        f'<h1>Tu curso</h1>'
-        f'<p class="sub">Curso {html.escape(CURSO)} · '
-        + (f'esta semana <b>{html.escape(_titulo(activo))}</b>'
-           if activo else 'sin cuadernillo activo')
-        + (f' · {n_est} estudiante{"" if n_est == 1 else "s"}' if datos else '')
-        + f' · última entrega {_hace(ultima)} · '
-          f'<a href="{raiz}/formgrader">ir a formgrader</a></p>')
+    banda_analitica = (f'<div class="banda">{html.escape(aviso)}</div>' if aviso else "")
+    
+    # Subtítulo activo
+    info_activo = next((f for f in ciclo if f["activa"]), None)
+    if info_activo and info_activo.get("cierra"):
+        sub_activo = f"Cierra {html.escape(str(info_activo['cierra'])[:16])}"
+    elif info_activo and info_activo.get("abre"):
+        sub_activo = f"Abre {html.escape(str(info_activo['abre'])[:16])}"
+    elif activo:
+        sub_activo = "Publicado sin límite de fecha"
+    else:
+        sub_activo = "Ningún cuadernillo activo"
 
-    cuerpo = f"""
-{cabecera}
-{banda_analitica}
+    cabecera = f"""
+    <div class="top-header">
+      <div>
+        <h1>Tu curso: <span style="font-weight:400">{html.escape(CURSO)}</span></h1>
+        <p class="sub">
+          Panel de progreso y analítica docente · Última entrega: {_hace(ultima)}
+        </p>
+      </div>
+      <div>
+        <a class="btn-top-action" href="{raiz}/formgrader">
+          <span>Ir a formgrader</span> <span>↗</span>
+        </a>
+      </div>
+    </div>
+    """
 
-<h2>Tus estudiantes</h2>
-<p class="sub2">Quien ha entrado desde Moodle, con su nombre. Haz clic en uno para
-ver su recorrido ejercicio por ejercicio.</p>
-{_seccion_estudiantes(datos, historial, notas, raiz)}
+    kpis = f"""
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-head">
+          <span class="kpi-label">Cuadernillo de la semana</span>
+          <span class="kpi-icon">📓</span>
+        </div>
+        <div class="kpi-val">{html.escape(_titulo(activo)) if activo else '<span class="tenue">Sin activo</span>'}</div>
+        <div class="kpi-sub">{sub_activo}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-head">
+          <span class="kpi-label">Estudiantes matriculados</span>
+          <span class="kpi-icon">👥</span>
+        </div>
+        <div class="kpi-val">{total_estudiantes}</div>
+        <div class="kpi-sub"><b style="color:var(--success)">{activos_recientes}</b> con actividad en plataforma</div>
+      </div>
+      <div class="kpi-card {'kpi-card-danger' if estudiantes_con_atascados > 0 else 'kpi-card-success'}">
+        <div class="kpi-head">
+          <span class="kpi-label">Atención requerida</span>
+          <span class="kpi-icon">{'⚠️' if estudiantes_con_atascados > 0 else '✅'}</span>
+        </div>
+        <div class="kpi-val">{estudiantes_con_atascados} <span class="chico tenue">estudiante(s)</span></div>
+        <div class="kpi-sub">{total_atascados} ejercicio(s) con bloqueo recurrente</div>
+      </div>
+      <div class="kpi-card {'kpi-card-warning' if total_pendientes_entrega > 0 else ''}">
+        <div class="kpi-head">
+          <span class="kpi-label">Entregas por gestionar</span>
+          <span class="kpi-icon">📥</span>
+        </div>
+        <div class="kpi-val">{total_pendientes_entrega}</div>
+        <div class="kpi-sub">{por_calificar} por calificar · {sin_recoger} sin recoger</div>
+      </div>
+    </div>
+    """
 
-<h2>En qué punto está cada cuadernillo</h2>
-<p class="sub2">Generar → Publicar → los alumnos lo traen, trabajan y entregan →
-Recoger → Calificar → subir notas. La última columna dice cuál es el siguiente
-paso de cada uno.</p>
-{_seccion_ciclo(ciclo, hay_historial)}
+    tabs_nav = f"""
+    <nav class="tabs-nav" role="tablist">
+      <button type="button" class="tab-btn active" data-tab="tab-estudiantes" onclick="switchMainTab('tab-estudiantes')" role="tab">
+        <span>👥 Estudiantes</span> <span class="tab-count">{total_estudiantes}</span>
+      </button>
+      <button type="button" class="tab-btn" data-tab="tab-cuadernillos" onclick="switchMainTab('tab-cuadernillos')" role="tab">
+        <span>📓 Cuadernillos y Entregas</span> <span class="tab-count">{len(ciclo)}</span>
+      </button>
+      <button type="button" class="tab-btn" data-tab="tab-diagnostico" onclick="switchMainTab('tab-diagnostico')" role="tab">
+        <span>📊 Diagnóstico y Telemetría</span>
+      </button>
+      <button type="button" class="tab-btn" data-tab="tab-competencias" onclick="switchMainTab('tab-competencias')" role="tab">
+        <span>🎯 Competencias y Cortes</span>
+      </button>
+    </nav>
+    """
 
-<h2>Lo que has recogido</h2>
-<p class="sub2">Entregas que Collect ya trajo a tu carpeta, la más reciente primero.</p>
-{_seccion_entregas(entregas, notas, nombres, raiz, activo)}
+    # Panel Tab 1: Estudiantes
+    pane_estudiantes = f"""
+    <div id="tab-estudiantes" class="tab-pane active" role="tabpanel">
+      <h2>Listado de estudiantes</h2>
+      <p class="sub2">Haz clic en cualquier estudiante o pulsa <b>Ver detalle ▾</b> para desplegar al instante su avance en microcompetencias, cuadernillos y fallas celda por celda.</p>
+      {_seccion_estudiantes(datos, historial, notas, raiz)}
+    </div>
+    """
 
-<h2>Qué cuesta y dónde se atascan</h2>
-<p class="sub2">Por ejercicio: cuántos lo pasaron a la primera y cuántos intentos
-reales les costó a los que lo resolvieron. «Atascado» es quien escribió una
-respuesta, no le pasa la prueba y no ha vuelto a conseguirlo. Ejecutar la celda
-vacía no cuenta.</p>
-{_seccion_dificultad(datos, activo)}
+    # Panel Tab 2: Cuadernillos y Entregas
+    pane_cuadernillos = f"""
+    <div id="tab-cuadernillos" class="tab-pane" role="tabpanel">
+      <h2>En qué punto está cada cuadernillo</h2>
+      <p class="sub2">Generar → Publicar → los alumnos lo traen, trabajan y entregan → Recoger → Calificar → subir notas. La columna <b>Te toca</b> indica la siguiente acción recomendada.</p>
+      {_seccion_ciclo(ciclo, hay_historial)}
 
-<h2>Qué dicen ellos del cuadernillo</h2>
-<p class="sub2">Lo que solo se puede saber preguntando: cuánto sienten que
-aprendieron, cuánto tiempo les tomó de verdad —incluido el que trabajaron fuera
-de Jupyter— y qué los frenó. Cruzado con la tabla de arriba distingue un
-cuadernillo <b>largo</b> (mucho tiempo, pocos intentos) de uno <b>difícil</b>
-(mucho tiempo y muchos intentos).</p>
-{_seccion_valoraciones(datos, activo)}
+      <h2>Entregas recogidas en disco</h2>
+      <p class="sub2">Entregas que Collect ya trajo a tu carpeta para calificar, agrupadas por cuadernillo.</p>
+      {_seccion_entregas(entregas, notas, nombres, raiz, activo)}
+    </div>
+    """
 
-<h2>Lo que se están equivocando igual</h2>
-<p class="sub2">El mismo error en varias personas. Suele ser un tema para
-retomar en clase, no un problema de cada uno.</p>
-{_seccion_malentendidos(datos, activo)}
+    # Panel Tab 3: Diagnóstico y Telemetría
+    pane_diagnostico = f"""
+    <div id="tab-diagnostico" class="tab-pane" role="tabpanel">
+      <h2>Qué cuesta y dónde se atascan</h2>
+      <p class="sub2">Por ejercicio: cuántos pasaron a la primera y cuántos intentos costó a quienes lo resolvieron. «Atascado» es quien escribió una respuesta que no pasa y no ha vuelto a intentar.</p>
+      {_seccion_dificultad(datos, activo)}
 
-<h2>Quién está peleando solo</h2>
-<p class="sub2">Estudiantes con ejercicios donde lo intentaron de verdad y no les
-sale.</p>
-{_seccion_riesgo(datos, nombres, raiz)}
+      <h2>Lo que se están equivocando igual (Malentendidos comunes)</h2>
+      <p class="sub2">El mismo error en varias personas. Suele indicar una laguna conceptual para retomar en clase.</p>
+      {_seccion_malentendidos(datos, activo)}
 
-<h2>Cómo va el grupo por competencia</h2>
-{_seccion_salud(datos)}
-{_seccion_competencias(datos)}
-{_guia_competencias((datos or {}).get('competencias', []))}
+      <h2>Quién está peleando solo</h2>
+      <p class="sub2">Estudiantes con alta tasa de fallos recientes que podrían requerir acompañamiento.</p>
+      {_seccion_riesgo(datos, nombres, raiz)}
 
-<h2>Congelar un corte</h2>
-<p class="sub2">El nivel que ves es siempre el de <b>hoy</b>: cambia cada vez que
-alguien entrega. Un corte guarda una foto del grupo con la fecha, para poder
-comparar dos momentos del semestre. Guarda también con qué umbrales se calculó,
-así que si mañana se ajustan, el corte viejo se puede recalcular en vez de
-quedarse mintiendo.</p>
-<p class="sub2">Ponle un nombre que distinga el momento: <b>pre</b>, <b>post</b>,
-<b>corte 1</b>… Repetir un nombre <b>sobrescribe</b> ese corte.</p>
-<div class="caja">
-  <label for="corte-etiqueta">Nombre del corte:</label>
-  <input id="corte-etiqueta" type="text" maxlength="60" placeholder="pre"
-         style="padding:7px 10px;border:1px solid {BORDE};border-radius:6px;
-                font-size:14px;min-width:180px">
-  <button id="corte-btn" class="btn">Congelar el corte de hoy</button>
-  <!-- aria-live: el resultado se escribe por JS y sin esto un lector de
-       pantalla no anuncia nada. Quien no ve el span pulsa el botón y no se
-       entera de si se guardó. -->
-  <span id="corte-dice" class="sub2" style="margin-left:10px"
-        role="status" aria-live="polite"></span>
-</div>
+      <h2>Qué dicen ellos del cuadernillo (Valoraciones)</h2>
+      <p class="sub2">Percepción subjetiva de aprendizaje (estrellas), tiempo real dedicado, causas de freno reportadas y comentarios directos.</p>
+      {_seccion_valoraciones(datos, activo)}
+    </div>
+    """
+
+    # Panel Tab 4: Competencias y Cortes
+    pane_competencias = f"""
+    <div id="tab-competencias" class="tab-pane" role="tabpanel">
+      <h2>Cómo va el grupo por competencia</h2>
+      {_seccion_salud(datos)}
+      {_seccion_competencias(datos)}
+      {_guia_competencias((datos or {}).get('competencias', []))}
+
+      <h2>Congelar un corte</h2>
+      <p class="sub2">El nivel de competencias mostrado es el de <b>hoy</b>. Un corte almacena una instantánea con fecha y umbrales para contrastar el avance a lo largo del semestre.</p>
+      <p class="sub2">Asigna un nombre descriptivo: <b>pre</b>, <b>post</b>, <b>corte 1</b>… Repetir un nombre sobrescribe ese corte.</p>
+      <div class="caja" style="padding: 18px 20px;">
+        <label for="corte-etiqueta" style="font-weight:600; margin-right:8px;">Nombre del corte:</label>
+        <input id="corte-etiqueta" type="text" maxlength="60" placeholder="corte_1"
+               style="padding:8px 12px; border:1px solid var(--border); border-radius:6px; font-size:14px; min-width:200px;">
+        <button id="corte-btn" class="btn" style="margin-left:8px;">Congelar el corte de hoy</button>
+        <span id="corte-dice" class="sub2" style="margin-left:12px; font-weight:600;" role="status" aria-live="polite"></span>
+      </div>
+    </div>
+    """
+
+    scripts = f"""
 <script>
-(function () {{
-  var btn = document.getElementById("corte-btn");
-  var dice = document.getElementById("corte-dice");
-  if (!btn) return;
-  // El token va en la CABECERA. En el cuerpo no autentica: Jupyter mira la
-  // query y las cabeceras, nunca el JSON, y devuelve un 403 sin explicación.
-  function xsrf() {{
-    var m = document.cookie.match(/\\b_xsrf=([^;]+)/);
-    return m ? decodeURIComponent(m[1]) : "";
+(function() {{
+  var raiz = "{raiz}";
+  var cacheEstudiantes = {{}};
+  window.currentFiltroEst = "todos";
+
+  function esc(s) {{
+    if (s === null || s === undefined) return "";
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }}
-  btn.addEventListener("click", function () {{
-    var etiqueta = (document.getElementById("corte-etiqueta").value || "").trim();
-    if (!etiqueta) {{ dice.textContent = "Ponle un nombre al corte."; return; }}
-    btn.disabled = true;
-    dice.textContent = "Congelando…";
-    fetch("{raiz}/panel-docente/corte", {{
-      method: "POST",
-      credentials: "same-origin",
-      headers: {{"Content-Type": "application/json", "X-XSRFToken": xsrf()}},
-      body: JSON.stringify({{etiqueta: etiqueta}})
-    }}).then(function (r) {{ return r.json().then(function (j) {{
-        return {{ok: r.ok, cuerpo: j}}; }}); }})
-      .then(function (res) {{
-        btn.disabled = false;
-        dice.textContent = res.ok
-          ? ("Corte «" + etiqueta + "» guardado: " + res.cuerpo.filas + " filas.")
-          : (res.cuerpo.error || "No se pudo guardar.");
+
+  // --- Cambio de pestañas principales ---
+  window.switchMainTab = function(tabId) {{
+    var tabs = ["tab-estudiantes", "tab-cuadernillos", "tab-diagnostico", "tab-competencias"];
+    tabs.forEach(function(t) {{
+      var pane = document.getElementById(t);
+      var btn = document.querySelector('.tab-btn[data-tab="' + t + '"]');
+      if (pane) {{
+        if (t === tabId) pane.classList.add("active");
+        else pane.classList.remove("active");
+      }}
+      if (btn) {{
+        if (t === tabId) {{
+          btn.classList.add("active");
+          btn.setAttribute("aria-selected", "true");
+        }} else {{
+          btn.classList.remove("active");
+          btn.setAttribute("aria-selected", "false");
+        }}
+      }}
+    }});
+    if (history.replaceState) {{
+      history.replaceState(null, null, "#" + tabId.replace("tab-", ""));
+    }}
+  }};
+
+  // --- Filtro y búsqueda en tabla de estudiantes ---
+  window.filtrarEstudiantes = function() {{
+    var input = document.getElementById("filtro-busqueda-est");
+    var txt = (input ? input.value : "").toLowerCase().trim();
+    var filtroPill = window.currentFiltroEst || "todos";
+    var filas = document.querySelectorAll(".fila-estudiante");
+    var visibles = 0;
+
+    filas.forEach(function(fila) {{
+      var sid = fila.getAttribute("data-sid") || "";
+      var safeId = fila.getAttribute("data-safeid") || "";
+      var nombre = fila.getAttribute("data-nombre") || "";
+      var email = fila.getAttribute("data-email") || "";
+      var atascados = parseInt(fila.getAttribute("data-atascados") || "0", 10);
+      var ingreso = fila.getAttribute("data-ingreso") === "1";
+      var detRow = document.getElementById("det-row-" + safeId);
+
+      var coincideTexto = !txt || nombre.indexOf(txt) !== -1 || email.indexOf(txt) !== -1 || sid.indexOf(txt) !== -1;
+      var coincideFiltro = true;
+      if (filtroPill === "atascados") {{
+        coincideFiltro = atascados > 0;
+      }} else if (filtroPill === "al_dia") {{
+        coincideFiltro = atascados === 0 && ingreso;
+      }} else if (filtroPill === "sin_actividad") {{
+        coincideFiltro = !ingreso;
+      }}
+
+      if (coincideTexto && coincideFiltro) {{
+        fila.style.display = "";
+        visibles++;
+      }} else {{
+        fila.style.display = "none";
+        if (detRow) detRow.style.display = "none";
+      }}
+    }});
+
+    var noRes = document.getElementById("no-coincidencias-est");
+    if (noRes) noRes.style.display = (visibles === 0 ? "block" : "none");
+  }};
+
+  window.setFiltroEstudiantes = function(filtro, btn) {{
+    window.currentFiltroEst = filtro;
+    var pills = document.querySelectorAll("#filtro-pills-est .f-pill");
+    pills.forEach(function(p) {{ p.classList.remove("active"); }});
+    if (btn) btn.classList.add("active");
+    window.filtrarEstudiantes();
+  }};
+
+  // --- Despliegue interactivo / Accordion por estudiante ---
+  window.toggleFilaEstudiante = function(sid, safeId, nombre, evt) {{
+    if (evt) evt.stopPropagation();
+    var row = document.getElementById("det-row-" + safeId);
+    var arrow = document.getElementById("arrow-" + safeId);
+    var btn = document.getElementById("btn-toggle-" + safeId);
+    if (!row) return;
+
+    var abierto = row.style.display === "table-row";
+    if (abierto) {{
+      row.style.display = "none";
+      if (arrow) arrow.textContent = "▾";
+      if (btn) btn.classList.remove("open");
+    }} else {{
+      row.style.display = "table-row";
+      if (arrow) arrow.textContent = "▴";
+      if (btn) btn.classList.add("open");
+      if (!cacheEstudiantes[sid]) {{
+        cargarDetalleEstudiante(sid, safeId, nombre);
+      }} else {{
+        renderDetalleEstudiante(sid, safeId, nombre, cacheEstudiantes[sid]);
+      }}
+    }}
+  }};
+
+  function cargarDetalleEstudiante(sid, safeId, nombre) {{
+    var box = document.getElementById("det-box-" + safeId);
+    if (!box) return;
+    box.innerHTML = '<div class="detalle-loading"><div class="spinner"></div><div>Cargando recorrido y microcompetencias de <b>' + esc(nombre) + '</b>…</div></div>';
+
+    fetch(raiz + "/panel-docente/api/estudiante/" + encodeURIComponent(sid))
+      .then(function(r) {{
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
       }})
-      .catch(function () {{
-        btn.disabled = false;
-        dice.textContent = "No se pudo guardar. Inténtalo otra vez.";
+      .then(function(data) {{
+        cacheEstudiantes[sid] = data;
+        renderDetalleEstudiante(sid, safeId, nombre, data);
+      }})
+      .catch(function(err) {{
+        box.innerHTML = '<div class="vacia" style="text-align:center"><p style="color:var(--danger)">No se pudo cargar el detalle del estudiante.</p><button type="button" class="btn btn-sm" onclick="cargarDetalleEstudiante(\'' + esc(sid) + '\', \'' + safeId + '\', \'' + esc(nombre) + '\')">Reintentar</button></div>';
       }});
+  }}
+
+  function renderDetalleEstudiante(sid, safeId, nombre, data) {{
+    var box = document.getElementById("det-box-" + safeId);
+    if (!box) return;
+
+    var comps = data.competencias || [];
+    var cuads = data.cuadernillos || [];
+    var ejercs = data.ejercicios || [];
+
+    var nAtascados = ejercs.filter(function(e){{ return !e.resuelto && !e.solo_ejecuto_vacio && !e.a_medias; }}).length;
+    var nResueltos = ejercs.filter(function(e){{ return e.resuelto; }}).length;
+    var nEntregados = cuads.filter(function(c){{ return c.entregado; }}).length;
+
+    var h = '<div class="drilldown-wrapper">';
+    h += '<div class="drilldown-header">';
+    h += '  <div><span class="drilldown-title">Detalle de aprendizaje: <b>' + esc(nombre) + '</b></span><span class="drilldown-sid mono">(' + esc(sid) + ')</span></div>';
+    h += '  <div class="drilldown-actions">';
+    h += '    <a class="btn-link-out" href="' + raiz + '/panel-docente/estudiante/' + encodeURIComponent(sid) + '" target="_blank">Abrir ficha completa ↗</a>';
+    h += '    <button type="button" class="btn-close-det" onclick="toggleFilaEstudiante(\'' + esc(sid) + '\', \'' + safeId + '\', \'' + esc(nombre) + '\', event)">✕ Cerrar</button>';
+    h += '  </div>';
+    h += '</div>';
+
+    // Sub-KPIs
+    h += '<div class="sub-kpis">';
+    h += '  <div class="sub-kpi"><span class="kpi-num">' + nResueltos + '</span> <span class="kpi-txt">ejercicios resueltos</span></div>';
+    h += '  <div class="sub-kpi ' + (nAtascados > 0 ? 'kpi-alerta' : '') + '"><span class="kpi-num">' + nAtascados + '</span> <span class="kpi-txt">ejercicios atascados</span></div>';
+    h += '  <div class="sub-kpi"><span class="kpi-num">' + nEntregados + '/' + cuads.length + '</span> <span class="kpi-txt">cuadernillos entregados</span></div>';
+    h += '</div>';
+
+    // Sub-tabs navigation
+    h += '<div class="subtabs-nav" role="tablist">';
+    h += '  <button type="button" class="subtab-btn active" id="st-btn-comps-' + safeId + '" onclick="switchSubTab(\'' + safeId + '\', \'comps\')">🎯 Microcompetencias (' + comps.length + ')</button>';
+    h += '  <button type="button" class="subtab-btn" id="st-btn-cuads-' + safeId + '" onclick="switchSubTab(\'' + safeId + '\', \'cuads\')">📓 Cuadernillos (' + cuads.length + ')</button>';
+    h += '  <button type="button" class="subtab-btn" id="st-btn-ejercs-' + safeId + '" onclick="switchSubTab(\'' + safeId + '\', \'ejercs\')">⚠️ Recorrido y Fallas (' + ejercs.length + ')</button>';
+    h += '</div>';
+
+    // Subtab 1: Microcompetencias
+    h += '<div class="subtab-pane active" id="st-pane-comps-' + safeId + '">';
+    if (!comps.length) {{
+      h += '<div class="vacia" style="padding:12px 0">Sin datos de competencias registrados para este estudiante.</div>';
+    }} else {{
+      h += '<div class="comps-grid">';
+      comps.forEach(function(c) {{
+        var nivel = c.nivel;
+        var badgeClass = nivel === 3 ? "pill-success" : (nivel === 2 ? "pill-warning" : (nivel === 1 ? "pill-danger" : "pill-neutral"));
+        var nivelTexto = nivel ? ("Nivel " + nivel) : "Sin medir";
+        var vistos = c.ejercicios_vistos || 0;
+        var resueltos = c.ejercicios_resueltos || 0;
+        var pct = vistos > 0 ? Math.round(100 * resueltos / vistos) : 0;
+        var barColor = pct >= 70 ? "var(--success)" : (pct >= 40 ? "var(--warning)" : "var(--danger)");
+
+        h += '<div class="comp-card-mini">';
+        h += '  <div class="comp-mini-head">';
+        h += '    <span class="comp-mini-id">' + esc(c.competencia_id) + '</span>';
+        h += '    <span class="pill ' + badgeClass + '">' + nivelTexto + '</span>';
+        h += '  </div>';
+        h += '  <div class="comp-mini-reason">' + esc(c.motivo_nivel || 'Sin evidencia suficiente para dictaminar nivel') + '</div>';
+        h += '  <div class="comp-mini-bar-group">';
+        h += '    <div class="comp-mini-stats"><span>' + resueltos + ' de ' + vistos + ' resueltos</span><span>' + pct + '%</span></div>';
+        h += '    <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:' + pct + '%; background:' + barColor + '"></div></div>';
+        h += '  </div>';
+        h += '  <div class="comp-mini-meta">' + (c.intentos || 0) + ' intento(s) · ' + (c.abandonos || 0) + ' abandono(s)</div>';
+        h += '  <div class="comp-mini-desc">' + esc(c.descripcion || '') + '</div>';
+        h += '</div>';
+      }});
+      h += '</div>';
+    }}
+    h += '</div>';
+
+    // Subtab 2: Cuadernillos
+    h += '<div class="subtab-pane" id="st-pane-cuads-' + safeId + '" style="display:none">';
+    if (!cuads.length) {{
+      h += '<div class="vacia" style="padding:12px 0">No hay cuadernillos registrados en el curso.</div>';
+    }} else {{
+      h += '<table class="tabla-sub">';
+      h += '<thead><tr><th>Cuadernillo</th><th>Descargado</th><th>Entregado</th><th class="num">Nota oficial</th><th>Estado</th></tr></thead><tbody>';
+      cuads.forEach(function(q) {{
+        var notaTxt = (q.nota_obtenida !== null && q.nota_maxima !== null)
+          ? ('<b>' + q.nota_obtenida + '</b> / ' + q.nota_maxima)
+          : '<span class="tenue">—</span>';
+        var estadoPill = '';
+        if (q.reentregada) {{
+          estadoPill = '<span class="pill pill-warning">Reentregado tras calificar</span>';
+        }} else if (q.calificada) {{
+          estadoPill = '<span class="pill pill-success">Calificado</span>';
+        }} else if (q.entregado) {{
+          estadoPill = '<span class="pill pill-warning">Por calificar</span>';
+        }} else if (q.traido) {{
+          estadoPill = '<span class="pill pill-neutral">En progreso</span>';
+        }} else {{
+          estadoPill = '<span class="tenue chico">Sin abrir</span>';
+        }}
+        h += '<tr>';
+        h += '  <td><b>' + esc(q.titulo) + '</b> <span class="mono tenue chico">(' + esc(q.tarea) + ')</span></td>';
+        h += '  <td>' + (q.traido_hace ? q.traido_hace : '<span class="tenue">No</span>') + '</td>';
+        h += '  <td>' + (q.entregado_hace ? q.entregado_hace : '<span class="tenue">Sin entregar</span>') + '</td>';
+        h += '  <td class="num">' + notaTxt + '</td>';
+        h += '  <td>' + estadoPill + '</td>';
+        h += '</tr>';
+      }});
+      h += '</tbody></table>';
+    }}
+    h += '</div>';
+
+    // Subtab 3: Recorrido y Fallas
+    h += '<div class="subtab-pane" id="st-pane-ejercs-' + safeId + '" style="display:none">';
+    if (!ejercs.length) {{
+      h += '<div class="vacia" style="padding:12px 0">El estudiante aún no ha ejecutado ninguna prueba de código en sus cuadernillos.</div>';
+    }} else {{
+      h += '<div class="ejerc-filter-bar">';
+      h += '  <button type="button" class="ejerc-f-btn active" onclick="filtrarEjercicios(\'' + safeId + '\', \'todos\', this)">Todos (' + ejercs.length + ')</button>';
+      h += '  <button type="button" class="ejerc-f-btn" onclick="filtrarEjercicios(\'' + safeId + '\', \'fallas\', this)">⚠️ Solo fallas / atascados (' + ejercs.filter(function(e){{ return !e.resuelto; }}).length + ')</button>';
+      h += '  <button type="button" class="ejerc-f-btn" onclick="filtrarEjercicios(\'' + safeId + '\', \'resueltos\', this)">✅ Resueltos (' + ejercs.filter(function(e){{ return e.resuelto; }}).length + ')</button>';
+      h += '</div>';
+
+      h += '<div class="ejercicios-lista" id="ejerc-list-' + safeId + '">';
+      ejercs.forEach(function(e) {{
+        var tipoClass = e.resuelto ? "resuelto" : (e.a_medias ? "amedias" : (e.solo_ejecuto_vacio ? "vacio" : "atascado"));
+        var pillClass = e.resuelto ? "pill-success" : (e.a_medias ? "pill-warning" : (e.solo_ejecuto_vacio ? "pill-neutral" : "pill-danger"));
+        var estadoTexto = e.resuelto ? "Resuelto" : (e.a_medias ? "A medias" : (e.solo_ejecuto_vacio ? "Celda vacía" : "Atascado"));
+
+        h += '<div class="ejercicio-item ' + tipoClass + '" data-estado="' + tipoClass + '">';
+        h += '  <div class="ejercicio-header">';
+        h += '    <div><span class="mono ejercicio-cod">' + esc(e.exercise_id) + '</span><span class="badge-semana">' + esc(e.cuadernillo_titulo) + '</span></div>';
+        h += '    <div class="ejercicio-meta"><span class="pill ' + pillClass + '">' + estadoTexto + '</span><span class="ejercicio-intentos">' + (e.intentos || 0) + ' intento(s)</span><span class="tenue chico">' + esc(e.ultimo_intento_hace || '') + '</span></div>';
+        h += '  </div>';
+
+        if (!e.resuelto && (e.ultimo_error || e.ultimo_mensaje)) {{
+          h += '<div class="error-box">';
+          if (e.ultimo_error) h += '<div class="error-type">📌 ' + esc(e.ultimo_error) + '</div>';
+          if (e.ultimo_mensaje) h += '<pre class="error-code">' + esc(e.ultimo_mensaje) + '</pre>';
+          h += '</div>';
+        }}
+        h += '</div>';
+      }});
+      h += '</div>';
+    }}
+    h += '</div>';
+
+    h += '</div>'; // drilldown-wrapper
+    box.innerHTML = h;
+  }}
+
+  window.switchSubTab = function(safeId, tabKey) {{
+    var panes = ["comps", "cuads", "ejercs"];
+    panes.forEach(function(k) {{
+      var p = document.getElementById("st-pane-" + k + "-" + safeId);
+      var b = document.getElementById("st-btn-" + k + "-" + safeId);
+      if (p) p.style.display = (k === tabKey ? "block" : "none");
+      if (b) {{
+        if (k === tabKey) b.classList.add("active");
+        else b.classList.remove("active");
+      }}
+    }});
+  }};
+
+  window.filtrarEjercicios = function(safeId, tipo, btn) {{
+    var parent = btn.parentElement;
+    var btns = parent.querySelectorAll(".ejerc-f-btn");
+    btns.forEach(function(b){{ b.classList.remove("active"); }});
+    btn.classList.add("active");
+
+    var list = document.getElementById("ejerc-list-" + safeId);
+    if (!list) return;
+    var items = list.querySelectorAll(".ejercicio-item");
+    items.forEach(function(item) {{
+      var estado = item.getAttribute("data-estado");
+      if (tipo === "todos") {{
+        item.style.display = "block";
+      }} else if (tipo === "fallas") {{
+        item.style.display = (estado === "atascado" || estado === "amedias") ? "block" : "none";
+      }} else if (tipo === "resueltos") {{
+        item.style.display = (estado === "resuelto") ? "block" : "none";
+      }}
+    }});
+  }};
+
+  // Congelar corte
+  var btnCorte = document.getElementById("corte-btn");
+  var diceCorte = document.getElementById("corte-dice");
+  if (btnCorte) {{
+    function xsrf() {{
+      var m = document.cookie.match(/\\b_xsrf=([^;]+)/);
+      return m ? decodeURIComponent(m[1]) : "";
+    }}
+    btnCorte.addEventListener("click", function () {{
+      var etiqueta = (document.getElementById("corte-etiqueta").value || "").trim();
+      if (!etiqueta) {{ diceCorte.textContent = "Ponle un nombre al corte."; return; }}
+      btnCorte.disabled = true;
+      diceCorte.textContent = "Congelando…";
+      fetch(raiz + "/panel-docente/corte", {{
+        method: "POST",
+        credentials: "same-origin",
+        headers: {{"Content-Type": "application/json", "X-XSRFToken": xsrf()}},
+        body: JSON.stringify({{etiqueta: etiqueta}})
+      }}).then(function (r) {{ return r.json().then(function (j) {{ return {{ok: r.ok, cuerpo: j}}; }}); }})
+        .then(function (res) {{
+          btnCorte.disabled = false;
+          diceCorte.textContent = res.ok
+            ? ("Corte «" + etiqueta + "» guardado: " + res.cuerpo.filas + " filas.")
+            : (res.cuerpo.error || "No se pudo guardar.");
+        }})
+        .catch(function () {{
+          btnCorte.disabled = false;
+          diceCorte.textContent = "No se pudo guardar. Inténtalo otra vez.";
+        }});
+    }});
+  }}
+
+  // Activación por hash de URL
+  window.addEventListener("DOMContentLoaded", function() {{
+    var hash = (window.location.hash || "").replace("#", "");
+    if (hash === "cuadernillos") window.switchMainTab("tab-cuadernillos");
+    else if (hash === "diagnostico") window.switchMainTab("tab-diagnostico");
+    else if (hash === "competencias") window.switchMainTab("tab-competencias");
+    else window.switchMainTab("tab-estudiantes");
   }});
 }})();
 </script>
 """
+
+    cuerpo = f"""
+    {cabecera}
+    {banda_analitica}
+    {kpis}
+    {tabs_nav}
+    {pane_estudiantes}
+    {pane_cuadernillos}
+    {pane_diagnostico}
+    {pane_competencias}
+    {scripts}
+    """
     return _pagina("Tu curso", cuerpo)
 
 
@@ -1163,14 +1926,28 @@ def _html_ficha(base_url, sid, datos_panel, ficha, historial, aviso, semana=""):
     _, notas = _libro()
     banda = f'<div class="banda">{html.escape(aviso)}</div>' if aviso else ""
 
-    datos_persona = (
-        f'<p class="sub">{html.escape(persona.get("email", "")) or "sin correo"} · '
-        f'id <span class="mono">{html.escape(sid)}</span> · '
-        f'último ingreso {_hace(_epoch_iso(persona.get("ultimo_ingreso")))}'
-        f' ({persona.get("ingresos", 0)} en total)'
-        + (' · <span class="bien">devolución de nota a Moodle posible</span>'
-           if persona.get("devolucion_moodle_posible") else
-           ' · <span class="tenue">Moodle no mandó casilla de nota</span>') + '</p>')
+    bg_col, text_col = _avatar_color(sid)
+    inics = _iniciales(nombre, sid)
+    avatar = f'<div class="avatar" style="width:48px;height:48px;font-size:16px;background:{bg_col};color:{text_col}">{html.escape(inics)}</div>'
+
+    moodle_pill = ('<span class="pill pill-success">Devolución Moodle activa</span>'
+                   if persona.get("devolucion_moodle_posible") else
+                   '<span class="pill pill-neutral">Moodle sin casilla de nota</span>')
+
+    datos_persona = f"""
+    <div style="display:flex; align-items:center; gap:16px; margin: 14px 0 20px;">
+      {avatar}
+      <div>
+        <h1 style="margin:0 0 4px; font-size:24px;">{html.escape(nombre)}</h1>
+        <div style="font-size:13px; color:var(--text-muted); display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+          <span>{html.escape(persona.get("email", "") or "sin correo")}</span>
+          <span class="mono">ID: {html.escape(sid)}</span>
+          <span>Último ingreso {_hace(_epoch_iso(persona.get("ultimo_ingreso")))} ({persona.get("ingresos", 0)} accesos)</span>
+          {moodle_pill}
+        </div>
+      </div>
+    </div>
+    """
 
     # Por cuadernillo: traído / entregado / nota
     filas_c = ""
@@ -1178,12 +1955,12 @@ def _html_ficha(base_url, sid, datos_panel, ficha, historial, aviso, semana=""):
         traido = h.get("traido", {}).get(sid, "")
         entregado = h.get("entregado", {}).get(sid, "")
         nota = notas.get((sid, tarea))
-        filas_c += (f'<tr><td>{_nombre(tarea)}</td>'
+        filas_c += (f'<tr><td><b>{_nombre(tarea)}</b></td>'
                     f'<td>{_hace(_epoch_exchange(traido)) if traido else "<span class=tenue>no lo ha traído</span>"}</td>'
                     f'<td>{_hace(_epoch_exchange(entregado)) if entregado else "<span class=tenue>sin entregar</span>"}</td>'
-                    f'<td class="num">{f"{nota[0]:g} / {nota[1]:g}" if nota else "<span class=tenue>aún sin nota</span>"}</td></tr>')
-    cuadernillos = (f'<div class="caja"><table><tr><th>Cuadernillo</th><th>Lo trajo</th>'
-                    f'<th>Entregó</th><th class="num">Nota</th></tr>{filas_c}</table></div>'
+                    f'<td class="num">{f"<b>{nota[0]:g}</b> / {nota[1]:g}" if nota else "<span class=tenue>aún sin nota</span>"}</td></tr>')
+    cuadernillos = (f'<div class="caja table-responsive"><table class="tabla-minimalista"><thead><tr><th>Cuadernillo</th><th>Lo trajo</th>'
+                    f'<th>Entregó</th><th class="num">Nota</th></tr></thead><tbody>{filas_c}</tbody></table></div>'
                     if filas_c else '<div class="caja vacia">Sin cuadernillos publicados.</div>')
 
     ejercicios = (ficha or {}).get("ejercicios", [])
@@ -1193,20 +1970,19 @@ def _html_ficha(base_url, sid, datos_panel, ficha, historial, aviso, semana=""):
         filas = ""
         for e in items:
             if e.get("resuelto"):
-                estado = '<span class="bien">resuelto</span>'
+                estado = '<span class="pill pill-success">Resuelto</span>'
             elif e.get("solo_ejecuto_vacio"):
-                estado = '<span class="tenue">solo ejecutó la celda vacía</span>'
+                estado = '<span class="pill pill-neutral">Celda vacía</span>'
             elif e.get("a_medias"):
-                estado = '<span class="pend">a medias</span>'
+                estado = '<span class="pill pill-warning">A medias</span>'
             else:
-                estado = '<span class="mal">atascado</span>'
+                estado = '<span class="pill pill-danger">Atascado</span>'
             err = ""
             if e.get("ultimo_error") and not e.get("resuelto"):
-                err = (f'<b>{html.escape(e["ultimo_error"])}</b>'
-                       f'<div class="tenue mensaje">'
-                       f'{html.escape(e.get("ultimo_mensaje", ""))}</div>')
+                err = (f'<div class="error-box"><div class="error-type">📌 {html.escape(e["ultimo_error"])}</div>'
+                       f'<pre class="error-code">{html.escape(e.get("ultimo_mensaje", ""))}</pre></div>')
             filas += (
-                f'<tr><td class="mono">{html.escape(e["exercise_id"])}</td>'
+                f'<tr><td class="mono"><b>{html.escape(e["exercise_id"])}</b></td>'
                 f'<td>{estado}</td>'
                 f'<td class="num">{_n(e.get("intentos"))}</td>'
                 f'<td>{_hace(_epoch_iso(e.get("ultimo_intento")))}</td>'
@@ -1220,27 +1996,13 @@ def _html_ficha(base_url, sid, datos_panel, ficha, historial, aviso, semana=""):
                         and not e.get("a_medias"))
         texto = f'{resueltos} de {len(items)} resuelto{"" if len(items) == 1 else "s"}'
         if atascados:
-            texto += f' · <b class="mal">{atascados} atascado{"" if atascados == 1 else "s"}</b>'
+            texto += f' · <b style="color:var(--danger)">{atascados} atascado{"" if atascados == 1 else "s"}</b>'
         return texto
 
-    # --- Su progreso por competencia -------------------------------------
-    # El panel del curso ya mostraba las competencias, pero AGREGADAS: "4 de 16
-    # estudiantes resolvió alguno". Y esta ficha mostraba el recorrido ejercicio
-    # a ejercicio. Entre las dos no había forma de contestar "este estudiante,
-    # ¿en qué competencia va atascado?", que es la pregunta para la que existe
-    # todo esto.
-    #
-    # El denominador son los ejercicios que ha VISTO, no los diseñados: medir
-    # sobre el total castigaría a todo el mundo por los cuadernillos que el
-    # docente todavía no ha publicado. Los que le faltan por tocar se dicen
-    # aparte, que es otra información y no la misma.
     def _tarjetas_competencia(comps):
         con_actividad = [c for c in comps if c.get("ejercicios_vistos")]
         sin_tocar = [c for c in comps
                      if not c.get("ejercicios_vistos") and c.get("ejercicios_disenados")]
-        # Con un filtro puesto, "no ha intentado ningún ejercicio" es falso: lo
-        # cierto es "en esta semana". Y el recorrido de más abajo, que NO va
-        # filtrado, lo desmentiría en la misma página.
         donde = f" en {html.escape(semana.replace('_', ' '))}" if semana else ""
         if not con_actividad:
             if sin_tocar:
@@ -1258,34 +2020,22 @@ def _html_ficha(base_url, sid, datos_panel, ficha, historial, aviso, semana=""):
             abandonos = c.get("abandonos", 0)
             faltan = c.get("ejercicios_disenados", 0) - vistos
             pct = int(100 * resueltos / vistos) if vistos else 0
-            color = VERDE if pct >= 70 else (AMBAR if pct >= 40 else ROJO)
+            color = "var(--success)" if pct >= 70 else ("var(--warning)" if pct >= 40 else "var(--danger)")
 
-            # Los abandonos se destacan a propósito: un `sin_validar` es que se
-            # atascó y se rindió sin llegar a validar. No es lo mismo que fallar,
-            # y es la señal más accionable que produce el AVA.
             detalle = f'{intentos} intento{"" if intentos == 1 else "s"}'
             if abandonos:
-                detalle += (f' · <b class="mal">{abandonos} '
+                detalle += (f' · <b style="color:var(--danger)">{abandonos} '
                             f'abandono{"" if abandonos == 1 else "s"}</b>')
             if faltan > 0:
                 detalle += f' · <span class="tenue">{faltan} sin tocar</span>'
 
-            # El nivel lo calcula el backend (service.NivelCompetencia): aquí
-            # solo se pinta. `nivel` viene a null cuando no hay evidencia
-            # suficiente, y eso NO es un N1 — es que no se sabe. Pintarlo como
-            # si fuera el nivel más bajo sería mentir sobre el estudiante.
             nivel = c.get("nivel")
             motivo = html.escape(c.get("motivo_nivel", ""))
             if nivel:
-                tinte = {3: VERDE, 2: AMBAR}.get(nivel, ROJO)
-                insignia = (f'<div class="nivel" style="background:{tinte}">'
-                            f'N{nivel}</div>')
+                badge_cls = {3: "pill-success", 2: "pill-warning"}.get(nivel, "pill-danger")
+                insignia = f'<span class="pill {badge_cls}" style="font-size:13px">Nivel {nivel}</span>'
             else:
-                insignia = '<div class="nivel sinmedir">Sin medir</div>'
-                # La barra se apaga a gris cuando no hay nivel. Con dos de dos
-                # resueltos salía verde al 100 % justo debajo de «Sin medir», y
-                # una barra llena se lee como un veredicto: exactamente lo que
-                # aquí no hay.
+                insignia = '<span class="pill pill-neutral" style="font-size:13px">Sin medir</span>'
                 color = "#c9ced6"
 
             tarjetas += (
@@ -1293,13 +2043,13 @@ def _html_ficha(base_url, sid, datos_panel, ficha, historial, aviso, semana=""):
                 f'{html.escape(c["competencia_id"])} · {vistos} '
                 f'ejercicio{"" if vistos == 1 else "s"} trabajado'
                 f'{"" if vistos == 1 else "s"}</div>'
-                f'{insignia}'
+                f'<div style="margin: 6px 0 8px">{insignia}</div>'
                 f'<div class="nivel-por">{motivo}</div>'
                 f'<div class="comp-e"><b>{resueltos}</b> de {vistos} '
                 f'resuelto{"" if vistos == 1 else "s"}</div>'
                 f'<div class="barra"><div class="relleno" '
                 f'style="width:{pct}%;background:{color}"></div></div>'
-                f'<div class="comp-e">{detalle}</div>'
+                f'<div class="comp-e" style="margin-top:8px">{detalle}</div>'
                 f'<div class="comp-d">{html.escape(c.get("descripcion", ""))}</div></div>')
 
         resto = ""
@@ -1311,16 +2061,7 @@ def _html_ficha(base_url, sid, datos_panel, ficha, historial, aviso, semana=""):
 
     competencias = _tarjetas_competencia((ficha or {}).get("competencias") or [])
 
-    # Filtro por semana. Las semanas salen del recorrido (que NO va filtrado),
-    # no de una lista fija: así aparecen solas cuando el docente publica una
-    # nueva y no hay una segunda lista que mantener.
-    #
-    # Aviso que el propio panel da: una semana aporta dos o tres ejercicios por
-    # competencia, así que casi todo saldrá «sin medir». No es un fallo del
-    # filtro, es que un nivel de una semana suelta no significa nada. Sirve
-    # para mirar la actividad de esa semana.
-    semanas = sorted({e.get("cuadernillo_id") for e in ejercicios
-                      if e.get("cuadernillo_id")})
+    semanas = sorted({e.get("cuadernillo_id") for e in ejercicios if e.get("cuadernillo_id")})
     if semanas:
         enlace = f'{raiz}/panel-docente/estudiante/{urllib.parse.quote(sid, safe="")}'
         fichas_semana = (f'<a href="{enlace}" '
@@ -1331,8 +2072,8 @@ def _html_ficha(base_url, sid, datos_panel, ficha, historial, aviso, semana=""):
                 f'class="{"puesto" if semana == w else ""}">'
                 f'{html.escape(w.replace("_", " "))}</a>')
         nota = ('' if not semana else
-                '<span class="tenue">· una sola semana casi nunca da evidencia '
-                'suficiente para un nivel</span>')
+                '<span class="tenue chico">· una sola semana casi nunca da evidencia '
+                'suficiente para un nivel formativo completo</span>')
         filtro_semana = f'<p class="semanas">{fichas_semana} {nota}</p>'
     else:
         filtro_semana = ""
@@ -1346,30 +2087,20 @@ def _html_ficha(base_url, sid, datos_panel, ficha, historial, aviso, semana=""):
         '<div class="caja vacia">Todavía no ha ejecutado ninguna celda de prueba.</div>')
 
     cuerpo = f"""
-<a class="volver" href="{raiz}/panel-docente">← Tu curso</a>
-<h1>{html.escape(nombre)}</h1>
-{datos_persona}
-{banda}
-<h2>Sus cuadernillos</h2>
-{cuadernillos}
-<h2>Cómo va por competencia</h2>
-<p class="sub2">De los ejercicios de cada competencia que <b>ha llegado a
-intentar</b>, cuántos resolvió. Un <b>abandono</b> es que dejó errores sin
-llegar a ejecutar la celda de prueba: se atascó y no volvió. No es lo mismo que
-fallar, y suele ser lo que más conviene mirar.</p>
-<p class="sub2"><b>N3</b> resuelve casi todo lo que intenta, con pocos fallos y
-sin rendirse · <b>N2</b> resuelve, pero le cuesta o deja cosas a medias ·
-<b>N1</b> no llega a resolver la mayoría · <b>Sin medir</b> es que todavía no
-hay de dónde: con tan pocos ejercicios intentados un nivel sería ruido, y eso
-<b>no</b> es lo mismo que estar en N1. Cada tarjeta dice cuántos le faltan.</p>
-{filtro_semana}
-{competencias}
-{_guia_competencias((ficha or {}).get('competencias') or [])}
-<h2>Su recorrido, ejercicio por ejercicio</h2>
-<p class="sub2">Un intento es cada vez que ejecutó una celda de prueba con algo
-escrito. Los errores son los de su último intento fallido.</p>
-{recorrido}
-"""
+    <a class="volver" href="{raiz}/panel-docente">← Volver al panel del curso</a>
+    {datos_persona}
+    {banda}
+    <h2>Sus cuadernillos</h2>
+    {cuadernillos}
+    <h2>Cómo va por competencia</h2>
+    <p class="sub2">Ejercicios de cada competencia que ha llegado a intentar y su tasa de resolución. Un <b>abandono</b> ocurre cuando se registraron fallos sin validar la celda de prueba.</p>
+    {filtro_semana}
+    {competencias}
+    {_guia_competencias((ficha or {}).get('competencias') or [])}
+    <h2>Su recorrido, ejercicio por ejercicio</h2>
+    <p class="sub2">Detalle de cada celda de prueba ejecutada, intentos y mensaje exacto del último fallo.</p>
+    {recorrido}
+    """
     return _pagina(nombre, cuerpo)
 
 
@@ -1386,9 +2117,6 @@ class FichaHandler(_BaseHandler):
     async def get(self, sid):
         sid = urllib.parse.unquote(sid)
         curso = urllib.parse.quote(CURSO, safe="")
-        # ?semana=semana_03 acota el desglose por competencia a esa semana.
-        # Se filtra antes de mandarlo: el backend lo mete en un WHERE, y un
-        # identificador de cuadernillo no tiene por qué traer nada más que esto.
         semana = (self.get_argument("semana", "") or "").strip()
         if not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", semana or "x"):
             semana = ""
@@ -1401,6 +2129,68 @@ class FichaHandler(_BaseHandler):
         self.set_header("Content-Type", "text/html; charset=utf-8")
         self.finish(_html_ficha(self.settings.get("base_url", "/"), sid, datos, ficha,
                                 historial, aviso or aviso2, semana))
+
+
+class EstudianteDetalleHandler(_BaseHandler):
+    """GET /panel-docente/api/estudiante/<sid> — devuelve en JSON las métricas,
+    microcompetencias, estado de cuadernillos y recorrido de ejercicios del alumno.
+    Permite el despliegue interactivo en el panel sin recargar la página.
+    """
+    @web.authenticated
+    async def get(self, sid):
+        sid = urllib.parse.unquote(sid or "").strip()
+        curso = urllib.parse.quote(CURSO, safe="")
+        ruta = f"/internal/curso/{curso}/estudiante/{urllib.parse.quote(sid, safe='')}"
+        ficha, aviso = await _backend(ruta)
+        historial, _ = _historial()
+        _, notas = _libro()
+        entregas_disco = _entregas()
+        publicados, _ = _publicados()
+
+        todas_tareas = sorted(set(publicados.keys()) | {t for (a, t) in notas if a == sid}
+                              | {e["tarea"] for e in entregas_disco if e["alumno"] == sid})
+        cuadernillos_lista = []
+        for t in todas_tareas:
+            traido = (historial or {}).get(t, {}).get("traido", {}).get(sid, "")
+            entregado = (historial or {}).get(t, {}).get("entregado", {}).get(sid, "")
+            nota = notas.get((sid, t))
+            recogida = next((e for e in entregas_disco if e["alumno"] == sid and e["tarea"] == t), None)
+            cuadernillos_lista.append({
+                "tarea": t,
+                "titulo": _titulo(t),
+                "traido": bool(traido),
+                "traido_hace": _hace(_epoch_exchange(traido)) if traido else None,
+                "entregado": bool(entregado),
+                "entregado_hace": _hace(_epoch_exchange(entregado)) if entregado else None,
+                "nota_obtenida": nota[0] if nota else None,
+                "nota_maxima": nota[1] if nota else None,
+                "calificada": bool(recogida["calificada"][0] if recogida else (nota is not None)),
+                "reentregada": bool(recogida["calificada"][1] if recogida else False),
+            })
+
+        ejercicios_formateados = []
+        for e in (ficha or {}).get("ejercicios", []):
+            ejercicios_formateados.append({
+                "exercise_id": e.get("exercise_id", ""),
+                "cuadernillo_id": e.get("cuadernillo_id", ""),
+                "cuadernillo_titulo": _titulo(e.get("cuadernillo_id", "")),
+                "resuelto": bool(e.get("resuelto")),
+                "a_medias": bool(e.get("a_medias")),
+                "solo_ejecuto_vacio": bool(e.get("solo_ejecuto_vacio")),
+                "intentos": e.get("intentos", 0),
+                "ultimo_intento_hace": _hace(_epoch_iso(e.get("ultimo_intento"))),
+                "ultimo_error": e.get("ultimo_error", ""),
+                "ultimo_mensaje": e.get("ultimo_mensaje", ""),
+            })
+
+        self.set_header("Content-Type", "application/json; charset=utf-8")
+        self.finish(json.dumps({
+            "student_id": sid,
+            "competencias": (ficha or {}).get("competencias", []),
+            "ejercicios": ejercicios_formateados,
+            "cuadernillos": cuadernillos_lista,
+            "aviso": aviso,
+        }, ensure_ascii=False))
 
 
 class CorteHandler(_BaseHandler):
@@ -1455,7 +2245,8 @@ def load_jupyter_server_extension(nbapp):
     raiz = nbapp.web_app.settings.get("base_url", "/").rstrip("/")
     nbapp.web_app.add_handlers(".*$", [
         (raiz + "/panel-docente", PanelDocenteHandler),
-        (raiz + "/panel-docente/estudiante/([^/]+)", FichaHandler),
+        (raiz + r"/panel-docente/estudiante/([^/]+)", FichaHandler),
+        (raiz + r"/panel-docente/api/estudiante/([^/]+)", EstudianteDetalleHandler),
         (raiz + "/panel-docente/corte", CorteHandler),
     ])
     log.info("[panel_docente_bridge] listo: panel del curso en %s/panel-docente",
