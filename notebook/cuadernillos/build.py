@@ -27,6 +27,29 @@ import base64
 import os
 import sys
 
+# Sin caché de bytecode, a propósito.
+#
+# El `.pyc` guarda el mtime de la fuente en SEGUNDOS enteros y lo compara junto
+# con el tamaño. Si alguien edita un generador y reconstruye dentro del mismo
+# segundo sin cambiar el tamaño —cambiar un «20» por un «95» no lo cambia—,
+# Python da la caché por buena y esto construye el cuadernillo VIEJO sin
+# que nada avise. Reproducido el 2026-09-22.
+#
+# Es la misma forma de fallar que dejó al profesor con la semana 03 rota en
+# clase: una copia vieja que nadie detecta porque todo dice OK. Construir tarda
+# segundos; no vale la pena arriesgarse por ahorrarlos.
+sys.dont_write_bytecode = True
+
+
+def _estimar_minutos(nb):
+    """Los minutos que pide el contenido, segun estimar_tiempo.py.
+
+    Se importa en vez de copiarse: si el metodo cambia, tiene que cambiar en un
+    solo sitio o las dos cuentas dejan de compararse entre si.
+    """
+    import estimar_tiempo
+    return estimar_tiempo.estimar_nb(nb)["total"]
+
 AQUI = os.path.dirname(os.path.abspath(__file__))
 DESTINO = os.path.abspath(os.path.join(AQUI, "..", "notebook_semana"))
 # Mapeo ejercicio -> competencias. Va aparte del notebook a propósito: es diseño
@@ -89,9 +112,34 @@ def _total_del_banner(nb):
     return None
 
 
+def _minutos_declarados(nb):
+    """Lo que suman los « · N min» de las cabeceras de seccion."""
+    total = 0
+    for celda in nb["cells"]:
+        if celda.get("cell_type") != "markdown":
+            continue
+        for m in re.finditer(r"·\s*(\d+)\s*min\b", "".join(celda.get("source", []))):
+            total += int(m.group(1))
+    return total
+
+
 def validar(nb):
     """Revisa los contratos que el AVA da por supuestos. Devuelve lista de fallos."""
     fallos = []
+
+    # Y los minutos que anuncia contra los que el contenido de verdad pide.
+    # Mismo problema que los puntos, y el que el profesor leyó en pantalla el
+    # 2026-09-22: la semana 03 anunciaba 153 minutos para seis ejercicios.
+    # El número lo escribe una persona y el contenido lo mueve otra, así que
+    # sin esta comprobación vuelve a envejecer en cuanto alguien toque algo.
+    declarados = _minutos_declarados(nb)
+    if declarados:
+        real = _estimar_minutos(nb)
+        if abs(declarados - real) > max(5, 0.15 * real):
+            fallos.append(
+                f"las secciones anuncian {declarados} min y el contenido pide "
+                f"unos {real:.0f}: ajusta los minutos de c.seccion(...) "
+                f"(`python3 estimar_tiempo.py` los calcula)")
 
     # El banner de la portada contra la suma real de nbgrader.
     declarado = _total_del_banner(nb)

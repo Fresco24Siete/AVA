@@ -98,8 +98,15 @@ CREATE TABLE competencias (
 -- El catálogo va sembrado aquí, no solo en la migración: una base creada desde
 -- cero arrancaba con la tabla vacía y cargar-competencias fallaba por la clave
 -- foránea de ejercicio_competencias, sin que nada lo explicara.
+-- La descripción de mCP17 dice «conocimientos matemáticos» y no el texto largo
+-- del syllabus («álgebra lineal, cálculo diferencial e integral y métodos
+-- numéricos»). Se decidió el 2026-09-21 y se aplicó a la base con
+-- migracion_v6.sql: con la frase larga, ninguno de los ejercicios del curso la
+-- mediría —en primer semestre no hay cálculo— y esta descripción es la que el
+-- panel le enseña al docente Y al estudiante. Aquí va ya corregida para que una
+-- instalación nueva no nazca con el texto que hubo que arreglar después.
 INSERT INTO competencias (id, codigo_anterior, descripcion) VALUES
- ('I1','mCP17','Aplica conocimientos de álgebra lineal, cálculo diferencial e integral y métodos numéricos para solucionar problemas mediante programación.'),
+ ('I1','mCP17','Aplica conocimientos matemáticos para la solución de problemas usando programación.'),
  ('I2','mCC85','Identifica que la complejidad computacional de las soluciones algorítmicas puede generar impactos económicos y ambientales.'),
  ('I3','mCC87','Identifica variables, conceptos y aspectos relevantes de un problema para desarrollar algoritmos que permitan solucionarlo.'),
  ('I4','mCC103','Reconoce problemas de sistemas y organizaciones susceptibles de tratamiento algorítmico.'),

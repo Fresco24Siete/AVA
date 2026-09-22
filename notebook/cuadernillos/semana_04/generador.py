@@ -81,13 +81,13 @@ Este cuadernillo tiene **65 puntos** y **90 XP**. La insignia se llama
 """)
 
     # =========================================================================
-    c.seccion(1, "Calentamiento", 8, """Tres de la semana pasada. Sin nota: dan XP y te dicen si puedes seguir.""")
+    c.seccion(1, "Calentamiento", 4, """Tres de la semana pasada. Sin nota: dan XP y te dicen si puedes seguir.""")
     c.code("quiz_igualdad()")
     c.code("quiz_cadena()")
     c.code("quiz_precedencia()")
 
     # =========================================================================
-    c.seccion(2, "Cien notas a mano", 8, """El profesor de Cálculo tiene que sacar el promedio de su curso. Son 100
+    c.seccion(2, "Cien notas a mano", 4, """El profesor de Cálculo tiene que sacar el promedio de su curso. Son 100
 estudiantes.
 
 Sin ciclos, el programa que lo hace tiene **cien líneas** de sumar. Y si el
@@ -109,7 +109,7 @@ entender cada una de sus piezas para poder escribirlo tú.
 """)
 
     # =========================================================================
-    c.seccion(3, "Concepto en corto", 30, """Un ciclo tiene tres piezas y ninguna es opcional. Si te falta una, o no
+    c.seccion(3, "Concepto en corto", 14, """Un ciclo tiene tres piezas y ninguna es opcional. Si te falta una, o no
 arranca, o no para nunca.""")
 
     c.md("""### 3A. Las tres piezas
@@ -184,7 +184,7 @@ print("Con ciclo :", total, "en", vueltas_dadas, "vueltas")
 print("Con formula:", n * (n + 1) // 2, "en 1 operacion")''')
 
     # =========================================================================
-    c.seccion(4, "Laboratorio", 55, """Cada estructura, primero en pseudocódigo y justo debajo en Python. Con una
+    c.seccion(4, "Laboratorio", 26, """Cada estructura, primero en pseudocódigo y justo debajo en Python. Con una
 excepción que conviene que entiendas.""")
 
     c.md("""### 4A. Mientras / while
@@ -209,7 +209,10 @@ while i <= 5:
 Ejecútalo de verdad en el motor:
 """)
 
-    c.code('''r = ps.ejecutar_pseudo("""
+    # El segundo diagrama de flujo del curso, y el que más falta hacía: en un
+    # ciclo lo difícil no es la condición, es ver que hay una flecha que VUELVE
+    # HACIA ATRÁS. Dibujada se ve; leyendo `FinMientras`, no.
+    c.code('''CONTAR = """
 Algoritmo Contar
     Definir i Como Entero
     i <- 1
@@ -218,8 +221,15 @@ Algoritmo Contar
         i <- i + 1
     FinMientras
 FinAlgoritmo
-""")
-print(r.salida)''')
+"""
+
+r = ps.ejecutar_pseudo(CONTAR)
+print(r.salida)
+
+# Mira la flecha que sale del rombo por el "Sí", baja, y VUELVE a subir hasta
+# el rombo. Esa flecha de vuelta es el ciclo: es lo unico que distingue este
+# dibujo del de la semana pasada.
+ava.figura(ps.diagrama(CONTAR), "Mientras: la flecha que regresa es el ciclo")''')
 
     c.md("""### 4B. El `for`, que solo existe en Python
 
@@ -290,7 +300,7 @@ del de fuera: dos ciclos de 3 vueltas son 9 pasadas, no 6.
     print("--- fin de la fila", fila)''')
 
     # =========================================================================
-    c.seccion(5, "Seis ejercicios", 45, """**65 puntos**, de menos a más. Si te atascas, `pista("E2")` te da hasta tres
+    c.seccion(5, "Seis ejercicios", 24, """**65 puntos**, de menos a más. Si te atascas, `pista("E2")` te da hasta tres
 ayudas escalonadas y no resta puntos.
 
 Un aviso propio de esta semana: si una celda se queda con `[*]` y no termina,
@@ -359,55 +369,94 @@ assert VUELTAS["e"] == 4, "i va 0,1,2,3 y en la cuarta comprobacion i vale 4 y s
 
 
     c.ejercicio(
-        numero=2, competencias=['I3'], titulo="Mientras, en pseudocódigo", estrellas=2, puntos=10,
-        enunciado="""Escribe el pseudocódigo completo en `ALGORITMO_E2`. El algoritmo:
+        numero=2, competencias=['I3', 'I1'], titulo="Fibonacci, pero empezando donde tú digas", estrellas=3, puntos=10,
+        enunciado="""La sucesión de Fibonacci la conoces: cada término es la suma de los dos
+anteriores. `1, 1, 2, 3, 5, 8, 13...`
 
-1. Lee un número entero `n`.
-2. Suma todos los enteros desde 1 hasta `n`.
-3. Escribe el total.
+Aquí **las dos primeras no son 1 y 1: las lee el usuario.** La regla de sumar
+los dos anteriores no cambia; lo que cambia es por dónde arranca.
 
-Con `n = 5` debe escribir 15 (porque 1+2+3+4+5). Con `n = 10`, 55.
+Escribe el pseudocódigo en `ALGORITMO_E2`. El algoritmo:
 
-Acuérdate de las tres piezas: arranque, condición y paso. Si te falta el paso,
-el motor te va a parar por ciclo infinito — y con razón.""",
+1. Lee tres enteros, **en este orden**: `a`, `b` y `n`.
+2. Construye la sucesión donde el término 1 es `a`, el término 2 es `b`, y de
+   ahí en adelante cada uno es la suma de los dos anteriores.
+3. Escribe el término `n`.
+
+| lee | sucesión | término `n` |
+|---|---|---|
+| `a=1, b=1, n=7` | 1, 1, 2, 3, 5, 8, **13** | 13 |
+| `a=2, b=1, n=6` | 2, 1, 3, 4, 7, **11** | 11 |
+| `a=5, b=5, n=4` | 5, 5, 10, **15** | 15 |
+
+Fíjate en la segunda fila: **no es la sucesión de Fibonacci de siempre.** Si
+copias un Fibonacci hecho, te va a dar bien la primera fila y mal las otras
+dos.
+
+> Y mira los bordes antes de darlo por terminado: con `n = 1` la respuesta es
+> `a`, y con `n = 2` es `b`. En esos dos casos el ciclo **no da ni una vuelta**.
+> Un ciclo que siempre da al menos una es el error más común de esta semana.""",
         partida='''ALGORITMO_E2 = """
 """''',
         solucion='''ALGORITMO_E2 = """
-Algoritmo Sumatoria
-    Definir n Como Entero
-    Definir total Como Entero
-    Definir i Como Entero
+Algoritmo FibonacciGeneral
+    Definir a, b, n Como Entero
+    Definir anterior, actual, siguiente, i Como Entero
+    Leer a
+    Leer b
     Leer n
-    total <- 0
-    i <- 1
-    Mientras i <= n Hacer
-        total <- total + i
-        i <- i + 1
-    FinMientras
-    Escribir total
+    anterior <- a
+    actual <- b
+    Si n = 1 Entonces
+        Escribir anterior
+    Sino
+        i <- 2
+        Mientras i < n Hacer
+            siguiente <- anterior + actual
+            anterior <- actual
+            actual <- siguiente
+            i <- i + 1
+        FinMientras
+        Escribir actual
+    FinSi
 FinAlgoritmo
 """''',
         pruebas='''assert isinstance(ALGORITMO_E2, str) and ALGORITMO_E2.strip(), \\
     "ALGORITMO_E2 debe traer el pseudocodigo completo, como texto"
-_r5 = ps.ejecutar_pseudo(ALGORITMO_E2, entradas=["5"])
-assert _r5.ok, "Tu algoritmo no ejecuta. El motor dice: " + _r5.error_corto
-assert "15" in _r5.salida, "Con n = 5 el total es 15"
-print("Con n = 5 ->", _r5.salida.strip())''',
-        pruebas_ocultas='''_r10 = ps.ejecutar_pseudo(ALGORITMO_E2, entradas=["10"])
-assert _r10.ok, "Con n = 10 falla: " + _r10.error_corto
-assert "55" in _r10.salida, "Con n = 10 el total es 55"
-_r1 = ps.ejecutar_pseudo(ALGORITMO_E2, entradas=["1"])
-assert "1" in _r1.salida, "Con n = 1 el total es 1"''',
+
+def _termino(a, b, n):
+    r = ps.ejecutar_pseudo(ALGORITMO_E2, entradas=[str(a), str(b), str(n)])
+    assert r.ok, f"Con a={a}, b={b}, n={n} tu algoritmo no ejecuta: " + r.error_corto
+    return r.salida.strip()
+
+def _comprobar(a, b, n, esperado):
+    # Se compara el numero COMPLETO, no si aparece dentro. Buscando "11" dentro
+    # de la salida, un algoritmo que escriba 110 pasaria la prueba.
+    obtenido = _termino(a, b, n)
+    assert obtenido == esperado, (
+        f"Con a={a}, b={b}, n={n} el termino es {esperado}, "
+        f"y tu algoritmo escribe {obtenido!r}")
+
+_comprobar(1, 1, 7, "13")
+_comprobar(2, 1, 6, "11")   # si copiaste un Fibonacci hecho, esta es la que te delata
+_comprobar(5, 5, 4, "15")
+print("Las tres sucesiones de la tabla dan el termino correcto.")''',
+        pruebas_ocultas='''_comprobar(7, 3, 1, "7")    # n = 1: la respuesta es a, sin dar una sola vuelta
+_comprobar(7, 3, 2, "3")    # n = 2: la respuesta es b, sin dar una sola vuelta
+_comprobar(7, 3, 3, "10")
+_comprobar(0, 0, 9, "0")    # dos semillas en 0: toda la sucesion es 0
+_comprobar(1, 1, 12, "144")''',
         pistas=[
-            "Necesitas tres variables: la que lees (n), la que acumula (total) y la que "
-            "cuenta las vueltas (i). Definelas todas antes de usarlas.",
-            "El acumulador empieza en 0 y el contador en 1. Si empiezas el acumulador en "
-            "1 te va a sobrar uno en el resultado.",
-            "El paso `i <- i + 1` va DENTRO del Mientras, como ultima linea. Si lo dejas "
-            "fuera, i no cambia nunca y el ciclo no termina.",
+            "No guardes la sucesion entera: solo necesitas DOS numeros a la vez, el "
+            "anterior y el actual. En cada vuelta los dos corren un puesto.",
+            "Para correr un puesto hace falta una tercera variable: si haces "
+            "`anterior <- actual` primero, pierdes el valor de anterior y la suma "
+            "siguiente sale mal. Calcula `siguiente` ANTES de mover nada.",
+            "Arranca el contador en 2, no en 1: los terminos 1 y 2 ya los tienes leidos, "
+            "no hay que calcularlos. Con `i <- 2` y `Mientras i < n`, si n es 1 o 2 el "
+            "ciclo no entra, que es justo lo que quieres.",
         ],
     )
-
 
     c.ejercicio(
         numero=3, competencias=['I3'], titulo="El while, en Python", estrellas=2, puntos=10,
@@ -621,7 +670,7 @@ assert "8" in _r2.salida and "55" in _r2.salida, "Con n = 10 son 8 aprobadas y 5
     )
 
     # =========================================================================
-    c.seccion(6, "Habla con el asistente", 5, """**Cinco preguntas** para todo el cuadernillo.""")
+    c.seccion(6, "Habla con el asistente", 3, """**Cinco preguntas** para todo el cuadernillo.""")
 
     c.md("""### En qué gastarlas
 
@@ -642,7 +691,7 @@ te puede responder; con la primera solo puede adivinar.
 """)
 
     # =========================================================================
-    c.seccion(7, "Cierre", 7, """Tres preguntas que nadie corrige.""")
+    c.seccion(7, "Cierre", 3, """Tres preguntas que nadie corrige.""")
 
     c.md("""- ¿Sabrías explicar, sin mirar, **por qué** un ciclo se queda dando vueltas para
   siempre? Si la respuesta es «porque se me olvidó algo», ¿qué algo?

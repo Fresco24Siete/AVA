@@ -90,7 +90,11 @@ except ImportError:  # pragma: no cover - depende del entorno
     W = None
     HAY_WIDGETS = False
 
+import ast
 import hashlib
+import io
+import linecache
+import os
 
 from IPython.display import HTML, display
 
@@ -470,3 +474,141 @@ def revisar(ejercicio, respuestas, esperado):
             + " · ".join(malas))
 
     print(f"Las {len(esperado)} correctas.")
+
+
+# --- Restricciones de la solución -------------------------------------------
+#
+# Lo pidió el profesor en la reunión del 2026-09-22: ejercicios «menos
+# tradicionales», del tipo «resuélvelo sin usar `for`». Una restricción que
+# nadie comprueba es decoración: el alumno la ignora, o peor, la respeta y no
+# se entera de que la respetó. Esto la vuelve parte de la calificación.
+#
+# Se mira el ÁRBOL de sintaxis y no el texto, para que un `for` dentro de un
+# comentario o de una cadena no cuente como infracción.
+
+_ESTRUCTURAS = {
+    "for": (ast.For, ast.AsyncFor, ast.comprehension),
+    "while": (ast.While,),
+    "recursion": (),          # se trata aparte, más abajo
+}
+
+
+def sin_usar(funcion, *prohibido):
+    """Comprueba que `funcion` esté escrita sin las construcciones prohibidas.
+
+    Acepta estructuras (`"for"`, `"while"`, `"recursion"`) y nombres
+    (`"sum"`, `"range"`, `"sorted"`). Lanza AssertionError nombrando la que se
+    coló.
+
+        sin_usar(buscar, "for")
+        sin_usar(promedio, "sum", "len")
+
+    Ojo con `"for"`: también tapa las por-comprensión (`[x for x in ...]`),
+    porque son el mismo ciclo escrito de otra forma.
+    """
+    nombre = getattr(funcion, "__name__", "")
+    definiciones = _definiciones_de(funcion, nombre)
+
+    # Si el alumno reparte el trabajo en funciones auxiliares, la restricción
+    # las alcanza: si no, bastaba con esconder el `for` una llamada más abajo.
+    arbol = _con_auxiliares(definiciones, nombre)
+
+    for palabra in prohibido:
+        if palabra == "recursion":
+            if [n for n in ast.walk(arbol)
+                    if isinstance(n, ast.Call)
+                    and isinstance(n.func, ast.Name) and n.func.id == nombre]:
+                raise AssertionError(
+                    f"La restricción era resolverlo sin recursión, y "
+                    f"`{nombre}` se llama a sí misma.")
+            continue
+
+        tipos = _ESTRUCTURAS.get(palabra)
+        if tipos:
+            hallado = [n for n in ast.walk(arbol) if isinstance(n, tipos)]
+            if hallado:
+                comprension = any(isinstance(n, ast.comprehension) for n in hallado)
+                detalle = (" — una por-comprensión `[... for ... in ...]` "
+                           "también es un `for`") if comprension and palabra == "for" else ""
+                raise AssertionError(
+                    f"La restricción era resolverlo sin `{palabra}`, y tu "
+                    f"solución usa uno{detalle}.")
+            continue
+
+        # Cualquier otra palabra se trata como nombre: sum(...), lista.sort()
+        if [n for n in ast.walk(arbol)
+                if (isinstance(n, ast.Name) and n.id == palabra)
+                or (isinstance(n, ast.Attribute) and n.attr == palabra)]:
+            raise AssertionError(
+                f"La restricción era resolverlo sin `{palabra}`, y tu "
+                f"solución lo usa.")
+
+
+def _definiciones_de(funcion, nombre):
+    """Las funciones definidas junto a `funcion`, por nombre.
+
+    Leer solo el trozo de la función no vale. Cuando el código se ejecutó desde una
+    cadena —no desde un archivo ni desde una celda— `linecache` puede resolver
+    el nombre falso del archivo contra los globals del módulo que llamó y
+    devolver **código de otro archivo**, que parsea sin error y no tiene nada
+    que ver. Una restricción que mira el código equivocado da por buena
+    cualquier cosa, así que la fuente solo se acepta si de verdad contiene la
+    definición que se pidió comprobar.
+    """
+    codigo = getattr(funcion, "__code__", None)
+    if codigo is None:
+        raise AssertionError(
+            f"{nombre or funcion!r} no es una función definida por ti. "
+            "La restricción se comprueba sobre la función del ejercicio.")
+
+    archivo = codigo.co_filename
+    if archivo in linecache.cache:
+        # La celda entera, tal y como IPython la guardó. Hace falta completa
+        # —y no solo el trozo de esta función— para ver también las auxiliares
+        # que tiene al lado.
+        fuente = "".join(linecache.cache[archivo][2])
+    elif os.path.isfile(archivo):
+        try:
+            fuente = io.open(archivo, encoding="utf-8").read()
+        except OSError:
+            fuente = ""
+    else:
+        # Sin fuente registrada NO se busca por otras vías: `linecache` sabe
+        # resolver un nombre de archivo falso contra los globals del módulo que
+        # llamó, y en ese camino devuelve código de otro archivo, que parsea
+        # bien y no tiene nada que ver con el ejercicio. Una restricción que
+        # mira el código equivocado da por buena cualquier cosa.
+        fuente = ""
+
+    definiciones = {}
+    if fuente:
+        try:
+            for nodo in ast.walk(ast.parse(fuente)):
+                if isinstance(nodo, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    definiciones.setdefault(nodo.name, nodo)
+        except SyntaxError:
+            definiciones = {}
+
+    if nombre not in definiciones:
+        # Callar aquí sería lo peor: daría la restricción por cumplida sin
+        # haber mirado una sola línea.
+        raise AssertionError(
+            f"No se pudo leer el código de `{nombre}` para comprobar la "
+            "restricción del enunciado. Define la función en una celda del "
+            "cuadernillo y vuelve a ejecutar esta celda.")
+    return definiciones
+
+
+def _con_auxiliares(definiciones, nombre, vistas=None):
+    """Junta la función pedida con las auxiliares que llama, en un solo árbol."""
+    vistas = vistas if vistas is not None else set()
+    if nombre in vistas or nombre not in definiciones:
+        return ast.Module(body=[], type_ignores=[])
+    vistas.add(nombre)
+
+    cuerpo = [definiciones[nombre]]
+    for nodo in ast.walk(definiciones[nombre]):
+        if (isinstance(nodo, ast.Call) and isinstance(nodo.func, ast.Name)
+                and nodo.func.id in definiciones and nodo.func.id not in vistas):
+            cuerpo.extend(_con_auxiliares(definiciones, nodo.func.id, vistas).body)
+    return ast.Module(body=cuerpo, type_ignores=[])

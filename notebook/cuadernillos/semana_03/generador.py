@@ -84,7 +84,7 @@ Este cuadernillo tiene **65 puntos** y **90 XP**. La insignia se llama
     # =========================================================================
     # Bloque 1 — Calentamiento
     # =========================================================================
-    c.seccion(1, "Calentamiento", 8, """Tres preguntas de la semana pasada. No tienen nota: dan XP y te dicen si
+    c.seccion(1, "Calentamiento", 4, """Tres preguntas de la semana pasada. No tienen nota: dan XP y te dicen si
 puedes seguir o te conviene volver un cuadernillo atrás.""")
 
     c.code("quiz_eps()")
@@ -94,7 +94,7 @@ puedes seguir o te conviene volver un cuadernillo atrás.""")
     # =========================================================================
     # Bloque 2 — El gancho
     # =========================================================================
-    c.seccion(2, "¿Puedes matricular la materia?", 8, """En la UIS, para matricular una materia tienen que cumplirse **tres** cosas al
+    c.seccion(2, "¿Puedes matricular la materia?", 4, """En la UIS, para matricular una materia tienen que cumplirse **tres** cosas al
 mismo tiempo: haber aprobado el prerrequisito, tener cupo en el grupo y estar a
 paz y salvo financiero.
 
@@ -121,7 +121,7 @@ escribirlo en los dos idiomas del curso.
     # =========================================================================
     # Bloque 3 — Concepto en corto
     # =========================================================================
-    c.seccion(3, "Concepto en corto", 30, """Lo que hay que entender antes de tocar nada. Tres ideas, y ninguna es larga.""")
+    c.seccion(3, "Concepto en corto", 15, """Lo que hay que entender antes de tocar nada. Tres ideas, y ninguna es larga.""")
 
     c.md("""### 3A. Una expresión booleana es una pregunta con dos respuestas posibles
 
@@ -190,7 +190,7 @@ Compruébalo tú, con `nota = 3`:
     # =========================================================================
     # Bloque 4 — Laboratorio
     # =========================================================================
-    c.seccion(4, "Laboratorio", 55, """De aquí en adelante todo se toca. Cada estructura aparece dos veces seguidas:
+    c.seccion(4, "Laboratorio", 27, """De aquí en adelante todo se toca. Cada estructura aparece dos veces seguidas:
 primero en pseudocódigo, y justo debajo en Python. Léelas juntas — es la forma
 más rápida de que se te queden las dos.""")
 
@@ -255,7 +255,11 @@ Ejecútalo de verdad en el motor de pseudocódigo, que además te dibuja el
 diagrama de flujo:
 """)
 
-    c.code('''r = ps.ejecutar_pseudo("""
+    # El diagrama lo pidió el profesor mirando esta misma sección: «viendo ahí
+    # la flechita es más fácil ver por qué sí se ejecuta». Y el párrafo de
+    # arriba ya lo prometía desde siempre, así que la celda estaba faltando a
+    # su palabra: imprimía la salida y nada más.
+    c.code('''ALGORITMO = """
 Algoritmo Aprobar
     Definir nota Como Real
     Leer nota
@@ -265,8 +269,14 @@ Algoritmo Aprobar
         Escribir "Reprobaste"
     FinSi
 FinAlgoritmo
-""", entradas=["3.8"])
-print(r.salida)''')
+"""
+
+r = ps.ejecutar_pseudo(ALGORITMO, entradas=["3.8"])
+print(r.salida)
+
+# El mismo algoritmo, dibujado: cada rombo es una decision y cada flecha, un
+# camino. Sigue con el dedo el que toma una nota de 3.8.
+ava.figura(ps.diagrama(ALGORITMO), "Si-Sino: dos caminos, y siempre se toma uno")''')
 
     c.md("""### 4C. La cadena Si-Sino Si: más de dos caminos
 
@@ -388,7 +398,7 @@ al principio del programa.
     # =========================================================================
     # Bloque 5 — Ejercicios
     # =========================================================================
-    c.seccion(5, "Seis ejercicios", 40, """Aquí se juega tu nota: **65 puntos** en seis ejercicios, de menos a más.
+    c.seccion(5, "Seis ejercicios", 20, """Aquí se juega tu nota: **65 puntos** en seis ejercicios, de menos a más.
 
 Dos cosas antes de empezar. Si ejecutas una celda de ejercicio sin haberla
 tocado te va a salir `NotImplementedError`: no es un fallo, es la marca de «aquí
@@ -770,7 +780,7 @@ assert abs(total_a_pagar(99999) - 99999) < 0.01, "99999 no llega al primer escal
     # =========================================================================
     # Bloque 6 — El tutor
     # =========================================================================
-    c.seccion(6, "Habla con el asistente", 5, """Tienes **cinco preguntas** para todo este cuadernillo. Cinco, no cinco por
+    c.seccion(6, "Habla con el asistente", 3, """Tienes **cinco preguntas** para todo este cuadernillo. Cinco, no cinco por
 ejercicio. Gástalas donde de verdad te atasques.""")
 
     c.md("""### En qué gastarlas
@@ -794,7 +804,7 @@ puede responder de verdad; con la primera solo puede adivinar.
     # =========================================================================
     # Bloque 7 — Cierre
     # =========================================================================
-    c.seccion(7, "Cierre", 7, """Tres preguntas que solo te interesan a ti. Nadie las corrige.""")
+    c.seccion(7, "Cierre", 3, """Tres preguntas que solo te interesan a ti. Nadie las corrige.""")
 
     c.md("""- ¿Sabrías explicarle a alguien de tu casa **por qué** `=` y `==` no son lo
   mismo, sin usar la palabra «programación»?

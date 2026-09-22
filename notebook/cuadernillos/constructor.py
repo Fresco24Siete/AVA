@@ -21,10 +21,29 @@ import base64
 import json
 import hashlib
 import os
+import re
 import zlib
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 RUTA_MOTOR = os.path.join(AQUI, "motor", "ava_motor.py")
+RUTA_ESQUEMA = os.path.join(AQUI, "..", "..", "database", "schema_v2.sql")
+
+
+def catalogo_competencias():
+    """{codigo: (codigo_oficial, descripcion)} leido de database/schema_v2.sql.
+
+    Se lee del esquema en vez de copiarlo aqui porque es el mismo texto que el
+    panel le ensena al docente: dos copias acabarian diciendo cosas distintas
+    sobre la misma competencia, y nadie sabria cual vale.
+    """
+    try:
+        with open(RUTA_ESQUEMA, encoding="utf-8") as f:
+            sql = f.read()
+    except OSError:
+        return {}
+    filas = re.findall(
+        r"\('(I\d)','(m[A-Z]+\d+)','([^']+)'\)", sql)
+    return {cod: (oficial, desc) for cod, oficial, desc in filas}
 
 
 def huella(ejercicio, llave, valor):
@@ -198,8 +217,48 @@ class Cuadernillo:
         `a_dict()`, cuando ya se conocen las pistas de todos los ejercicios.
         """
         self.md(self.INSTRUCCIONES)
+        self._i_competencias = len(self.celdas)
+        self.md("")                      # se rellena en a_dict()
         self._i_arranque = len(self.celdas)
         return self.code("", editable=False, etiquetas=("ava-motor",))
+
+    def _texto_competencias(self):
+        """Qué microcompetencia mide este cuadernillo, dicho al principio.
+
+        Lo pidió el profesor: «sería bueno incluir a qué tipo de
+        microcompetencia le estamos apuntando en este cuadernillo; así queda
+        explícito para nosotros y, cuando se haga la recopilación de
+        información, saber si lo medí o no lo medí».
+
+        Se arma de las etiquetas REALES de los ejercicios, no de una lista
+        escrita aparte: así no puede decir una cosa y medir otra.
+        """
+        usadas = sorted({c for cs in self.competencias.values() for c in cs})
+        if not usadas:
+            return ""
+
+        catalogo = catalogo_competencias()
+        cuantos = {}
+        for cs in self.competencias.values():
+            for c in cs:
+                cuantos[c] = cuantos.get(c, 0) + 1
+
+        filas = []
+        for cod in usadas:
+            oficial, desc = catalogo.get(cod, (cod, ""))
+            n = cuantos[cod]
+            filas.append(f"| **{oficial}** | {desc} | {n} |")
+
+        return (
+            "### Qué mide este cuadernillo\n\n"
+            "Cada ejercicio calificable está asociado a una microcompetencia del "
+            "programa. Estas son las de esta sesión:\n\n"
+            "| Microcompetencia | Qué significa | Ejercicios |\n"
+            "|---|---|---:|\n"
+            + "\n".join(filas)
+            + "\n\nNo hace falta que hagas nada con esto: está aquí para que sepas "
+              "qué se está midiendo y por qué estos ejercicios y no otros.\n"
+        )
 
     def _fuente_arranque(self):
         fuente = _incrustar([RUTA_MOTOR] + self.modulos, self.motor_comprimido)
@@ -315,6 +374,13 @@ class Cuadernillo:
                 "de progreso, ni pistas, ni verificadores."
             )
         self.celdas[self._i_arranque]["source"] = _lineas(self._fuente_arranque())
+        if getattr(self, "_i_competencias", None) is not None:
+            texto = self._texto_competencias()
+            if texto:
+                self.celdas[self._i_competencias]["source"] = _lineas(texto)
+            else:
+                # Sin etiquetas no se deja una celda vacia en medio.
+                self.celdas.pop(self._i_competencias)
         return {
             "cells": self.celdas,
             "metadata": {

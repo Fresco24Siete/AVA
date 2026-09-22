@@ -81,7 +81,7 @@ Este cuadernillo tiene **50 puntos** y **85 XP**. La insignia se llama
 """)
 
     # =========================================================================
-    c.seccion(1, "Dónde estás", 10, """Antes de repasar, mira el conjunto. Cuatro semanas en una imagen.""")
+    c.seccion(1, "Dónde estás", 5, """Antes de repasar, mira el conjunto. Cuatro semanas en una imagen.""")
 
     c.code("mapa_del_curso()")
 
@@ -90,7 +90,7 @@ volver **antes** de la evaluación. No después.
 """)
 
     # =========================================================================
-    c.seccion(2, "Las tres estructuras", 15, """Aquí está la idea que ordena todo el semestre, y conviene decirla sin adornos.""")
+    c.seccion(2, "Las tres estructuras", 7, """Aquí está la idea que ordena todo el semestre, y conviene decirla sin adornos.""")
 
     c.code("las_tres_estructuras()")
 
@@ -118,7 +118,7 @@ for nota in range(1, 6):
 print("Suma:", total, "· Aprobadas:", aprobadas)''')
 
     # =========================================================================
-    c.seccion(3, "Autodiagnóstico", 15, """Tres preguntas, una por eje. No tienen nota: te dicen dónde estás flojo
+    c.seccion(3, "Autodiagnóstico", 7, """Tres preguntas, una por eje. No tienen nota: te dicen dónde estás flojo
 mientras todavía hay tiempo de arreglarlo.""")
 
     c.code("quiz_errores()")
@@ -143,7 +143,7 @@ mientras todavía hay tiempo de arreglarlo.""")
 """)
 
     # =========================================================================
-    c.seccion(4, "Qué hace Python con tu archivo", 25, """Contenido nuevo, y es de la segunda clase. Hasta ahora ejecutabas celdas sin
+    c.seccion(4, "Qué hace Python con tu archivo", 12, """Contenido nuevo, y es de la segunda clase. Hasta ahora ejecutabas celdas sin
 preguntarte qué pasa por debajo. Toca preguntárselo.""")
 
     c.md("""### 4A. De tu archivo al resultado
@@ -267,7 +267,7 @@ sacar de los atascos cuando ya no haya cuadernillo.
 """)
 
     # =========================================================================
-    c.seccion(5, "Cuatro ejercicios", 35, """**50 puntos.** El primero es de repaso y los tres últimos, del contenido
+    c.seccion(5, "Cuatro ejercicios", 19, """**50 puntos.** El primero es de repaso y los tres últimos, del contenido
 nuevo de esta clase. Esta semana el cuadernillo es corto a propósito: el peso
 está en la evaluación, y repetir aquí lo que ya se evalúa aparte no ayuda a
 nadie.""")
@@ -484,7 +484,7 @@ assert not boletin(["4.0"]).endswith("\\n"), "Sin salto de linea al final"''',
     )
 
     # =========================================================================
-    c.seccion(6, "Habla con el asistente", 5, """**Cinco preguntas** para todo el cuadernillo.""")
+    c.seccion(6, "Habla con el asistente", 3, """**Cinco preguntas** para todo el cuadernillo.""")
 
     c.md("""### En qué gastarlas
 
@@ -499,7 +499,7 @@ acumulan, pero el tiempo que ganes sí. Si un ejercicio de repaso te sale solo,
 """)
 
     # =========================================================================
-    c.seccion(7, "Cierre", 7, """Tres preguntas antes de la evaluación. Contéstatelas de verdad.""")
+    c.seccion(7, "Cierre", 3, """Tres preguntas antes de la evaluación. Contéstatelas de verdad.""")
 
     c.md("""- De las cuatro semanas del mapa, ¿cuál te costó más? Esa es la que hay que
   repasar, aunque sea la que menos ganas dan.

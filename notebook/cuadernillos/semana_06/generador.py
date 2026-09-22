@@ -80,13 +80,13 @@ Este cuadernillo tiene **65 puntos** y **95 XP**. La insignia se llama
 """)
 
     # =========================================================================
-    c.seccion(1, "Calentamiento", 8, """Tres de la semana pasada.""")
+    c.seccion(1, "Calentamiento", 4, """Tres de la semana pasada.""")
     c.code("quiz_input()")
     c.code("quiz_division()")
     c.code("quiz_estructura()")
 
     # =========================================================================
-    c.seccion(2, "Un nombre entre mil", 8, """Tienes la lista de los 30.000 estudiantes de la UIS, ordenada alfabéticamente,
+    c.seccion(2, "Un nombre entre mil", 4, """Tienes la lista de los 30.000 estudiantes de la UIS, ordenada alfabéticamente,
 y buscas uno.
 
 Si la miras uno por uno desde el principio, en el peor caso das 30.000 pasos.
@@ -102,7 +102,7 @@ hay que aprender a guardar muchos datos en una variable.
 """)
 
     # =========================================================================
-    c.seccion(3, "Concepto en corto", 30, """Listas y cadenas. Son lo mismo por dentro: una fila de casillas numeradas.""")
+    c.seccion(3, "Concepto en corto", 14, """Listas y cadenas. Son lo mismo por dentro: una fila de casillas numeradas.""")
 
     c.md("""### 3A. La lista y sus índices
 
@@ -173,7 +173,7 @@ for nota in notas:
     print("  ", nota)''')
 
     # =========================================================================
-    c.seccion(4, "Laboratorio", 55, """Las dos búsquedas y los cuatro ordenamientos. Recuerda: el pseudocódigo de esta
+    c.seccion(4, "Laboratorio", 26, """Las dos búsquedas y los cuatro ordenamientos. Recuerda: el pseudocódigo de esta
 sección es para leerlo, no para ejecutarlo — el motor del curso no maneja listas.""")
 
     c.md("""### 4A. Búsqueda lineal
@@ -319,7 +319,7 @@ número que puedes calcular.
 """)
 
     # =========================================================================
-    c.seccion(5, "Seis ejercicios", 45, """**65 puntos**, y el cuadernillo más exigente de los seis. Tómate el tiempo.""")
+    c.seccion(5, "Seis ejercicios", 21, """**65 puntos**, y el cuadernillo más exigente de los seis. Tómate el tiempo.""")
 
     c.ejercicio(
         numero=1, competencias=['I3'], titulo="Índices", estrellas=1, puntos=5,
@@ -388,32 +388,47 @@ assert INDICES["indice_ultimo"] == 4, "Cinco elementos, indices 0 a 4"''',
 
 
     c.ejercicio(
-        numero=2, competencias=['I3'], titulo="Buscar sin ordenar", estrellas=2, puntos=10,
+        numero=2, competencias=['I3'], titulo="Buscar sin ordenar, y sin `for`", estrellas=2, puntos=10,
         enunciado="""Escribe `posicion_de(datos, buscado)`: la búsqueda lineal.
 
 Devuelve el **índice** donde está `buscado`, o `-1` si no está. Si aparece más
 de una vez, devuelve el de la **primera** aparición.
 
-`posicion_de(["Ana", "Bruno", "Ana"], "Ana")` es `0`, no `2`.""",
+`posicion_de(["Ana", "Bruno", "Ana"], "Ana")` es `0`, no `2`.
+
+> **La restricción: resuélvelo sin usar `for`.** Ni ciclo `for` ni
+> por-comprensión (`[... for ... in ...]`). Usa un `while`, y la celda de
+> prueba lo comprueba: si se cuela un `for`, te lo dice.
+
+No es un capricho. Con `for` esto lo escribes de memoria y no piensas nada; con
+`while` tienes que poner tú las tres piezas —dónde arranca el índice, hasta
+dónde sigue, y quién lo mueve— que es exactamente lo que vas a necesitar en el
+Ejercicio 3, donde el índice **no** avanza de uno en uno y el `for` ya no te
+sirve.""",
         partida='''def posicion_de(datos, buscado):
     ...''',
         solucion='''def posicion_de(datos, buscado):
-    for i in range(len(datos)):
+    i = 0
+    while i < len(datos):
         if datos[i] == buscado:
             return i
+        i = i + 1
     return -1''',
         pruebas='''assert callable(posicion_de), "posicion_de debe ser una funcion"
+sin_usar(posicion_de, "for")
 assert posicion_de(["Ana", "Bruno", "Carlos"], "Bruno") == 1
 assert posicion_de(["Ana", "Bruno"], "Zoe") == -1, "Si no esta, devuelve -1"
 assert posicion_de(["Ana", "Bruno", "Ana"], "Ana") == 0, "La PRIMERA aparicion"
-print("Las tres busquedas dan la posicion correcta.")''',
-        pruebas_ocultas='''assert posicion_de([], "Ana") == -1, "En una lista vacia no esta nada"
+print("Las tres busquedas dan la posicion correcta, y sin un solo for.")''',
+        pruebas_ocultas='''sin_usar(posicion_de, "for")
+assert posicion_de([], "Ana") == -1, "En una lista vacia no esta nada"
 assert posicion_de([10, 20, 30], 30) == 2
 assert posicion_de([10, 20, 30], 10) == 0
 assert isinstance(posicion_de([1, 2], 2), int)''',
         pistas=[
-            "Necesitas el INDICE, no el valor, asi que recorre con "
-            "`for i in range(len(datos))` y compara `datos[i]`.",
+            "Las tres piezas del while: `i = 0` antes de entrar, `while i < len(datos)` "
+            "para seguir, e `i = i + 1` dentro para avanzar. Si te falta la tercera, "
+            "el ciclo no termina nunca.",
             "`return` sale de la funcion en el acto. Si devuelves en cuanto encuentras, "
             "la primera aparicion es la unica que puede salir.",
             "El `return -1` va FUERA del ciclo, al final. Si lo pones dentro, la "
@@ -655,7 +670,7 @@ assert _c["mejor"] == "lineal", "Si la binaria no hace MENOS pasos, gana la line
     )
 
     # =========================================================================
-    c.seccion(6, "Habla con el asistente", 5, """**Cinco preguntas** para todo el cuadernillo. Este es el más difícil de los
+    c.seccion(6, "Habla con el asistente", 3, """**Cinco preguntas** para todo el cuadernillo. Este es el más difícil de los
 seis, así que administra bien.""")
 
     c.md("""### En qué gastarlas
@@ -676,7 +691,7 @@ puede responder de verdad.
 """)
 
     # =========================================================================
-    c.seccion(7, "Cierre", 7, """Cierras la primera mitad del curso. Tres preguntas.""")
+    c.seccion(7, "Cierre", 3, """Cierras la primera mitad del curso. Tres preguntas.""")
 
     c.md("""- ¿Podrías explicarle a alguien **por qué** la búsqueda binaria necesita que la
   lista esté ordenada? Si la respuesta es «porque si no, no funciona», todavía

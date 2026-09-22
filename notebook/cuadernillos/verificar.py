@@ -21,9 +21,23 @@ Devuelve 1 si algo falla, para poder encadenarlo con build.py.
 """
 import contextlib
 import io
+import linecache
 import json
 import os
 import sys
+
+# Sin caché de bytecode, a propósito.
+#
+# El `.pyc` guarda el mtime de la fuente en SEGUNDOS enteros y lo compara junto
+# con el tamaño. Si alguien edita un generador y reconstruye dentro del mismo
+# segundo sin cambiar el tamaño —cambiar un «20» por un «95» no lo cambia—,
+# Python da la caché por buena y esto verifica el cuadernillo VIEJO sin
+# que nada avise. Reproducido el 2026-09-22.
+#
+# Es la misma forma de fallar que dejó al profesor con la semana 03 rota en
+# clase: una copia vieja que nadie detecta porque todo dice OK. Construir tarda
+# segundos; no vale la pena arriesgarse por ahorrarlos.
+sys.dont_write_bytecode = True
 import types
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
@@ -68,6 +82,21 @@ def _celdas_por_grade_id(nb):
         if gid:
             fuera[gid] = "".join(celda["source"])
     return fuera
+
+
+def _registrar(fuente, nombre):
+    """Deja la fuente en `linecache` bajo su nombre falso y lo devuelve.
+
+    IPython hace justo esto con cada celda, y por eso dentro del cuadernillo
+    funcionan `inspect.getsource` y las trazas de error. Aquí hacía falta para
+    que `sin_usar()` —la comprobación de «resuélvelo sin `for`»— vea el código
+    del alumno. Sin registrar, `linecache` resolvía el nombre falso contra los
+    globals de este archivo y devolvía líneas de `verificar.py`: código ajeno
+    que parsea bien y no dice nada del ejercicio.
+    """
+    lineas = [l + "\n" for l in fuente.splitlines()]
+    linecache.cache[nombre] = (len(fuente), None, lineas, nombre)
+    return nombre
 
 
 def verificar(codigo):
@@ -128,7 +157,7 @@ def verificar(codigo):
                   or "a propósito" in fuente or "a proposito" in fuente)
         try:
             with contextlib.redirect_stdout(mudo), contextlib.redirect_stderr(mudo):
-                exec(compile(fuente, f"celda_{pos}", "exec"), cuerpo)
+                exec(compile(fuente, _registrar(fuente, f"celda_{pos}"), "exec"), cuerpo)
         except Exception as err:
             if adrede:
                 continue
@@ -155,8 +184,8 @@ def verificar(codigo):
         entorno = dict(base)
         try:
             with contextlib.redirect_stdout(mudo), contextlib.redirect_stderr(mudo):
-                exec(compile(entera, f"solucion_{n}", "exec"), entorno)
-                exec(compile(prueba, f"prueba_{n}", "exec"), entorno)
+                exec(compile(entera, _registrar(entera, f"solucion_{n}"), "exec"), entorno)
+                exec(compile(prueba, _registrar(prueba, f"prueba_{n}"), "exec"), entorno)
         except Exception as err:
             fallos += 1
             estado.append(f"la solución NO pasa ({type(err).__name__}: "
@@ -165,8 +194,8 @@ def verificar(codigo):
         entorno = dict(base)
         try:
             with contextlib.redirect_stdout(mudo), contextlib.redirect_stderr(mudo):
-                exec(compile(plantilla, f"plantilla_{n}", "exec"), entorno)
-                exec(compile(prueba, f"prueba_{n}", "exec"), entorno)
+                exec(compile(plantilla, _registrar(plantilla, f"plantilla_{n}"), "exec"), entorno)
+                exec(compile(prueba, _registrar(prueba, f"prueba_{n}"), "exec"), entorno)
             fallos += 1
             estado.append("la PLANTILLA VACÍA ya aprueba: el ejercicio está regalado")
         except Exception:

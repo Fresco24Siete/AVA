@@ -94,7 +94,7 @@ para ti; si ya programaste, los ejercicios 5 a 7 te van a exigir.
     # =========================================================================
     # Bloque 1 — Sección 1: primer éxito y punto de partida
     # =========================================================================
-    c.seccion(1, "Tu primer programa", 15, """Desde 1978, casi todo el que aprende a programar empieza igual: haciendo que la
+    c.seccion(1, "Tu primer programa", 13, """Desde 1978, casi todo el que aprende a programar empieza igual: haciendo que la
 máquina salude. Es un ritual de iniciación y hoy te toca a ti.
 
 Ejecuta la celda de abajo (clic + `Shift+Enter`).""")
@@ -146,7 +146,7 @@ nota en absoluto.*
     # =========================================================================
     # Bloque 2 — Sección 2: el gancho
     # =========================================================================
-    c.seccion(2, "¿Qué pasó cuando presionaste Shift+Enter?", 5, """Escribiste una línea en español-ish, presionaste dos teclas y apareció un
+    c.seccion(2, "¿Qué pasó cuando presionaste Shift+Enter?", 4, """Escribiste una línea en español-ish, presionaste dos teclas y apareció un
 saludo. Entre esas dos cosas ocurrieron, como mínimo, **siete pasos** repartidos
 en cuatro piezas distintas, y ninguna de ellas entiende la palabra `print`.
 
@@ -187,7 +187,7 @@ pedazo de silicio.
     # =========================================================================
     # Bloque 3 — El entorno de Python
     # =========================================================================
-    c.seccion(3, "¿Dónde se escribe todo esto?", 25, """Ya ejecutaste código y ya sabes que quien lo ejecuta es el kernel. Falta
+    c.seccion(3, "¿Dónde se escribe todo esto?", 21, """Ya ejecutaste código y ya sabes que quien lo ejecuta es el kernel. Falta
 ponerle nombre a las herramientas, porque durante el semestre se van a nombrar
 todo el tiempo y se confunden con facilidad.
 
@@ -277,7 +277,7 @@ print(open("prueba.txt", encoding="utf-8").read())
     # =========================================================================
     # Bloque 4 — Los tres errores
     # =========================================================================
-    c.seccion(4, "Los tres errores", 20, """Vas a equivocarte muchísimo este semestre. No es una amenaza, es aritmética:
+    c.seccion(4, "Los tres errores", 17, """Vas a equivocarte muchísimo este semestre. No es una amenaza, es aritmética:
 equivocarse es el 80 % de programar, también para quien lleva veinte años.
 
 Lo que separa a quien avanza de quien se bloquea no es equivocarse menos: es
@@ -481,7 +481,7 @@ mi programa?» sino **«¿corrió, y además está bien?»**.
     # =========================================================================
     # Bloque 5 — Los siete ejercicios (25 puntos)
     # =========================================================================
-    c.seccion(5, "Siete ejercicios", 35, """Aquí es donde se juega tu nota: **25 puntos** repartidos en siete ejercicios.
+    c.seccion(5, "Siete ejercicios", 31, """Aquí es donde se juega tu nota: **25 puntos** repartidos en siete ejercicios.
 Cada uno son dos celdas — la tuya y la de prueba — y la de prueba es solo un
 montón de `assert` como el que acabas de fabricar.
 
@@ -914,7 +914,7 @@ assert ficha("Jose", [5.0, 5.0, 5.0]) == "Jose: promedio 5.00 — Aprobado"''',
     # =========================================================================
     # Bloque 6 — El tutor
     # =========================================================================
-    c.seccion(6, "Tus cinco preguntas", 5, """Abajo a la derecha de la pantalla hay un botón con un robot. Es **Ava**, el
+    c.seccion(6, "Tus cinco preguntas", 4, """Abajo a la derecha de la pantalla hay un botón con un robot. Es **Ava**, el
 tutor de inteligencia artificial del curso. Tres cosas que tienes que saber
 antes de tocarlo:
 
@@ -992,7 +992,7 @@ pasó, y pide una pregunta en vez de una respuesta.**
     # =========================================================================
     # Bloque 7 — Cierre
     # =========================================================================
-    c.seccion(7, "Cierre", 10, """Antes de reclamar tu insignia, tres preguntas que solo te interesan a ti:
+    c.seccion(7, "Cierre", 8, """Antes de reclamar tu insignia, tres preguntas que solo te interesan a ti:
 
 1. **¿Qué puedes hacer hoy que no podías esta mañana?** (respóndete en voz
    alta; si la respuesta es «nada», vuelve a la sección 3B)

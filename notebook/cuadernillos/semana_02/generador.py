@@ -111,7 +111,7 @@ Hay una tarjeta que marca el corte cuando llegues.
     # =========================================================================
     # Bloque 1 — Sección 1: calentamiento (Parte A)
     # =========================================================================
-    c.seccion(1, "Calentamiento", 10, """Cuatro preguntas rápidas de la semana pasada. No tienen nota: dan XP y te
+    c.seccion(1, "Calentamiento", 7, """Cuatro preguntas rápidas de la semana pasada. No tienen nota: dan XP y te
 dicen si estás listo para lo de hoy.
 
 Si algo aquí se te atasca, **esa es la señal**: vuelve al cuadernillo de la
@@ -134,7 +134,7 @@ casualmente, uno de los temas de hoy.
     # =========================================================================
     # Bloque 2 — Sección 2: el gancho
     # =========================================================================
-    c.seccion(2, "¿A qué hora tengo que salir de la casa?", 8, """Vives en **Girón**. Tu primera clase en la UIS es a las **6:00 a. m.** y el
+    c.seccion(2, "¿A qué hora tengo que salir de la casa?", 6, """Vives en **Girón**. Tu primera clase en la UIS es a las **6:00 a. m.** y el
 profesor cierra la puerta en punto.
 
 - De tu casa a la parada: **8 minutos** caminando.
@@ -193,7 +193,7 @@ seria.
     # =========================================================================
     # Bloque 3 — Sección 3: concepto en corto (Parte A)
     # =========================================================================
-    c.seccion(3, "Concepto en corto", 30, """Antes de escribir nada hay que pensar. Esta sección es la parte del oficio que
+    c.seccion(3, "Concepto en corto", 22, """Antes de escribir nada hay que pensar. Esta sección es la parte del oficio que
 se hace **sin computador**, y es la que el 90 % de los novatos se salta.""")
 
     c.figura("s02_d1_cadv",
@@ -331,7 +331,7 @@ escrito —donde no hay computador— los dos primeros son los únicos que tiene
     # =========================================================================
     # Bloque 4 — Sección 4: laboratorio (Parte B)
     # =========================================================================
-    c.seccion(4, "Laboratorio", 55, """Bienvenido a la Parte B. De aquí en adelante todo se toca.
+    c.seccion(4, "Laboratorio", 40, """Bienvenido a la Parte B. De aquí en adelante todo se toca.
 
 El hilo es un solo programa —el de la papelería de la Carrera 9— y con él vas a
 hacer cuatro cosas, en este orden: **predecir** qué hace, **ejecutarlo**,
@@ -796,7 +796,7 @@ error y el diagnóstico. Las de arriba solo dicen dónde.
     # =========================================================================
     # Bloque 5 — Sección 5: los ocho ejercicios (80 puntos)
     # =========================================================================
-    c.seccion(5, "Ocho ejercicios", 50, """Aquí es donde se juega tu nota: **80 puntos** repartidos en ocho ejercicios.
+    c.seccion(5, "Ocho ejercicios", 37, """Aquí es donde se juega tu nota: **80 puntos** repartidos en ocho ejercicios.
 Cada uno son dos celdas — la tuya y la de prueba.
 
 Tres reglas de la casa:
@@ -1579,7 +1579,7 @@ ps.trazador(RETO_SI, entradas=["12000"])''', etiquetas=("ava-figura",))
     # =========================================================================
     # Bloque 7 — Sección 7: el tutor
     # =========================================================================
-    c.seccion(6, "Habla con el asistente", 5, """Tienes **5 preguntas** en este cuadernillo (las ves en el botón de abajo a la
+    c.seccion(6, "Habla con el asistente", 4, """Tienes **5 preguntas** en este cuadernillo (las ves en el botón de abajo a la
 derecha). Cinco no es poco: es justo lo que alcanza si preguntas bien. Aquí van
 cinco que valen la pena, una por cada cosa importante de hoy:
 
@@ -1610,7 +1610,7 @@ preguntas desde otra parte, el asistente responde a ciegas.""")
     # =========================================================================
     # Bloque 8 — Sección 8: cierre
     # =========================================================================
-    c.seccion(7, "Cierre", 7, """Antes de reclamar tu insignia, marca honestamente lo que ya puedes hacer. Esto
+    c.seccion(7, "Cierre", 5, """Antes de reclamar tu insignia, marca honestamente lo que ya puedes hacer. Esto
 no tiene nota: es tu plan para la semana.""")
 
     c.code("radar_salida()")
