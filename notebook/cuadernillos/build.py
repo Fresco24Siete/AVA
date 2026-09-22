@@ -123,6 +123,29 @@ def _minutos_declarados(nb):
     return total
 
 
+def _minutos_en_prosa(nb):
+    """Cifras de duración sueltas en el texto, fuera de las cabeceras.
+
+    La guarda de las cabeceras no las ve, y por ahí se escapó una: semana_02
+    siguió diciéndole al alumno «Son 165 minutos» cuando ya eran 121, y el
+    commit que lo daba por corregido no lo estaba. Un número escrito en prosa
+    envejece igual que uno escrito en una cabecera.
+    """
+    encontrados = []
+    for celda in nb["cells"]:
+        if celda.get("cell_type") != "markdown":
+            continue
+        texto = "".join(celda.get("source", []))
+        # Dentro de un enunciado, un número de minutos es parte del problema y
+        # no una promesa sobre el cuadernillo: semana_02 dice «las 6:00 (que son
+        # 360 minutos desde medianoche)» y eso está bien como está.
+        if "### Ejercicio" in texto:
+            continue
+        for m in re.finditer(r"[Ss]on\s+(\d+)\s*minutos", texto):
+            encontrados.append(int(m.group(1)))
+    return encontrados
+
+
 def validar(nb):
     """Revisa los contratos que el AVA da por supuestos. Devuelve lista de fallos."""
     fallos = []
@@ -132,6 +155,13 @@ def validar(nb):
     # 2026-09-22: la semana 03 anunciaba 153 minutos para seis ejercicios.
     # El número lo escribe una persona y el contenido lo mueve otra, así que
     # sin esta comprobación vuelve a envejecer en cuanto alguien toque algo.
+    for suelto in _minutos_en_prosa(nb):
+        if suelto != _minutos_declarados(nb):
+            fallos.append(
+                f"el texto anuncia «son {suelto} minutos» y las secciones suman "
+                f"{_minutos_declarados(nb)}: quita la cifra suelta, que envejece "
+                f"sola, o cuádrala")
+
     declarados = _minutos_declarados(nb)
     if declarados:
         real = _estimar_minutos(nb)

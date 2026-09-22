@@ -91,7 +91,7 @@ ejecuta de verdad**. Lo escribes en español, oprimes un botón y corre.
 
 ### Este cuadernillo se hace en dos sentadas
 
-Son 165 minutos y cubre las dos clases de la semana. No intentes hacerlo de una:
+Son unas dos horas y cubre las dos clases de la semana. No intentes hacerlo de una:
 
 | | Cuándo | Qué trae |
 |---|---|---|
