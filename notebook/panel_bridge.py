@@ -111,13 +111,35 @@ def _progreso():
         return None, "No se pudo consultar tu progreso en este momento."
 
 
+def _tarea_de(codigo):
+    """'semana_02_v3' -> 'semana_02'.
+
+    Cuando el docente corrige un cuadernillo, la versión nueva llega al alumno
+    como <id>_vN.ipynb. La TAREA de nbgrader sigue siendo <id>: entregar bajo
+    el nombre con sufijo crearía una tarea que no existe y nadie calificaría.
+    """
+    return re.sub(r"_v\d+$", "", codigo)
+
+
 def _cuadernillos_en_disco():
-    """Los .ipynb que el alumno tiene entregados, por si el backend no responde."""
+    """Los .ipynb que el alumno tiene disponibles en su espacio de trabajo."""
     try:
         archivos = sorted(f for f in os.listdir(CARPETA)
                           if f.endswith(".ipynb") and f != "inicio.ipynb")
     except OSError:
         return []
+
+    pub = _publicados()
+    # Si se pudo consultar el servicio de intercambio (o ya hay registro de
+    # cuadernillos publicados), solo se muestran los cuadernillos que sigan
+    # publicados en el curso. Lo que el docente retiró o eliminó ya no se lista.
+    if pub.get("consultado"):
+        publicados_set = set((pub.get("cuadernillos") or {}).keys())
+        archivos = [f for f in archivos if _tarea_de(f[:-6]) in publicados_set]
+    elif pub.get("cuadernillos"):
+        publicados_set = set(pub["cuadernillos"].keys())
+        archivos = [f for f in archivos if _tarea_de(f[:-6]) in publicados_set]
+
     return [{"archivo": f, "id": f[:-6]} for f in archivos]
 
 
@@ -242,14 +264,6 @@ def _anotar_entrega(codigo, cuando):
         log.warning("[panel] no se pudo anotar la entrega: %s", err)
 
 
-def _tarea_de(codigo):
-    """'semana_02_v3' -> 'semana_02'.
-
-    Cuando el docente corrige un cuadernillo, la versión nueva llega al alumno
-    como <id>_vN.ipynb. La TAREA de nbgrader sigue siendo <id>: entregar bajo
-    el nombre con sufijo crearía una tarea que no existe y nadie calificaría.
-    """
-    return re.sub(r"_v\d+$", "", codigo)
 
 
 def _nombre_en_nbgrader(codigo):
@@ -680,8 +694,13 @@ class EntregarHandler(_BaseHandler):
         disponibles = {c["id"]: c["archivo"] for c in _cuadernillos_en_disco()}
         self.set_header("Content-Type", "application/json; charset=utf-8")
         if codigo not in disponibles:
-            self.finish(json.dumps(
-                {"ok": False, "mensaje": "No encontré ese cuadernillo."}))
+            pub = _publicados()
+            if pub.get("consultado") and _tarea_de(codigo) not in (pub.get("cuadernillos") or {}):
+                msg = ("Este cuadernillo ya no está activo en el curso (fue "
+                       "retirado por tu profesor).")
+            else:
+                msg = "No encontré ese cuadernillo."
+            self.finish(json.dumps({"ok": False, "mensaje": msg}))
             return
 
         ok, error = _entregar(codigo, disponibles[codigo])

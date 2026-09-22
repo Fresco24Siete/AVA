@@ -30,6 +30,7 @@ No sobrescribe el trabajo del alumno nunca.
 import hashlib
 import json
 import os
+import re
 import shutil
 import tempfile
 from datetime import datetime, timezone
@@ -169,18 +170,109 @@ def _sha(ruta):
         return hashlib.sha256(f.read()).hexdigest()[:12]
 
 
+def _tarea_de(codigo):
+    """'semana_02_v3' -> 'semana_02'."""
+    return re.sub(r"_v\d+$", "", codigo)
+
+
+def _limpiar_retirados(liberadas, registro, previos):
+    """Limpia o archiva los cuadernillos que el docente retiró del servicio.
+
+    Si el alumno no modificó el cuadernillo (su SHA coincide con la versión
+    registrada de plantilla), se elimina del disco para no dejar archivos
+    fantasmas de tareas borradas. Si el alumno ya había trabajado en él, se
+    mueve a CARPETA/archivados/ para que no pierda sus notas ni código, pero
+    deje de aparecer como tarea activa en su espacio principal.
+    """
+    codigos_retirados = (set(previos.keys()) | {
+        _tarea_de(a[:-6]) for a in registro if a.endswith(".ipynb")
+    }) - liberadas
+
+    if not codigos_retirados:
+        return
+
+    archivados_dir = os.path.join(CARPETA, "archivados")
+
+    try:
+        archivos_en_disco = [f for f in os.listdir(CARPETA)
+                             if f.endswith(".ipynb") and f != "inicio.ipynb"]
+    except OSError:
+        archivos_en_disco = []
+
+    for archivo in archivos_en_disco:
+        codigo = archivo[:-6]
+        tarea = _tarea_de(codigo)
+        if tarea not in codigos_retirados:
+            continue
+
+        ruta = os.path.join(CARPETA, archivo)
+        version_registrada = registro.get(archivo)
+
+        try:
+            modificado = (version_registrada is None) or (_sha(ruta) != version_registrada)
+        except Exception:
+            modificado = True
+
+        if modificado:
+            try:
+                os.makedirs(archivados_dir, exist_ok=True)
+                destino_arch = os.path.join(archivados_dir, archivo)
+                if os.path.exists(destino_arch):
+                    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    base_n, ext = os.path.splitext(archivo)
+                    destino_arch = os.path.join(archivados_dir, f"{base_n}_{ts}{ext}")
+                shutil.move(ruta, destino_arch)
+            except OSError:
+                pass
+        else:
+            try:
+                os.remove(ruta)
+            except OSError:
+                pass
+
+        if archivo in registro:
+            del registro[archivo]
+
+    # Limpiar cualquier residuo en registro de tareas retiradas
+    for archivo in list(registro.keys()):
+        if archivo.endswith(".ipynb") and _tarea_de(archivo[:-6]) in codigos_retirados:
+            del registro[archivo]
+
+    # Limpiar correcciones locales descargadas de tareas retiradas
+    correcciones_dir = os.path.join(CARPETA, ".ava_correcciones")
+    for tarea in codigos_retirados:
+        ruta_html = os.path.join(correcciones_dir, f"{tarea}.html")
+        if os.path.isfile(ruta_html):
+            try:
+                os.remove(ruta_html)
+            except OSError:
+                pass
+
+    # Limpiar anotaciones de entrega locales para tareas retiradas
+    entregas_file = os.path.join(CARPETA, ".ava_entregas.json")
+    entregas_local = _leer_json(entregas_file, {})
+    if entregas_local:
+        cambio = False
+        for k in list(entregas_local.keys()):
+            if _tarea_de(k) in codigos_retirados:
+                del entregas_local[k]
+                cambio = True
+        if cambio:
+            _guardar_json(entregas_file, entregas_local)
+
+
 def _consultar(publicados):
     """Pregunta al servicio y actualiza `publicados` en sitio.
 
-    Devuelve (pudo_consultar, entregas, descargas) donde `descargas` es
-    {id: carpeta temporal con la liberación} para lo que hubo que traer. Quien
-    llama borra esas carpetas.
+    Devuelve (pudo_consultar, entregas, descargas, liberadas_codigos) donde
+    `descargas` es {id: carpeta temporal con la liberación} para lo que hubo que
+    traer. Quien llama borra esas carpetas.
     """
     try:
         from nbexchange_cliente import ava
         liberadas, entregas = ava.liberados()
     except Exception:
-        return False, {}, {}
+        return False, {}, {}, set()
 
     descargas = {}
     for codigo, info in liberadas.items():
@@ -211,25 +303,29 @@ def _consultar(publicados):
         }
         descargas[codigo] = tmp
 
-    # Lo que el docente retiró del servicio deja de estar publicado. El archivo
-    # del alumno, si lo tenía, se queda donde está.
+    # Lo que el docente retiró del servicio deja de estar publicado.
     for codigo in list(publicados):
         if codigo not in liberadas:
             del publicados[codigo]
-    return True, entregas, descargas
+    return True, entregas, descargas, set(liberadas.keys())
 
 
 def main():
     nota = _leer_json(PUBLICADOS, {})
-    publicados = dict(nota.get("cuadernillos") or {})
+    previos = dict(nota.get("cuadernillos") or {})
+    publicados = dict(previos)
     entregas = dict(nota.get("entregas") or {})
 
-    consulto, entregas_nuevas, descargas = _consultar(publicados)
+    consulto, entregas_nuevas, descargas, liberadas = _consultar(publicados)
     if consulto:
-        entregas = entregas_nuevas
+        entregas = {k: v for k, v in entregas_nuevas.items() if k in liberadas}
 
     ahora = datetime.now(timezone.utc)
     registro = _leer_json(REGISTRO, {})
+
+    if consulto:
+        _limpiar_retirados(liberadas, registro, previos)
+
     _migrar_modelo_viejo(activo_de(publicados, ahora))
     entregados = []
     try:
