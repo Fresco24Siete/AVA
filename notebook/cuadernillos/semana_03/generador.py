@@ -4,7 +4,7 @@
 Curso 41333 Algoritmos y Programación · Ingeniería en IA · UIS 2026-2
 Unidad 3 — Operadores y estructuras condicionales.
 
-65 puntos de nbgrader en seis ejercicios, 90 XP lúdicos y la insignia
+40 puntos de nbgrader en cuatro ejercicios, 90 XP lúdicos y la insignia
 «Quien decide». Todo lo que aparece aquí se apoya solo en lo de las semanas 1 y
 2: variables, tipos, entrada, salida, pseudocódigo y prueba de escritorio. No
 hay ciclos —son de la semana 4— ni listas ni funciones propias más allá de las
@@ -77,14 +77,14 @@ receta y empiezan a parecerse a algo que piensa.
 Si un ejercicio te pide «para cada uno de los cien estudiantes», te equivocaste
 de cuadernillo.
 
-Este cuadernillo tiene **65 puntos** y **90 XP**. La insignia se llama
+Este cuadernillo tiene **40 puntos** y **90 XP**. La insignia se llama
 «Quien decide».
 """)
 
     # =========================================================================
     # Bloque 1 — Calentamiento
     # =========================================================================
-    c.seccion(1, "Calentamiento", 4, """Tres preguntas de la semana pasada. No tienen nota: dan XP y te dicen si
+    c.seccion(1, "Calentamiento", 3, """Tres preguntas de la semana pasada. No tienen nota: dan XP y te dicen si
 puedes seguir o te conviene volver un cuadernillo atrás.""")
 
     c.code("quiz_eps()")
@@ -94,7 +94,7 @@ puedes seguir o te conviene volver un cuadernillo atrás.""")
     # =========================================================================
     # Bloque 2 — El gancho
     # =========================================================================
-    c.seccion(2, "¿Puedes matricular la materia?", 4, """En la UIS, para matricular una materia tienen que cumplirse **tres** cosas al
+    c.seccion(2, "¿Puedes matricular la materia?", 3, """En la UIS, para matricular una materia tienen que cumplirse **tres** cosas al
 mismo tiempo: haber aprobado el prerrequisito, tener cupo en el grupo y estar a
 paz y salvo financiero.
 
@@ -121,7 +121,7 @@ escribirlo en los dos idiomas del curso.
     # =========================================================================
     # Bloque 3 — Concepto en corto
     # =========================================================================
-    c.seccion(3, "Concepto en corto", 15, """Lo que hay que entender antes de tocar nada. Tres ideas, y ninguna es larga.""")
+    c.seccion(3, "Concepto en corto", 8, """Lo que hay que entender antes de tocar nada. Tres ideas, y ninguna es larga.""")
 
     c.md("""### 3A. Una expresión booleana es una pregunta con dos respuestas posibles
 
@@ -190,7 +190,7 @@ Compruébalo tú, con `nota = 3`:
     # =========================================================================
     # Bloque 4 — Laboratorio
     # =========================================================================
-    c.seccion(4, "Laboratorio", 27, """De aquí en adelante todo se toca. Cada estructura aparece dos veces seguidas:
+    c.seccion(4, "Laboratorio", 14, """De aquí en adelante todo se toca. Cada estructura aparece dos veces seguidas:
 primero en pseudocódigo, y justo debajo en Python. Léelas juntas — es la forma
 más rápida de que se te queden las dos.""")
 
@@ -398,16 +398,26 @@ al principio del programa.
     # =========================================================================
     # Bloque 5 — Ejercicios
     # =========================================================================
-    c.seccion(5, "Seis ejercicios", 20, """Aquí se juega tu nota: **65 puntos** en seis ejercicios, de menos a más.
+    c.seccion(5, "Cuatro ejercicios", 18, """Aquí se juega tu nota: **40 puntos** en cuatro ejercicios de **10 puntos** cada uno, de menos a más.
 
-Dos cosas antes de empezar. Si ejecutas una celda de ejercicio sin haberla
-tocado te va a salir `NotImplementedError`: no es un fallo, es la marca de «aquí
-falta tu parte». Y si te atascas, `pista("E2")` te da hasta tres ayudas
-escalonadas — pedirlas no resta puntos.""")
+### ⚠️ Importante: ¿Por qué existe `raise NotImplementedError` en las celdas de solución?
+
+En cada ejercicio calificable encontrarás inicialmente en la celda de solución:
+```python
+# ESCRIBE TU CODIGO AQUI y borra la linea de abajo
+raise NotImplementedError("Todavia no has escrito tu respuesta")
+```
+
+**¿Por qué es fundamental esta celda/línea si aún no has escrito una solución al ejercicio?**
+1. **Identifica ejercicios pendientes sin ambigüedad:** Si ejecutas la celda sin resolverla o la entregas intacta, `raise NotImplementedError` le avisa explícitamente a nbgrader y a la plataforma AVA que el ejercicio **aún no se ha realizado**. Así el sistema reconoce que la plantilla está en blanco y no lo confunde con un intento fallido de programación.
+2. **Protección contra falsos aprobados:** Evita que una celda vacía o incompleta pueda ser evaluada por accidente o arroje aprobados falsos. Garantiza que solo se califique el código que tú escribas conscientemente.
+3. **¿Qué debes hacer al resolver el ejercicio?:** Escribe tu solución y **borra obligatoriamente la línea `raise NotImplementedError(...)`**. Si no la borras, Python detendrá la ejecución arrojando ese error y tu código no alcanzará a ser evaluado.
+
+Si te atascas, `pista("E1")`, `pista("E2")`, `pista("E3")` o `pista("E4")` te dan hasta tres ayudas escalonadas — pedirlas no resta puntos.""")
 
     # --- Ejercicio 1 ------------------------------------------------------
     c.ejercicio(
-        numero=1, competencias=['I3'], titulo="Verdadero o falso", estrellas=1, puntos=5,
+        numero=1, competencias=['I3'], titulo="Verdadero o falso", estrellas=1, puntos=10,
         enunciado="""Con estos valores:
 
 ```python
@@ -426,7 +436,8 @@ escribe tu respuesta y deja que la prueba te corrija.
 | `c` | `nota >= 3.0 and faltas <= 3` |
 | `d` | `becado or nota >= 4.5` |
 | `e` | `not becado` |""",
-        partida='''RESPUESTAS = {
+        partida='''# Escribe tu respuesta en cada llave y recuerda borrar la línea raise NotImplementedError
+RESPUESTAS = {
     "a": ...,
     "b": ...,
     "c": ...,
@@ -495,7 +506,8 @@ FinAlgoritmo
 ```
 
 Con 5 horas debe salir 6000. Con 10 horas, 8000.""",
-        partida='''ALGORITMO_E2 = """
+        partida='''# Escribe tu pseudocódigo completo y recuerda borrar la línea raise NotImplementedError
+ALGORITMO_E2 = """
 """''',
         solucion='''ALGORITMO_E2 = """
 Algoritmo Parqueadero
@@ -548,7 +560,8 @@ Escribe `letra(nota)` que devuelva la letra correspondiente.
 
 **El orden de la cadena importa.** Piensa por dónde empezar: si pruebas primero
 la condición menos exigente, todas las notas altas se van a colar por ahí.""",
-        partida='''def letra(nota):
+        partida='''# Escribe tu función y recuerda borrar la línea raise NotImplementedError
+def letra(nota):
     ...''',
         solucion='''def letra(nota):
     if nota >= 4.5:
@@ -585,67 +598,7 @@ assert letra(5.0) == "A"''',
 
     # --- Ejercicio 4 ------------------------------------------------------
     c.ejercicio(
-        numero=4, competencias=['I3', 'I1'], titulo="Precedencia", estrellas=3, puntos=10,
-        enunciado="""Cuatro expresiones. Predice el valor de cada una **sin ejecutarla** y guárdalo
-en `PRECEDENCIA`.
-
-| | Expresión | Tipo de respuesta |
-|---|---|---|
-| `p` | `10 - 2 * 3` | un número |
-| `q` | `(10 - 2) * 3` | un número |
-| `r` | `17 // 5 + 17 % 5` | un número |
-| `s` | `False or True and False` | `True` o `False` |
-
-Recuerda el orden: paréntesis, multiplicar y dividir, sumar y restar, comparar,
-`not`, `and`, `or`.
-
-Ninguna de las cuatro está resuelta más arriba: hay que razonarlas.""",
-        partida='''PRECEDENCIA = {
-    "p": ...,
-    "q": ...,
-    "r": ...,
-    "s": ...,
-}''',
-        solucion='''PRECEDENCIA = {
-    "p": 4,
-    "q": 24,
-    "r": 5,
-    "s": False,
-}''',
-        pruebas='''assert isinstance(PRECEDENCIA, dict) and set(PRECEDENCIA) == set("pqrs"), \\
-    "PRECEDENCIA debe tener exactamente las llaves p, q, r y s"
-assert isinstance(PRECEDENCIA["s"], bool), "s es una expresion logica: True o False"
-assert not isinstance(PRECEDENCIA["p"], bool), "p es un numero, no un booleano"
-
-revisar("ejercicio_4", PRECEDENCIA, {
-    "p": ("f1b0ae33fa823af7",
-          "en `p`: resuelve primero la multiplicacion y despues la resta"),
-    "q": ("cd0714f92b7143e5",
-          "en `q` el parentesis va primero. Resuelvelo y multiplica lo que salga"),
-    "r": ("55e3aa7476da32aa",
-          "en `r`: `//` descarta los decimales y `%` da el residuo. Calculalos por separado antes de sumar"),
-    "s": ("a3ad79f6172d6261",
-          "en `s`, `and` va antes que `or`: ponle los parentesis que la maquina pone sola y vuelve a leerla"),
-})''',
-        pruebas_ocultas='''assert PRECEDENCIA["p"] == 4, "la multiplicacion va antes que la resta: 10 - 6"
-assert PRECEDENCIA["q"] == 24, "el parentesis manda: 8 * 3"
-assert PRECEDENCIA["r"] == 5, "17 // 5 es 3 y 17 % 5 es 2, asi que 3 + 2"
-assert PRECEDENCIA["s"] is False, \\
-    "'and' va antes que 'or': se lee False or (True and False) = False or False"''',
-        pistas=[
-            "Reescribe cada expresion poniendole los parentesis que la maquina pone "
-            "sola. Cuando los veas, el resultado sale solo.",
-            "En `r` hay dos operadores nuevos juntos: `//` descarta decimales y `%` da "
-            "el residuo. Calculalos por separado antes de sumar.",
-            "En `s`, `and` se evalua antes que `or`. Asi que la maquina lee "
-            "`False or (True and False)`: primero resuelve el parentesis, y a un "
-            "`or` con las dos falsas no le queda nada que salvar.",
-        ],
-    )
-
-    # --- Ejercicio 5 ------------------------------------------------------
-    c.ejercicio(
-        numero=5, competencias=['I3'], titulo="¿Puede matricular?", estrellas=3, puntos=15,
+        numero=4, competencias=['I3', 'I1'], titulo="¿Puede matricular?", estrellas=3, puntos=10,
         enunciado="""El del gancho, ahora en serio.
 
 `matricula(aprobo, cupo, paz_y_salvo)` recibe tres booleanos y **devuelve un
@@ -663,7 +616,8 @@ fila en la oficina de registro.
 **El orden manda.** Si le falta el prerrequisito, eso es lo primero que hay que
 decirle, aunque además deba plata. Y si aprobó pero no hay cupo, el estado
 financiero da igual.""",
-        partida='''def matricula(aprobo, cupo, paz_y_salvo):
+        partida='''# Escribe tu función y recuerda borrar la línea raise NotImplementedError
+def matricula(aprobo, cupo, paz_y_salvo):
     ...''',
         solucion='''def matricula(aprobo, cupo, paz_y_salvo):
     if not aprobo:
@@ -697,90 +651,10 @@ assert isinstance(matricula(True, True, True), str), "Debe devolver texto"''',
         ],
     )
 
-    # --- Ejercicio 6 ------------------------------------------------------
-    c.ejercicio(
-        numero=6, competencias=['I3', 'I1'], titulo="El mismo algoritmo, en los dos idiomas", estrellas=4, puntos=15,
-        enunciado="""El de cierre, y el más largo. Una tienda aplica descuentos por compra:
-
-| Compra | Descuento |
-|---|---|
-| $200.000 o más | 15 % |
-| entre $100.000 y $199.999 | 10 % |
-| menos de $100.000 | ninguno |
-
-Tienes que entregarlo **en los dos idiomas**, porque en un proyecto real primero
-se acuerda el algoritmo con quien no programa y después se escribe:
-
-1. `ALGORITMO_E6` — el pseudocódigo completo. Lee la compra, calcula el total a
-   pagar y lo escribe. La prueba lo ejecuta con el motor.
-2. `total_a_pagar(compra)` — la función de Python. Devuelve el número.
-
-Con 250000 se pagan 212500. Con 150000, 135000. Con 50000, 50000.""",
-        partida='''ALGORITMO_E6 = """
-"""
-
-
-def total_a_pagar(compra):
-    ...''',
-        solucion='''ALGORITMO_E6 = """
-Algoritmo Descuento
-    Definir compra Como Real
-    Definir total Como Real
-    Leer compra
-    Si compra >= 200000 Entonces
-        total <- compra * 0.85
-    Sino
-        Si compra >= 100000 Entonces
-            total <- compra * 0.90
-        Sino
-            total <- compra
-        FinSi
-    FinSi
-    Escribir total
-FinAlgoritmo
-"""
-
-
-def total_a_pagar(compra):
-    if compra >= 200000:
-        return compra * 0.85
-    elif compra >= 100000:
-        return compra * 0.90
-    return compra''',
-        pruebas='''assert isinstance(ALGORITMO_E6, str) and ALGORITMO_E6.strip(), \\
-    "ALGORITMO_E6 debe traer el pseudocodigo completo"
-_a = ps.ejecutar_pseudo(ALGORITMO_E6, entradas=["250000"])
-assert _a.ok, "Tu pseudocodigo no ejecuta. El motor dice: " + _a.error_corto
-assert "212500" in _a.salida, "Con 250000 y 15% de descuento se pagan 212500"
-
-assert callable(total_a_pagar), "total_a_pagar debe ser una funcion"
-assert abs(total_a_pagar(250000) - 212500) < 0.01, "250000 con 15% son 212500"
-assert abs(total_a_pagar(150000) - 135000) < 0.01, "150000 con 10% son 135000"
-assert abs(total_a_pagar(50000) - 50000) < 0.01, "Menos de 100000 no lleva descuento"
-print("Los dos idiomas coinciden.")''',
-        pruebas_ocultas='''_b = ps.ejecutar_pseudo(ALGORITMO_E6, entradas=["150000"])
-assert "135000" in _b.salida, "Con 150000 el pseudocodigo debe dar 135000"
-_c = ps.ejecutar_pseudo(ALGORITMO_E6, entradas=["50000"])
-assert "50000" in _c.salida, "Con 50000 no hay descuento"
-assert abs(total_a_pagar(200000) - 170000) < 0.01, \\
-    "200000 exactos YA llevan el 15%: la tabla dice '200.000 o mas'"
-assert abs(total_a_pagar(100000) - 90000) < 0.01, "100000 exactos llevan el 10%"
-assert abs(total_a_pagar(99999) - 99999) < 0.01, "99999 no llega al primer escalon"''',
-        pistas=[
-            "Hazlo en dos ratos: primero el pseudocodigo, ejecutalo con "
-            "`ps.ejecutar_pseudo` hasta que de bien, y solo entonces traducelo.",
-            "Pagar con 15% de descuento es pagar el 85%: `compra * 0.85`. Eso te ahorra "
-            "restar y es menos propenso a error.",
-            "Cuidado con los bordes: 200000 exactos YA entran en el 15%, porque la tabla "
-            "dice «o mas». En pseudocodigo el `Sino Si` se escribe anidando otro `Si` "
-            "dentro del `Sino`.",
-        ],
-    )
-
     # =========================================================================
     # Bloque 6 — El tutor
     # =========================================================================
-    c.seccion(6, "Habla con el asistente", 3, """Tienes **cinco preguntas** para todo este cuadernillo. Cinco, no cinco por
+    c.seccion(6, "Habla con el asistente", 2, """Tienes **cinco preguntas** para todo este cuadernillo. Cinco, no cinco por
 ejercicio. Gástalas donde de verdad te atasques.""")
 
     c.md("""### En qué gastarlas
@@ -792,7 +666,7 @@ hace falta gastar una pregunta.
 
 ### Cómo se pregunta bien
 
-Mal: «no me sale el 7».
+Mal: «no me sale el 4».
 Bien: «con `matricula(False, True, False)` mi función
 devuelve "Pendiente financiero" y esperaba "Falta el prerrequisito". ¿Qué tiene
 que ver el orden de mis `if`?»
@@ -804,11 +678,11 @@ puede responder de verdad; con la primera solo puede adivinar.
     # =========================================================================
     # Bloque 7 — Cierre
     # =========================================================================
-    c.seccion(7, "Cierre", 3, """Tres preguntas que solo te interesan a ti. Nadie las corrige.""")
+    c.seccion(7, "Cierre", 2, """Tres preguntas que solo te interesan a ti. Nadie las corrige.""")
 
     c.md("""- ¿Sabrías explicarle a alguien de tu casa **por qué** `=` y `==` no son lo
   mismo, sin usar la palabra «programación»?
-- De los seis ejercicios, ¿cuál te costó más? ¿Fue por la lógica o por la
+- De los cuatro ejercicios, ¿cuál te costó más? ¿Fue por la lógica o por la
   sintaxis? No es lo mismo, y saber cuál de los dos te frena cambia cómo
   estudias la semana que viene.
 - ¿Pusiste paréntesis donde dudabas, o los dejaste al azar y confiaste?
