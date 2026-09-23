@@ -264,15 +264,21 @@ class Motor:
             with salida:
                 if radio.value is None:
                     _html('<div class="ava-caja">Elige una opción antes de verificar.</div>')
-                elif radio.value == correcta:
-                    ganado = self._sumar(clave, xp)
-                    extra = f" (+{ganado} XP)" if ganado else " (ya lo tenías)"
-                    _html(f'<div class="ava-caja ok"><div class="ava-tit">'
-                          f'{_ICONO_OK}Correcto{extra}</div>{explicacion}</div>')
                 else:
-                    _html(f'<div class="ava-caja mal"><div class="ava-tit">'
-                          f'{_ICONO_MAL}Todavía no</div>Vuelve a leer con calma e '
-                          f'inténtalo otra vez. Los intentos no restan.</div>')
+                    if isinstance(correcta, int):
+                        es_correcta = (0 <= correcta < len(opciones) and radio.value == opciones[correcta])
+                    else:
+                        es_correcta = (radio.value == correcta)
+
+                    if es_correcta:
+                        ganado = self._sumar(clave, xp)
+                        extra = f" (+{ganado} XP)" if ganado else " (ya lo tenías)"
+                        _html(f'<div class="ava-caja ok"><div class="ava-tit">'
+                              f'{_ICONO_OK}Correcto{extra}</div>{explicacion}</div>')
+                    else:
+                        _html(f'<div class="ava-caja mal"><div class="ava-tit">'
+                              f'{_ICONO_MAL}Todavía no</div>Vuelve a leer con calma e '
+                              f'inténtalo otra vez. Los intentos no restan.</div>')
 
         verificar.on_click(_al_verificar)
         botones = [verificar]
