@@ -431,6 +431,279 @@ def _n(v, vacio="—"):
     return str(v) if v else f'<span class="tenue">{vacio}</span>'
 
 
+# --- Competencias: código, nivel y chips -------------------------------------
+#
+# Por dentro la competencia es I1…I7 (clave primaria, mapeo, corte). Por fuera
+# el docente conoce el código del microcurrículo (mCP17, mCC87, mCC103), que el
+# backend manda como `codigo`. Aquí el oficial es la etiqueta y el I-código
+# queda como secundario, para que las dos cosas sigan siendo la misma.
+
+# Un color por nivel, el mismo en todas las pestañas, en la ficha y en el JS
+# del despliegue: N3 verde (lo saca con soltura), N2 ámbar (lo saca pero le
+# cuesta), N1 rojo (no le sale), sin evidencia gris (todavía no se sabe).
+NIVEL_CLASE = {3: "n3", 2: "n2", 1: "n1"}
+NIVEL_COLOR = {3: "var(--success)", 2: "var(--warning)", 1: "var(--danger)",
+               None: "#cbd5e1"}
+NIVEL_TEXTO = {3: "N3 · lo resuelve con soltura", 2: "N2 · lo resuelve, pero le cuesta",
+               1: "N1 · no le sale todavía", None: "sin evidencia suficiente"}
+
+
+def _codigo(c):
+    """El código oficial (mCP17…), o el interno si el backend aún no lo manda."""
+    return c.get("codigo") or c.get("competencia_id", "")
+
+
+def _etiqueta_comp(c, interno=True):
+    """«mCP17» en grande y «I1» al lado en pequeño, salvo que coincidan."""
+    oficial, cod = _codigo(c), c.get("competencia_id", "")
+    texto = f'<b>{html.escape(oficial)}</b>'
+    if interno and cod and cod != oficial:
+        texto += f' <span class="mono tenue chico">{html.escape(cod)}</span>'
+    return texto
+
+
+def _competencias_en_alcance(datos):
+    """Las competencias que el panel mide, en el orden del catálogo."""
+    comps = list((datos or {}).get("competencias") or [])
+    if comps:
+        return comps
+    # Sin la sección del curso, se deducen del resumen por estudiante.
+    vistas = {}
+    for fila in (datos or {}).get("competencias_por_estudiante") or []:
+        vistas.setdefault(fila.get("competencia_id", ""), fila)
+    return [vistas[k] for k in sorted(vistas)]
+
+
+def _niveles_por_estudiante(datos):
+    """{student_id: {competencia_id: fila}} a partir del resumen del curso."""
+    salida = {}
+    for fila in (datos or {}).get("competencias_por_estudiante") or []:
+        salida.setdefault(fila.get("student_id", ""), {})[fila.get("competencia_id", "")] = fila
+    return salida
+
+
+def _chip_nivel(comp, fila):
+    """Una chip por competencia: código oficial + N1/N2/N3 + resueltos/vistos.
+
+    Es lo que Bryan pidió ver sin clics: «solo se quería saber el avance por
+    estudiante». Si no hay nivel, un guion con el motivo en el tooltip, que no
+    es lo mismo que N1 y no puede parecerlo.
+    """
+    oficial = _codigo(comp)
+    interno = comp.get("competencia_id", "")
+    if not fila:
+        titulo = f"{interno} · sin intentos reales todavía"
+        return (f'<span class="chip-comp chip-sin" title="{html.escape(titulo)}">'
+                f'<span class="chip-cod">{html.escape(oficial)}</span>'
+                f'<span class="chip-niv">—</span></span>')
+    nivel = fila.get("nivel")
+    vistos = fila.get("ejercicios_vistos", 0)
+    resueltos = fila.get("ejercicios_resueltos", 0)
+    motivo = fila.get("motivo_nivel") or NIVEL_TEXTO[None]
+    titulo = f"{interno} · {NIVEL_TEXTO.get(nivel, NIVEL_TEXTO[None])} · {motivo}"
+    clase = NIVEL_CLASE.get(nivel, "sin")
+    niv = f"N{nivel}" if nivel else "—"
+    cuenta = f'<span class="chip-rv">{resueltos}/{vistos}</span>' if vistos else ""
+    return (f'<span class="chip-comp chip-{clase}" title="{html.escape(titulo)}">'
+            f'<span class="chip-cod">{html.escape(oficial)}</span>'
+            f'<span class="chip-niv">{niv}</span>{cuenta}</span>')
+
+
+def _leyenda_niveles():
+    return ('<div class="leyenda">'
+            '<span><i class="cuadro" style="background:var(--success)"></i>N3 lo resuelve con soltura</span>'
+            '<span><i class="cuadro" style="background:var(--warning)"></i>N2 lo resuelve, pero le cuesta</span>'
+            '<span><i class="cuadro" style="background:var(--danger)"></i>N1 no le sale todavía</span>'
+            '<span><i class="cuadro" style="background:#cbd5e1"></i>sin evidencia (menos de 3 ejercicios intentados)</span>'
+            '</div>')
+
+
+# --- Gráficos: SVG generado aquí, sin librerías --------------------------------
+#
+# El panel corre dentro de JupyterHub, sin CDN y con lo que haya en el
+# contenedor. Un SVG inline con rectángulos y líneas es suficiente para lo
+# que se quiere ver de un vistazo, y no depende de nada.
+
+def _svg_texto(x, y, texto, **at):
+    extra = "".join(f' {k.replace("_", "-")}="{html.escape(str(v))}"' for k, v in at.items())
+    return f'<text x="{x:g}" y="{y:g}"{extra}>{html.escape(str(texto))}</text>'
+
+
+def _grafico_niveles(datos, estudiantes):
+    """Barra apilada por competencia: cuántos están en N3, N2, N1 o sin evidencia.
+
+    El ancho completo es el grupo entero, para que el hueco gris se lea como lo
+    que es: gente de la que todavía no se sabe. Quien no tiene fila en el
+    resumen (no ha intentado nada real) cuenta como sin evidencia.
+    """
+    comps = _competencias_en_alcance(datos)
+    por_est = _niveles_por_estudiante(datos)
+    ids = [e.get("student_id") for e in estudiantes]
+    if not comps or not ids:
+        return ""
+    total = len(ids)
+    ancho, x0, x1, alto_fila, arriba = 680, 118, 556, 34, 10
+    alto = arriba + alto_fila * len(comps) + 6
+    partes = [f'<svg viewBox="0 0 {ancho} {alto}" class="grafico" role="img" '
+              f'aria-label="Distribución de niveles por competencia">']
+    for i, comp in enumerate(comps):
+        cid = comp.get("competencia_id", "")
+        cuenta = {3: 0, 2: 0, 1: 0, None: 0}
+        for sid in ids:
+            fila = por_est.get(sid, {}).get(cid)
+            nivel = fila.get("nivel") if fila else None
+            cuenta[nivel if nivel in (1, 2, 3) else None] += 1
+        y = arriba + i * alto_fila
+        partes.append(_svg_texto(0, y + 20, _codigo(comp), font_size=13, font_weight=700,
+                                 fill="var(--text-main)"))
+        partes.append(_svg_texto(0, y + 32, cid, font_size=10, fill="var(--text-subtle)"))
+        x = x0
+        for nivel in (3, 2, 1, None):
+            n = cuenta[nivel]
+            if not n:
+                continue
+            w = (x1 - x0) * n / total
+            titulo = f"{_codigo(comp)}: {n} de {total} · {NIVEL_TEXTO[nivel]}"
+            partes.append(f'<rect x="{x:.1f}" y="{y + 6}" width="{w:.1f}" height="22" '
+                          f'fill="{NIVEL_COLOR[nivel]}" rx="3"><title>{html.escape(titulo)}</title></rect>')
+            if w >= 26:
+                etiqueta = f"{n}" if nivel is None else f"N{nivel} · {n}"
+                if w < 54:
+                    etiqueta = str(n)
+                partes.append(_svg_texto(x + w / 2, y + 21, etiqueta, font_size=11.5,
+                                         font_weight=600, text_anchor="middle",
+                                         fill="#fff" if nivel else "var(--text-muted)"))
+            x += w
+        con_nivel = cuenta[3] + cuenta[2] + cuenta[1]
+        partes.append(_svg_texto(x1 + 8, y + 21, f"{con_nivel}/{total} con nivel", font_size=11,
+                                 fill="var(--text-muted)", text_anchor="start"))
+    partes.append("</svg>")
+    return ('<div class="caja grafico-caja">'
+            '<div class="grafico-titulo">Cuántos estudiantes hay en cada nivel</div>'
+            f'{_leyenda_niveles()}{"".join(partes)}'
+            '<p class="sub2 chico" style="margin:8px 0 0">Cada barra es el grupo entero '
+            f'({total} estudiantes). A la derecha, cuántos tienen ya un nivel medido.</p></div>')
+
+
+def _grafico_dificultad(items):
+    """Barras horizontales por ejercicio: cuántos lo resolvieron y cuántos se
+    quedaron atascados, sobre cuántos lo intentaron de verdad.
+
+    Resolvieron + atascados = lo intentaron (quien escribió algo y pasó, o no
+    pasó y no volvió a pasar). Ejecutar la celda vacía no está aquí.
+    """
+    items = [e for e in items if e.get("alumnos_que_lo_intentaron", 0) > 0]
+    if not items:
+        return ""
+    mayor = max(e.get("alumnos_que_lo_intentaron", 0) for e in items) or 1
+    ancho, x0, x1, alto_fila, arriba = 680, 200, 540, 26, 6
+    alto = arriba + alto_fila * len(items) + 4
+    partes = [f'<svg viewBox="0 0 {ancho} {alto}" class="grafico" role="img" '
+              f'aria-label="Resueltos y atascados por ejercicio">']
+    for i, e in enumerate(items):
+        intentaron = e.get("alumnos_que_lo_intentaron", 0)
+        resolvieron = e.get("alumnos_que_lo_resolvieron", 0)
+        atascados = e.get("alumnos_atascados", 0)
+        y = arriba + i * alto_fila
+        nombre = e.get("exercise_id", "")
+        if e.get("orden"):
+            nombre += f'  (celda {e["orden"]})'
+        partes.append(_svg_texto(x0 - 8, y + 17, nombre, font_size=12, text_anchor="end",
+                                 fill="var(--text-main)", font_family="ui-monospace, Menlo, monospace"))
+        largo = (x1 - x0) * intentaron / mayor
+        w_ok = largo * resolvieron / intentaron if intentaron else 0
+        w_mal = largo - w_ok
+        if w_ok > 0:
+            partes.append(f'<rect x="{x0}" y="{y + 5}" width="{w_ok:.1f}" height="16" rx="3" '
+                          f'fill="var(--success)"><title>{html.escape(nombre)}: {resolvieron} lo resolvieron</title></rect>')
+        if w_mal > 0:
+            partes.append(f'<rect x="{x0 + w_ok:.1f}" y="{y + 5}" width="{w_mal:.1f}" height="16" rx="3" '
+                          f'fill="var(--danger)"><title>{html.escape(nombre)}: {atascados} atascados</title></rect>')
+        texto = f"{resolvieron} de {intentaron}"
+        if atascados:
+            texto += f" · {atascados} atascado{'' if atascados == 1 else 's'}"
+        partes.append(_svg_texto(x0 + largo + 8, y + 17, texto, font_size="11.5",
+                                 fill="var(--danger)" if atascados else "var(--text-muted)"))
+    partes.append("</svg>")
+    return ('<div class="grafico-caja grafico-en-grupo">'
+            '<div class="leyenda">'
+            '<span><i class="cuadro" style="background:var(--success)"></i>lo resolvieron</span>'
+            '<span><i class="cuadro" style="background:var(--danger)"></i>atascados (escribieron algo y no les pasa)</span>'
+            '<span class="tenue">· el largo de la barra es cuántos lo intentaron</span></div>'
+            + "".join(partes) + "</div>")
+
+
+def _grafico_actividad(datos):
+    """Línea de intentos reales por día. Dice si el grupo trabaja repartido en
+    la semana o todo la víspera de la entrega."""
+    dias = [d for d in (datos or {}).get("actividad_por_dia") or [] if d.get("dia")]
+    if len(dias) < 2:
+        return ""
+    from datetime import date, timedelta
+    try:
+        inicio = date.fromisoformat(dias[0]["dia"])
+        fin = date.fromisoformat(dias[-1]["dia"])
+    except ValueError:
+        return ""
+    por_dia = {d["dia"]: d for d in dias}
+    serie = []
+    d = inicio
+    while d <= fin and len(serie) < 400:
+        fila = por_dia.get(d.isoformat(), {})
+        serie.append((d, fila.get("intentos_reales", 0), fila.get("alumnos", 0)))
+        d += timedelta(days=1)
+    ancho, alto = 680, 190
+    izq, der, arriba, abajo = 40, 14, 14, 30
+    mayor = max(v for _, v, _ in serie) or 1
+    # Un techo redondo para el eje: 140 -> 150, 23 -> 25.
+    paso = 10 ** max(0, len(str(mayor)) - 1)
+    techo = ((mayor + paso - 1) // paso) * paso or 1
+    w = ancho - izq - der
+    h = alto - arriba - abajo
+
+    def px(i):
+        return izq + (w * i / max(1, len(serie) - 1))
+
+    def py(v):
+        return arriba + h - h * v / techo
+
+    partes = [f'<svg viewBox="0 0 {ancho} {alto}" class="grafico" role="img" '
+              f'aria-label="Intentos reales por día">']
+    for k in range(0, 5):
+        v = techo * k / 4
+        y = py(v)
+        partes.append(f'<line x1="{izq}" y1="{y:.1f}" x2="{ancho - der}" y2="{y:.1f}" '
+                      f'stroke="var(--border)" stroke-width="1"/>')
+        partes.append(_svg_texto(izq - 6, y + 4, f"{v:g}", font_size=10.5, text_anchor="end",
+                                 fill="var(--text-subtle)"))
+    puntos = [(px(i), py(v)) for i, (_, v, _) in enumerate(serie)]
+    linea = " ".join(f"{x:.1f},{y:.1f}" for x, y in puntos)
+    partes.append(f'<polygon points="{izq},{py(0):.1f} {linea} {puntos[-1][0]:.1f},{py(0):.1f}" '
+                  f'fill="var(--primary)" opacity="0.12"/>')
+    partes.append(f'<polyline points="{linea}" fill="none" stroke="var(--primary)" '
+                  f'stroke-width="2" stroke-linejoin="round"/>')
+    cada = max(1, (len(serie) + 7) // 8)
+    for i, (dia, v, alumnos) in enumerate(serie):
+        x, y = puntos[i]
+        if v:
+            partes.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="3" fill="var(--primary)">'
+                          f'<title>{dia.strftime("%d/%m")}: {v} intentos reales de {alumnos} '
+                          f'estudiante{"" if alumnos == 1 else "s"}</title></circle>')
+        if i % cada == 0 or i == len(serie) - 1:
+            partes.append(_svg_texto(x, alto - 10, dia.strftime("%d/%m"), font_size=10.5,
+                                     text_anchor="middle", fill="var(--text-subtle)"))
+    partes.append("</svg>")
+    total = sum(v for _, v, _ in serie)
+    pico = max(serie, key=lambda t: t[1])
+    return ('<div class="caja grafico-caja">'
+            '<div class="grafico-titulo">Intentos reales por día</div>'
+            + "".join(partes) +
+            f'<p class="sub2 chico" style="margin:8px 0 0">{total} intentos reales entre el '
+            f'{inicio.strftime("%d/%m")} y el {fin.strftime("%d/%m")}. El día de más trabajo fue el '
+            f'{pico[0].strftime("%d/%m")} ({pico[1]} intentos de {pico[2]} '
+            f'estudiante{"" if pico[2] == 1 else "s"}). Pasa el ratón por un punto para ver el día.</p></div>')
+
+
 def _iniciales(nombre, sid):
     texto = (nombre or sid or "").strip()
     partes = texto.split()
@@ -470,6 +743,19 @@ def _seccion_estudiantes(datos, historial, notas, raiz):
         for sid in h.get("entregado", {}):
             entregadas[sid] = entregadas.get(sid, 0) + 1
 
+    # El nivel por competencia de cada persona viene en el mismo payload
+    # (competencias_por_estudiante): una consulta para todo el grupo, no una
+    # petición por fila.
+    comps_alcance = _competencias_en_alcance(datos)
+    niveles = _niveles_por_estudiante(datos)
+    hay_niveles = "competencias_por_estudiante" in (datos or {})
+    # Con el backend viejo (sin la clave) todas las filas llevan data-nivel=0 y el
+    # filtro «Aún sin nivel» enseñaría a todo el mundo: no se emite en ese caso.
+    boton_sin_nivel = (
+        '<button type="button" class="f-pill" data-filtro="sin_nivel" '
+        'onclick="setFiltroEstudiantes(\'sin_nivel\', this)">◌ Aún sin nivel</button>'
+    ) if hay_niveles else ""
+
     filas = ""
     for e in lista:
         sid = e["student_id"]
@@ -507,6 +793,15 @@ def _seccion_estudiantes(datos, historial, notas, raiz):
 
         resueltos_val = e.get("ejercicios_resueltos", 0)
 
+        if not hay_niveles:
+            chips = '<span class="tenue chico" title="El backend no devolvió el resumen por estudiante">no disponible</span>'
+        elif comps_alcance:
+            chips = "".join(_chip_nivel(c, niveles.get(sid, {}).get(c.get("competencia_id", "")))
+                            for c in comps_alcance)
+        else:
+            chips = '<span class="tenue chico">—</span>'
+        mejor_nivel = max((f.get("nivel") or 0 for f in niveles.get(sid, {}).values()), default=0)
+
         filas += f"""
         <tr class="fila-estudiante" id="fila-{safe_id}"
             data-sid="{html.escape(sid)}"
@@ -516,6 +811,7 @@ def _seccion_estudiantes(datos, historial, notas, raiz):
             data-atascados="{atascados}"
             data-entregas="{n_entregas}"
             data-ingreso="{1 if ultimo else 0}"
+            data-nivel="{mejor_nivel}"
             onclick="toggleFilaEstudiante('{html.escape(sid)}', '{safe_id}', '{html.escape(nombre)}', event)">
           <td>
             <div class="estudiante-meta">
@@ -528,6 +824,7 @@ def _seccion_estudiantes(datos, historial, notas, raiz):
           </td>
           <td><div class="tiempo-rel">{_hace(ultimo)}</div></td>
           <td>{donde}</td>
+          <td class="celda-chips">{chips}</td>
           <td class="num"><span class="badge-resueltos"><b>{resueltos_val}</b> ej.</span></td>
           <td class="num">{badge_atascados}</td>
           <td class="num">{entregas_badge} {chips_notas}</td>
@@ -539,7 +836,7 @@ def _seccion_estudiantes(datos, historial, notas, raiz):
           </td>
         </tr>
         <tr class="fila-detalle" id="det-row-{safe_id}" style="display:none">
-          <td colspan="7" class="celda-detalle" id="det-box-{safe_id}">
+          <td colspan="8" class="celda-detalle" id="det-box-{safe_id}">
           </td>
         </tr>"""
 
@@ -560,13 +857,16 @@ def _seccion_estudiantes(datos, historial, notas, raiz):
         <button type="button" class="f-pill" data-filtro="atascados" onclick="setFiltroEstudiantes('atascados', this)">⚠️ Con atascados ({sum(1 for e in lista if e.get("ejercicios_atascados", 0) > 0)})</button>
         <button type="button" class="f-pill" data-filtro="al_dia" onclick="setFiltroEstudiantes('al_dia', this)">✅ Al día</button>
         <button type="button" class="f-pill" data-filtro="sin_actividad" onclick="setFiltroEstudiantes('sin_actividad', this)">⏳ Sin actividad</button>
+{boton_sin_nivel}
       </div>
     </div>
     """
+    leyenda = _leyenda_niveles() if hay_niveles and comps_alcance else ""
 
     return f"""
     <div class="caja table-container">
       {barra_herramientas}
+      {leyenda}
       <div class="table-responsive">
         <table class="tabla-minimalista" id="tabla-estudiantes">
           <thead>
@@ -574,6 +874,7 @@ def _seccion_estudiantes(datos, historial, notas, raiz):
               <th>Estudiante</th>
               <th>Última actividad</th>
               <th>Va por</th>
+              <th title="Código oficial de la competencia · nivel de hoy · ejercicios resueltos/intentados">Nivel por competencia</th>
               <th class="num">Resueltos</th>
               <th class="num">Atascados</th>
               <th class="num">Entregas / Notas</th>
@@ -626,19 +927,25 @@ def _clave_descendente(codigo):
     return (-int(numeros[-1]) if numeros else 0, codigo)
 
 
-def _desplegables(grupos, activo, cabecera, cuerpo_de, resumen_de):
-    """Un <details> por cuadernillo. `cuerpo_de` y `resumen_de` reciben la lista."""
+def _desplegables(grupos, activo, cabecera, cuerpo_de, resumen_de, antes_de=None):
+    """Un <details> por cuadernillo. `cuerpo_de` y `resumen_de` reciben la lista.
+
+    `antes_de`, si se da, recibe la lista y devuelve HTML que va dentro del
+    desplegable, encima de la tabla: es donde entra el gráfico del grupo.
+    """
     if not grupos:
         return ""
     bloques = ""
     for codigo, items in grupos:
         abierto = " open" if (codigo == activo or len(grupos) == 1) else ""
         marca = '<span class="marca">Esta semana</span>' if codigo == activo else ""
+        encima = antes_de(items) if antes_de else ""
         bloques += (
             f'<details class="grupo"{abierto}>'
             f'<summary><span class="gtit">{html.escape(_titulo(codigo))}</span>'
             f'<span class="mono tenue gcod">{html.escape(codigo)}</span>{marca}'
             f'<span class="gres">{resumen_de(items)}</span></summary>'
+            f'{encima}'
             f'<div class="gtabla"><table>{cabecera}{cuerpo_de(items)}</table></div>'
             f'</details>')
     return f'<div class="caja grupos">{bloques}</div>'
@@ -906,7 +1213,7 @@ def _seccion_dificultad(datos, activo=""):
         '<th class="num" title="De los que lo resolvieron, cuántos a la primera">A la primera</th>'
         '<th class="num" title="Mediana de intentos reales hasta pasar la prueba">Intentos hasta pasar</th>'
         '<th class="num">Atascados</th><th class="num">A medias</th></tr>',
-        cuerpo, resumen)
+        cuerpo, resumen, antes_de=_grafico_dificultad)
 
 
 def _seccion_malentendidos(datos, activo=""):
@@ -956,17 +1263,19 @@ def _guia_competencias(comps):
         n = c.get("ejercicios_disenados", 0)
         cuantos = (f'{n} ejercicio{"" if n == 1 else "s"}' if n
                    else '<span class="tenue">sin ejercicios todavía</span>')
-        filas += (f'<tr><td class="mono"><b>{html.escape(c.get("competencia_id", ""))}</b></td>'
+        filas += (f'<tr><td class="mono">{_etiqueta_comp(c)}</td>'
                   f'<td>{html.escape(c.get("descripcion", ""))}</td>'
                   f'<td class="num">{cuantos}</td></tr>')
-    return (f'<details class="caja guia"><summary>Qué mide cada código '
-            f'(I1 … I7)</summary><table>{filas}</table></details>')
+    codigos = ", ".join(html.escape(_codigo(c)) for c in sorted(comps, key=lambda x: x.get("competencia_id", "")))
+    return (f'<details class="caja guia"><summary>Qué mide cada competencia '
+            f'({codigos})</summary><table>{filas}</table></details>')
 
 
-def _seccion_competencias(datos):
+def _seccion_competencias(datos, estudiantes=None):
     comps = (datos or {}).get("competencias", [])
     if not comps:
         return '<div class="caja vacia">Sin datos de competencias.</div>'
+    grafico = _grafico_niveles(datos, estudiantes or [])
     con_datos, sin_datos, sin_ejercicios = [], [], []
     for c in comps:
         if not c.get("ejercicios_disenados"):
@@ -983,7 +1292,7 @@ def _seccion_competencias(datos):
         pct = int(100 * resolvieron / alumnos)
         color = VERDE if pct >= 70 else (AMBAR if pct >= 40 else ROJO)
         tarjetas += (
-            f'<div class="comp"><div class="comp-id">{html.escape(c["competencia_id"])}'
+            f'<div class="comp"><div class="comp-id">{_etiqueta_comp(c)}'
             f' · {disenados} ejercicio{"" if disenados == 1 else "s"}</div>'
             f'<div class="comp-e"><b>{resolvieron}</b> de {alumnos} '
             f'{"estudiante" if alumnos == 1 else "estudiantes"} resolvió alguno</div>'
@@ -992,16 +1301,19 @@ def _seccion_competencias(datos):
     resto = ""
     if sin_datos:
         resto += ('<p class="sub2">Con ejercicios pero sin actividad todavía: '
-                  + ", ".join(f'<b title="{html.escape(c["descripcion"])}">{html.escape(c["competencia_id"])}</b>'
+                  + ", ".join(f'<b title="{html.escape(c["descripcion"])}">{html.escape(_codigo(c))}</b>'
                               f' ({c["ejercicios_disenados"]})' for c in sin_datos)
                   + '. <span class="tenue">Pasa el ratón para leer cuál es.</span></p>')
     if sin_ejercicios:
-        resto += ('<p class="sub2">Sin ningún ejercicio que las evalúe: '
-                  + ", ".join(f'<b title="{html.escape(c["descripcion"])}">{html.escape(c["competencia_id"])}</b>'
-                              for c in sin_ejercicios) + '.</p>')
+        resto += ('<p class="sub2">Sin ningún ejercicio que las evalúe todavía: '
+                  + ", ".join(f'<b title="{html.escape(c["descripcion"])}">{html.escape(_codigo(c))}</b>'
+                              for c in sin_ejercicios)
+                  + '. <span class="tenue">Hasta que se etiqueten ejercicios con ella, nadie puede tener nivel ahí.</span></p>')
     if not tarjetas:
-        return f'<div class="caja vacia">Nadie ha trabajado aún ningún ejercicio etiquetado.</div>{resto}'
-    return f'<div class="comps">{tarjetas}</div>{resto}'
+        return f'{grafico}<div class="caja vacia">Nadie ha trabajado aún ningún ejercicio etiquetado.</div>{resto}'
+    return (f'{grafico}<h3 class="h3">Cuántos han resuelto algo de cada competencia</h3>'
+            f'<p class="sub2">La barra es la parte del grupo con actividad que ya resolvió al menos un ejercicio de esa competencia. No es el nivel: el nivel está arriba y en la fila de cada estudiante.</p>'
+            f'<div class="comps">{tarjetas}</div>{resto}')
 
 
 def _seccion_riesgo(datos, nombres, raiz):
@@ -1377,6 +1689,38 @@ ESTILO = """
   .volver { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 14px; font-size: 13.5px; }
   .docentes-lista { margin-top: 14px; font-size: 12.5px; color: var(--text-muted); }
   .docentes-label { font-weight: 600; }
+
+  /* Nivel por competencia: chips en el listado. Un color por nivel, el mismo
+     que las pills del despliegue y los gráficos: N3 verde, N2 ámbar, N1 rojo,
+     sin evidencia gris. */
+  .celda-chips { width: 280px; }
+  .chip-comp {
+    display: inline-flex; align-items: center; gap: 5px; margin: 2px 6px 2px 0;
+    padding: 2px 7px 2px 6px; border-radius: 999px; border: 1px solid var(--border); white-space: nowrap;
+    background: #f8fafc; font-size: 12px; line-height: 1.3; cursor: help;
+  }
+  .chip-cod { font-weight: 700; color: var(--text-main); letter-spacing: .01em; }
+  .chip-niv { font-weight: 800; font-size: 11.5px; padding: 1px 6px; border-radius: 999px; color: #fff; background: #cbd5e1; }
+  .chip-rv { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .chip-n3 { background: var(--success-bg); border-color: var(--success-border); }
+  .chip-n3 .chip-niv { background: var(--success); }
+  .chip-n2 { background: var(--warning-bg); border-color: var(--warning-border); }
+  .chip-n2 .chip-niv { background: var(--warning); }
+  .chip-n1 { background: var(--danger-bg); border-color: var(--danger-border); }
+  .chip-n1 .chip-niv { background: var(--danger); }
+  .chip-sin .chip-niv { background: none; color: var(--text-subtle); font-weight: 700; }
+  .chip-sin .chip-cod { color: var(--text-muted); font-weight: 600; }
+
+  .leyenda { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--text-muted); margin: 0 0 10px; }
+  .leyenda .cuadro { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .table-container > .leyenda { padding: 0 16px 6px; }
+
+  /* Gráficos SVG inline: escalan al ancho de su caja. */
+  .grafico { display: block; width: 100%; height: auto; max-width: 820px; font-family: inherit; }
+  .grafico-caja { padding: 16px 18px 12px; margin-bottom: 14px; }
+  .grafico-en-grupo { padding: 12px 16px 4px; border-bottom: 1px dashed var(--border); }
+  .grafico-titulo { font-size: 13px; font-weight: 700; color: var(--text-main); margin-bottom: 8px; }
+  .h3 { font-size: 15px; font-weight: 700; margin: 18px 0 4px; color: var(--text-main); }
 """
 
 
@@ -1493,7 +1837,7 @@ def _html_panel(base_url, datos=None, aviso=None):
     pane_estudiantes = f"""
     <div id="tab-estudiantes" class="tab-pane active" role="tabpanel">
       <h2>Listado de estudiantes</h2>
-      <p class="sub2">Haz clic en cualquier estudiante o pulsa <b>Ver detalle ▾</b> para desplegar al instante su avance en microcompetencias, cuadernillos y fallas celda por celda.</p>
+      <p class="sub2">Cada fila lleva el <b>nivel de hoy en cada competencia</b>: código oficial, N1/N2/N3 y ejercicios resueltos/intentados. Un guion es «sin evidencia» (menos de 3 ejercicios intentados), que no es lo mismo que N1. Pasa el ratón por una chip para leer el porqué; haz clic en la fila o en <b>Ver detalle ▾</b> para ver cuadernillos y fallas celda por celda.</p>
       {_seccion_estudiantes(datos, historial, notas, raiz)}
     </div>
     """
@@ -1512,10 +1856,17 @@ def _html_panel(base_url, datos=None, aviso=None):
     """
 
     # Panel Tab 3: Diagnóstico y Telemetría
+    grafico_actividad = (_grafico_actividad(datos) or
+                         '<div class="caja vacia">Todavía no hay dos días con intentos '
+                         'reales para dibujar la línea.</div>')
     pane_diagnostico = f"""
     <div id="tab-diagnostico" class="tab-pane" role="tabpanel">
+      <h2>Cuándo trabajan</h2>
+      <p class="sub2">Intentos reales por día (ejecutar la celda vacía no cuenta). Si todo se amontona la víspera del cierre, conviene abrir el cuadernillo antes o recordarlo a mitad de semana.</p>
+      {grafico_actividad}
+
       <h2>Qué cuesta y dónde se atascan</h2>
-      <p class="sub2">Por ejercicio: cuántos pasaron a la primera y cuántos intentos costó a quienes lo resolvieron. «Atascado» es quien escribió una respuesta que no pasa y no ha vuelto a intentar.</p>
+      <p class="sub2">Por ejercicio: la barra dice cuántos lo intentaron de verdad y cuántos de ellos lo resolvieron (verde) o se quedaron atascados (rojo). En la tabla, cuántos pasaron a la primera y cuántos intentos costó a quienes lo resolvieron. «Atascado» es quien escribió una respuesta que no pasa y no ha vuelto a pasar.</p>
       {_seccion_dificultad(datos, activo)}
 
       <h2>Lo que se están equivocando igual (Malentendidos comunes)</h2>
@@ -1536,8 +1887,9 @@ def _html_panel(base_url, datos=None, aviso=None):
     pane_competencias = f"""
     <div id="tab-competencias" class="tab-pane" role="tabpanel">
       <h2>Cómo va el grupo por competencia</h2>
+      <p class="sub2">Cada estudiante recibe un nivel por competencia a partir de lo que intentó y resolvió: <b>N3</b> lo resuelve con soltura, <b>N2</b> lo resuelve pero le cuesta (2 o más fallos por ejercicio, o lo deja a medias), <b>N1</b> no le sale. Con menos de 3 ejercicios intentados no hay nivel: es «sin evidencia», no N1. Los códigos son los del microcurrículo (mCP17, mCC87, mCC103); I1, I3, I4 son la clave interna.</p>
       {_seccion_salud(datos)}
-      {_seccion_competencias(datos)}
+      {_seccion_competencias(datos, lista_estudiantes)}
       {_guia_competencias((datos or {}).get('competencias', []))}
 
       <h2>Congelar un corte</h2>
@@ -1605,6 +1957,7 @@ def _html_panel(base_url, datos=None, aviso=None):
       var email = fila.getAttribute("data-email") || "";
       var atascados = parseInt(fila.getAttribute("data-atascados") || "0", 10);
       var ingreso = fila.getAttribute("data-ingreso") === "1";
+      var nivel = parseInt(fila.getAttribute("data-nivel") || "0", 10);
       var detRow = document.getElementById("det-row-" + safeId);
 
       var coincideTexto = !txt || nombre.indexOf(txt) !== -1 || email.indexOf(txt) !== -1 || sid.indexOf(txt) !== -1;
@@ -1615,6 +1968,8 @@ def _html_panel(base_url, datos=None, aviso=None):
         coincideFiltro = atascados === 0 && ingreso;
       }} else if (filtroPill === "sin_actividad") {{
         coincideFiltro = !ingreso;
+      }} else if (filtroPill === "sin_nivel") {{
+        coincideFiltro = nivel === 0;
       }}
 
       if (coincideTexto && coincideFiltro) {{
@@ -1734,7 +2089,7 @@ def _html_panel(base_url, datos=None, aviso=None):
 
         h += '<div class="comp-card-mini">';
         h += '  <div class="comp-mini-head">';
-        h += '    <span class="comp-mini-id">' + esc(c.competencia_id) + '</span>';
+        h += '    <span class="comp-mini-id">' + esc(c.codigo || c.competencia_id) + (c.codigo && c.codigo !== c.competencia_id ? ' <span class="mono tenue chico">' + esc(c.competencia_id) + '</span>' : '') + '</span>';
         h += '    <span class="pill ' + badgeClass + '">' + nivelTexto + '</span>';
         h += '  </div>';
         h += '  <div class="comp-mini-reason">' + esc(c.motivo_nivel || 'Sin evidencia suficiente para dictaminar nivel') + '</div>';
@@ -2040,7 +2395,7 @@ def _html_ficha(base_url, sid, datos_panel, ficha, historial, aviso, semana=""):
 
             tarjetas += (
                 f'<div class="comp"><div class="comp-id">'
-                f'{html.escape(c["competencia_id"])} · {vistos} '
+                f'{_etiqueta_comp(c)} · {vistos} '
                 f'ejercicio{"" if vistos == 1 else "s"} trabajado'
                 f'{"" if vistos == 1 else "s"}</div>'
                 f'<div style="margin: 6px 0 8px">{insignia}</div>'
@@ -2055,7 +2410,7 @@ def _html_ficha(base_url, sid, datos_panel, ficha, historial, aviso, semana=""):
         resto = ""
         if sin_tocar:
             resto = ('<p class="sub2">Sin tocar todavía: '
-                     + ", ".join(f'<b>{html.escape(c["competencia_id"])}</b>'
+                     + ", ".join(f'<b title="{html.escape(c.get("descripcion", ""))}">{html.escape(_codigo(c))}</b>'
                                  for c in sin_tocar) + '.</p>')
         return f'<div class="comps">{tarjetas}</div>{resto}'
 

@@ -71,6 +71,23 @@ func (h *PanelDocenteHandler) PanelHandler(c *gin.Context) {
 	} else {
 		respuesta["competencias"] = v
 	}
+	// El nivel de cada persona en cada competencia, en una sola consulta, para
+	// que el listado lo enseñe en la fila sin abrir «Ver detalle» de nadie.
+	// Es la misma SQL y el mismo cálculo de nivel que la ficha individual.
+	if v, err := h.estudiantes.CompetenciasDelCurso(curso); err != nil {
+		fallos = append(fallos, "competencias_por_estudiante")
+		log.Printf("[panel] competencias por estudiante: %v", err)
+	} else {
+		for i := range v {
+			nivelDe(&v[i].CompetenciaDeEstudiante)
+		}
+		respuesta["competencias_por_estudiante"] = v
+	}
+	if v, err := h.repo.PorDia(curso); err != nil {
+		fallos = append(fallos, "actividad_por_dia")
+	} else {
+		respuesta["actividad_por_dia"] = v
+	}
 	if v, err := h.repo.Malentendidos(curso); err != nil {
 		fallos = append(fallos, "malentendidos")
 	} else {
@@ -194,29 +211,36 @@ func (h *PanelDocenteHandler) FichaHandler(c *gin.Context) {
 // pensar que basta con que el alumno trabaje más.
 func ponerNivel(comps []repository.CompetenciaDeEstudiante) {
 	for i := range comps {
-		// nil = todavía no se sabe (falta la migración v5). No se da nivel
-		// igualmente, pero el motivo dice la verdad en vez de inventar una
-		// explicación pedagógica para lo que es un despliegue a medias.
-		if comps[i].EnAlcance == nil {
-			comps[i].Nivel = nil
-			comps[i].Motivo = "el nivel no está disponible todavía en este servidor"
-			continue
-		}
-		if !*comps[i].EnAlcance {
-			comps[i].Nivel = nil
-			comps[i].Motivo = "no se mide con trazas de actividad: " +
-				"esta competencia se evalúa por autorreporte y coevaluación"
-			continue
-		}
-		nivel, motivo := service.NivelCompetencia(service.SenalesCompetencia{
-			Vistos:    comps[i].Vistos,
-			Resueltos: comps[i].Resueltos,
-			Fallos:    comps[i].Fallos,
-			Abandonos: comps[i].Abandonos,
-		})
-		comps[i].Nivel = nivel
-		comps[i].Motivo = motivo
+		nivelDe(&comps[i])
 	}
+}
+
+// nivelDe es ponerNivel para UNA fila. Está separado para que el resumen del
+// curso entero (CompetenciasDelCurso), que lleva el student_id delante, pase
+// por el mismo cálculo exacto que la ficha y el corte.
+func nivelDe(c *repository.CompetenciaDeEstudiante) {
+	// nil = todavía no se sabe (falta la migración v5). No se da nivel
+	// igualmente, pero el motivo dice la verdad en vez de inventar una
+	// explicación pedagógica para lo que es un despliegue a medias.
+	if c.EnAlcance == nil {
+		c.Nivel = nil
+		c.Motivo = "el nivel no está disponible todavía en este servidor"
+		return
+	}
+	if !*c.EnAlcance {
+		c.Nivel = nil
+		c.Motivo = "no se mide con trazas de actividad: " +
+			"esta competencia se evalúa por autorreporte y coevaluación"
+		return
+	}
+	nivel, motivo := service.NivelCompetencia(service.SenalesCompetencia{
+		Vistos:    c.Vistos,
+		Resueltos: c.Resueltos,
+		Fallos:    c.Fallos,
+		Abandonos: c.Abandonos,
+	})
+	c.Nivel = nivel
+	c.Motivo = motivo
 }
 
 // CorteRequest es lo que manda el docente al congelar un corte.

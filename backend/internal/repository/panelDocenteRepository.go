@@ -173,10 +173,14 @@ func (r *PanelDocenteRepository) PorEjercicio(curso string) ([]DificultadEjercic
 
 type CompetenciaCurso struct {
 	CompetenciaID string `db:"competencia_id" json:"competencia_id"`
-	Descripcion   string `db:"descripcion" json:"descripcion"`
-	Ejercicios    int    `db:"ejercicios" json:"ejercicios_disenados"`
-	Alumnos       int    `db:"alumnos" json:"alumnos_con_actividad"`
-	Resolvieron   int    `db:"resolvieron" json:"alumnos_que_resolvieron_alguno"`
+	// El código oficial del microcurrículo (mCP17, mCC87, mCC103…), que es el
+	// que el docente reconoce; I1…I7 es solo la clave interna. Sale de
+	// competencias.codigo_anterior y cae al id si estuviera vacío.
+	Codigo      string `db:"codigo" json:"codigo"`
+	Descripcion string `db:"descripcion" json:"descripcion"`
+	Ejercicios  int    `db:"ejercicios" json:"ejercicios_disenados"`
+	Alumnos     int    `db:"alumnos" json:"alumnos_con_actividad"`
+	Resolvieron int    `db:"resolvieron" json:"alumnos_que_resolvieron_alguno"`
 }
 
 // PorCompetencia sale del catálogo, no de la telemetría: una competencia para la
@@ -187,7 +191,9 @@ func (r *PanelDocenteRepository) PorCompetencia(curso string) ([]CompetenciaCurs
 	// consume a distinguir «no hay» de «falló».
 	salida := []CompetenciaCurso{}
 	err := r.db.Select(&salida, `
-		SELECT c.id AS competencia_id, c.descripcion,
+		SELECT c.id AS competencia_id,
+		       COALESCE(c.codigo_anterior, c.id) AS codigo,
+		       c.descripcion,
 		       -- Con FILTER: sin el, COUNT(DISTINCT (a,b)) cuenta la tupla
 		       -- (NULL, NULL) del LEFT JOIN y una competencia SIN ejercicios
 		       -- aparecia con 1. Es lo que el profesor vio en pantalla:
@@ -206,8 +212,33 @@ func (r *PanelDocenteRepository) PorCompetencia(curso string) ([]CompetenciaCurs
 		 -- Solo las que el AVA mide con trazas. Mismo filtro que la ficha del
 		 -- estudiante, y tiene que serlo: son dos secciones del mismo panel.
 		 WHERE `+filtroEnAlcance(r.db)+`
-		 GROUP BY c.id, c.descripcion
+		 GROUP BY c.id, c.codigo_anterior, c.descripcion
 		 ORDER BY c.id`, curso)
+	return salida, err
+}
+
+type ActividadDia struct {
+	Dia            string `db:"dia" json:"dia"`
+	IntentosReales int    `db:"intentos_reales" json:"intentos_reales"`
+	Alumnos        int    `db:"alumnos" json:"alumnos"`
+}
+
+// PorDia: cuántos intentos reales hubo cada día y de cuánta gente. Es la
+// línea de actividad del panel: dice si el grupo trabaja repartido en la
+// semana o todo la noche antes de la entrega, que es lo que decide cuándo
+// abrir y cerrar el siguiente cuadernillo.
+//
+// El día se corta en hora de Colombia: received_at es TIMESTAMPTZ y cortarlo
+// en UTC parte la noche del alumno en dos días distintos.
+func (r *PanelDocenteRepository) PorDia(curso string) ([]ActividadDia, error) {
+	salida := []ActividadDia{}
+	err := r.db.Select(&salida, intentosReales+`
+		SELECT to_char(received_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') AS dia,
+		       COUNT(*) FILTER (WHERE NOT stub)   AS intentos_reales,
+		       COUNT(DISTINCT student_id)         AS alumnos
+		  FROM t
+		 GROUP BY 1
+		 ORDER BY 1`, curso)
 	return salida, err
 }
 

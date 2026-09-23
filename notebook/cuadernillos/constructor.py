@@ -150,6 +150,7 @@ class Cuadernillo:
         # por JOIN. Así, corregir una etiqueta corrige todo el histórico.
         self.competencias = {}
         self._i_arranque = None       # dónde va la celda del motor
+        self._nota_respuesta_puesta = False   # «Cómo se responde», una sola vez
 
     # -- Celdas simples ------------------------------------------------------
     def md(self, texto):
@@ -208,6 +209,30 @@ class Cuadernillo:
 > **2. Al terminar, entrega.** Tu trabajo **no le llega a tu profesor** hasta que
 > pulses **Guardar y entregar** — el botón está arriba y también al final del
 > cuadernillo. Puedes entregar las veces que quieras: siempre cuenta la última.
+"""
+
+    # Va justo antes del PRIMER ejercicio de cada cuadernillo, una sola vez.
+    #
+    # Lo pidió el profesor (22-sep): notas puntuales «para que los estudiantes
+    # no se confundan», con el ejemplo del raise NotImplementedError. Hasta
+    # ahora solo la semana 03 lo explicaba, y lo hacía en su propio generador;
+    # aquí sale en todos sin que cada semana tenga que acordarse.
+    #
+    # Lo que ve el alumno debajo de su plantilla lo pone «Generate» según
+    # notebook/nbgrader_config.py (ClearSolutions.code_stub): un comentario
+    # «ESCRIBE TU CODIGO AQUI y borra la linea de abajo» y la línea
+    # raise NotImplementedError("Todavia no has escrito tu respuesta").
+    # Esta nota explica esa línea; no se repite como comentario en la celda,
+    # porque el stub ya trae el suyo justo encima del raise.
+    NOTA_RESPUESTA = """> ### Cómo se responde un ejercicio
+>
+> Cada ejercicio son dos celdas. La primera es **la tuya**: trae la línea
+> `raise NotImplementedError(...)`, que solo significa «aquí falta tu
+> respuesta». **Bórrala** y escribe tu código en su lugar; si la dejas, tu
+> solución no llega a evaluarse. Ejecuta tu celda y después la **celda de
+> prueba** de abajo: ella te dice si vas bien, y puedes repetirla las veces
+> que quieras. Si te atascas, `pista("{clave}")`. No cambies el nombre de la
+> función ni muevas celdas.
 """
 
     def arranque(self):
@@ -318,6 +343,9 @@ class Cuadernillo:
         al calificar, para que no se pueda programar «contra la prueba».
         """
         clave = f"E{numero}"
+        if not self._nota_respuesta_puesta:
+            self.md(self.NOTA_RESPUESTA.format(clave=clave))
+            self._nota_respuesta_puesta = True
         nivel = "★" * estrellas + "☆" * (4 - estrellas)
         ayuda = (f'\n\n> ¿Atascado? Ejecuta `pista("{clave}")` en una celda nueva. '
                  f"Hay {len(pistas)}, de la que hace pensar a la que casi resuelve. "

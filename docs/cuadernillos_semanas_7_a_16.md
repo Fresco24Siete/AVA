@@ -1,5 +1,21 @@
 # Cómo acortar los cuadernillos 7 a 16
 
+> **Pautas fijadas por Bryan el 22-sep-2026, tras la reunión con el profesor
+> (mandan sobre lo que sigue):**
+>
+> - Quedan pocas semanas para 16 cuadernillos: **cortos en tiempo (~30 min)**,
+>   con **teoría y ejercicios** y nada más. `estimar_tiempo.py` es el juez.
+> - Los ejercicios siguen las **temáticas que dio el profesor para las 16
+>   semanas**; no se inventan temas.
+> - Los enunciados, **en lo posible ligados a la carrera «Ingeniería de IA»**
+>   (datos, modelos, clasificación, métricas…), sin cambiar lo que se mide.
+> - Solo **tres microcompetencias** se miden con trazas: mCP17 (I1), mCC87 (I3)
+>   y mCC103 (I4). Etiqueta I1 solo donde de verdad se aplican matemáticas.
+> - Cada cuadernillo lleva las **notas puntuales** que pone el constructor
+>   (qué hacer con `raise NotImplementedError`, etc.); no las repitas a mano.
+> - Por la semana del 22-sep se llega solo hasta el cuadernillo 6.
+
+
 **Esto es una indicación, no un trabajo hecho.** Las semanas 7 a 16 no se han
 tocado. Aquí queda escrito cómo abordarlas cuando toque, para no tener que
 volver a aprender lo que costó aprender en las semanas 3 a 6.

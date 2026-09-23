@@ -312,7 +312,12 @@ func (r *EstudiantesRepository) Ficha(curso, estudiante string) ([]EjercicioDeEs
 // persona. Es lo que el panel del curso ya mostraba agregado, pero por alumno.
 type CompetenciaDeEstudiante struct {
 	CompetenciaID string `db:"competencia_id" json:"competencia_id"`
-	Descripcion   string `db:"descripcion"    json:"descripcion"`
+	// El código oficial del microcurrículo (mCP17, mCC87, mCC103…), que es el
+	// que el docente reconoce. Por dentro todo sigue en I1…I7 —clave primaria,
+	// mapeo, corte, telemetría—; esto es solo cómo se enseña. Sale de
+	// competencias.codigo_anterior y, si estuviera vacío, cae al id.
+	Codigo      string `db:"codigo"         json:"codigo"`
+	Descripcion string `db:"descripcion"    json:"descripcion"`
 	// Cuántos ejercicios de esta competencia existen en total.
 	Disenados int `db:"disenados" json:"ejercicios_disenados"`
 	// De esos, en cuántos llegó a intentar algo de verdad. Es el denominador
@@ -401,11 +406,66 @@ type CompetenciaDeEstudiante struct {
 // para mirar la ACTIVIDAD de esa semana, no para graduar por semana.
 func (r *EstudiantesRepository) Competencias(curso, estudiante, cuadernillo string) ([]CompetenciaDeEstudiante, error) {
 	salida := []CompetenciaDeEstudiante{}
-	err := r.db.Select(&salida, `
+	err := r.db.Select(&salida, r.sqlCompetencias(false), curso, estudiante, cuadernillo)
+	return salida, err
+}
+
+// CompetenciaDeEstudianteCurso es una fila del resumen por estudiante y
+// competencia de TODO el curso: lo mismo que devuelve Competencias() para una
+// persona, con su student_id delante.
+type CompetenciaDeEstudianteCurso struct {
+	StudentID string `db:"student_id" json:"student_id"`
+	CompetenciaDeEstudiante
+}
+
+// CompetenciasDelCurso: el desglose por competencia de todo el grupo en UNA
+// consulta, agrupada por estudiante y competencia.
+//
+// Existe porque el listado del docente tenía que abrir «Ver detalle» de cada
+// alumno para saber su nivel, y lo que se quería era verlo de un vistazo en la
+// fila. Pedirlo por persona son 22 peticiones por carga de página; esto es una.
+//
+// Es la MISMA SQL que Competencias() (ver sqlCompetencias): el criterio de
+// «intento de plantilla», los recuentos y el filtro de alcance están escritos
+// una sola vez, así que la fila del listado y la ficha no pueden discrepar.
+//
+// Solo salen los estudiantes con algún intento real: quien no ha tocado nada
+// no tiene fila, y el panel lo pinta como «sin evidencia» igual que si la
+// tuviera en cero.
+func (r *EstudiantesRepository) CompetenciasDelCurso(curso string) ([]CompetenciaDeEstudianteCurso, error) {
+	salida := []CompetenciaDeEstudianteCurso{}
+	err := r.db.Select(&salida, r.sqlCompetencias(true), curso, "", "")
+	return salida, err
+}
+
+// sqlCompetencias es la consulta que alimenta Competencias() y
+// CompetenciasDelCurso(). Parámetros: $1 curso, $2 estudiante (vacío = todos),
+// $3 cuadernillo (vacío = todo el curso).
+//
+// Con porEstudiante la misma consulta se agrupa además por student_id: cada
+// persona con intentos reales se cruza con TODAS las competencias en alcance,
+// para que una competencia sin tocar salga en cero (y sin nivel) y no
+// desaparezca. Sin él, devuelve las competencias de una sola persona, que es
+// lo que necesitan la ficha y el corte.
+//
+// Va construida en una función y no en dos literales porque lo que importa
+// —qué cuenta como intento, qué se cuenta y qué competencias entran— tiene
+// que ser una sola definición. Dos copias acaban divergiendo, y entonces la
+// fila del listado dice N2 y la ficha del mismo alumno dice N3.
+func (r *EstudiantesRepository) sqlCompetencias(porEstudiante bool) string {
+	colEstudiante, desde, juntaEstudiante, agrupaEstudiante := "", "competencias c", "", ""
+	if porEstudiante {
+		colEstudiante = "g.student_id, "
+		desde = "(SELECT DISTINCT student_id FROM reales) g CROSS JOIN competencias c"
+		juntaEstudiante = "AND t.student_id = g.student_id"
+		agrupaEstudiante = "g.student_id, "
+	}
+	return `
 	    WITH reales AS (
-	        SELECT a.cuadernillo_id, a.exercise_id, a.validation_result
+	        SELECT a.student_id, a.cuadernillo_id, a.exercise_id, a.validation_result
 	          FROM exercise_attempts a
-	         WHERE a.course_id = $1 AND a.student_id = $2
+	         WHERE a.course_id = $1
+	           AND ($2 = '' OR a.student_id = $2)
 	           AND ($3 = '' OR a.cuadernillo_id = $3)
 	           -- Plantilla = no aprobó Y todos sus errores son el stub. Se
 	           -- conserva si aprobó, si trae algún error de verdad, o si no
@@ -417,7 +477,9 @@ func (r *EstudiantesRepository) Competencias(curso, estudiante, cuadernillo stri
 	                OR NOT EXISTS (SELECT 1 FROM attempt_errors e
 	                                WHERE e.attempt_id = a.id))
 	    )
-		SELECT c.id AS competencia_id, c.descripcion, `+r.columnaEnAlcance()+`,
+		SELECT ` + colEstudiante + `c.id AS competencia_id,
+		       COALESCE(c.codigo_anterior, c.id) AS codigo,
+		       c.descripcion, ` + r.columnaEnAlcance() + `,
 		       -- El FILTER no sobra: sin el, COUNT(DISTINCT (a,b)) cuenta la
 		       -- tupla (NULL, NULL) que deja el LEFT JOIN cuando la competencia
 		       -- no tiene ningun ejercicio, y devuelve 1 en vez de 0.
@@ -437,10 +499,11 @@ func (r *EstudiantesRepository) Competencias(curso, estudiante, cuadernillo stri
 		       COUNT(DISTINCT (t.cuadernillo_id, t.exercise_id)) FILTER (
 		           WHERE t.validation_result = 'sin_validar'
 		             AND NOT EXISTS (SELECT 1 FROM reales r
-		                              WHERE r.cuadernillo_id = t.cuadernillo_id
+		                              WHERE r.student_id     = t.student_id
+		                                AND r.cuadernillo_id = t.cuadernillo_id
 		                                AND r.exercise_id    = t.exercise_id
 		                                AND r.validation_result = 'passed'))  AS abandonos
-		  FROM competencias c
+		  FROM ` + desde + `
 		  -- El filtro de semana va también aquí, no solo sobre los intentos:
 		  -- si no, "diseñados" seguiría contando los ejercicios de las otras
 		  -- semanas y la tarjeta diría "3 sin tocar" en una semana de dos.
@@ -448,14 +511,14 @@ func (r *EstudiantesRepository) Competencias(curso, estudiante, cuadernillo stri
 		                    AND ($3 = '' OR ec.cuadernillo_id = $3)
 		  LEFT JOIN reales t ON t.cuadernillo_id = ec.cuadernillo_id
 		                    AND t.exercise_id    = ec.exercise_id
+		                    ` + juntaEstudiante + `
 		 -- Solo las que el AVA puede medir. El microcurriculo tiene siete, pero
 		 -- tres se evaluan por autorreporte y coevaluacion: ensenarlas en el
 		 -- panel con un hueco al lado no informa de nada, solo invita a
 		 -- preguntarse por que estan vacias. Ver filtroEnAlcance.
-		 WHERE `+r.filtroEnAlcance()+`
-		 GROUP BY c.id, c.descripcion
-		 ORDER BY c.id`, curso, estudiante, cuadernillo)
-	return salida, err
+		 WHERE ` + r.filtroEnAlcance() + `
+		 GROUP BY ` + agrupaEstudiante + `c.id, c.codigo_anterior, c.descripcion
+		 ORDER BY ` + agrupaEstudiante + `c.id`
 }
 
 // FilaCorte es una fila del corte que se congela: el nivel de una persona en

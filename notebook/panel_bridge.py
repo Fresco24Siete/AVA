@@ -121,26 +121,92 @@ def _tarea_de(codigo):
     return re.sub(r"_v\d+$", "", codigo)
 
 
+def _numero_version(archivo):
+    """'semana_02_v3.ipynb' -> 3; 'semana_02.ipynb' (la base) -> 1."""
+    m = re.search(r"_v(\d+)\.ipynb$", archivo)
+    return int(m.group(1)) if m else 1
+
+
+def agrupar_por_tarea(archivos, publicados_set=None, publicados=None):
+    """Una entrada por TAREA, apuntando a su versión más nueva.
+
+    Cuando el docente corrige un cuadernillo, la versión nueva llega al lado
+    como <id>_vN.ipynb sin tocar la anterior. Listar los archivos tal cual
+    ponía dos (o tres) tarjetas de la misma semana, y la marca «Esta semana»,
+    la nota y el progreso —que van por tarea— caían en la vieja o en ninguna.
+    Aquí se agrupa por tarea (`_tarea_de`) y se elige UN archivo:
+
+      - el que entregar_cuadernillo anotó como vigente (`archivo` en la nota
+        de publicados), si sigue en disco; es el que sabe qué versión
+        publicó el docente;
+      - si no hay nota, el de número más alto (_v3 > _v2 > base).
+
+    Las demás versiones no se listan: van en `anteriores`, para nombrarlas en
+    una línea discreta. Nunca se borran ni se mueven.
+
+    `publicados_set` restringe a las tareas liberadas; None lista todo lo que
+    hay en disco (sin nota local no se puede saber qué está publicado).
+    """
+    publicados = publicados or {}
+    por_tarea = {}
+    for f in archivos:
+        if not f.endswith(".ipynb") or f == "inicio.ipynb":
+            continue
+        tarea = _tarea_de(f[:-6])
+        if publicados_set is not None and tarea not in publicados_set:
+            continue
+        por_tarea.setdefault(tarea, []).append(f)
+
+    lista = []
+    for tarea in sorted(por_tarea):
+        versiones = sorted(por_tarea[tarea], key=_numero_version)
+        anotado = str((publicados.get(tarea) or {}).get("archivo") or "")
+        vigente = anotado if anotado in versiones else versiones[-1]
+        lista.append({"id": tarea, "archivo": vigente,
+                      "anteriores": [v for v in versiones if v != vigente]})
+    return lista
+
+
 def _cuadernillos_en_disco():
-    """Los .ipynb que el alumno tiene disponibles en su espacio de trabajo."""
+    """Las tareas que el alumno tiene disponibles: una por tarea publicada,
+    apuntando a la versión más nueva (ver agrupar_por_tarea)."""
     try:
-        archivos = sorted(f for f in os.listdir(CARPETA)
-                          if f.endswith(".ipynb") and f != "inicio.ipynb")
+        archivos = sorted(os.listdir(CARPETA))
     except OSError:
         return []
 
     pub = _publicados()
+    cuadernillos = pub.get("cuadernillos") or {}
     # Si se pudo consultar el servicio de intercambio (o ya hay registro de
     # cuadernillos publicados), solo se muestran los cuadernillos que sigan
     # publicados en el curso. Lo que el docente retiró o eliminó ya no se lista.
-    if pub.get("consultado"):
-        publicados_set = set((pub.get("cuadernillos") or {}).keys())
-        archivos = [f for f in archivos if _tarea_de(f[:-6]) in publicados_set]
-    elif pub.get("cuadernillos"):
-        publicados_set = set(pub["cuadernillos"].keys())
-        archivos = [f for f in archivos if _tarea_de(f[:-6]) in publicados_set]
+    if pub.get("consultado") or cuadernillos:
+        return agrupar_por_tarea(archivos, set(cuadernillos.keys()), cuadernillos)
+    return agrupar_por_tarea(archivos)
 
-    return [{"archivo": f, "id": f[:-6]} for f in archivos]
+
+def _archivo_a_entregar(codigo):
+    """Qué archivo se manda cuando el alumno pulsa «Guardar y entregar».
+
+    custom.js manda el nombre del cuadernillo ABIERTO sin .ipynb
+    ('semana_03_v3', o 'semana_03' si está en la base): se entrega ese mismo
+    archivo, que es el que acaba de guardar. Como el panel y el índice solo
+    abren la versión más nueva, ese es el camino normal; entregar desde una
+    versión anterior solo pasa si el alumno la abrió a propósito desde la
+    línea de «tienes guardada una versión anterior», y entonces lo que manda
+    es SU trabajo, no una copia vacía. Un nombre que no está en disco cae en
+    la versión más nueva de su tarea.
+    Devuelve (tarea, archivo) o (tarea, None) si no es un cuadernillo suyo.
+    """
+    tarea = _tarea_de(codigo)
+    for c in _cuadernillos_en_disco():
+        if c["id"] != tarea:
+            continue
+        pedido = f"{codigo}.ipynb"
+        if pedido in c["anteriores"]:
+            return tarea, pedido
+        return tarea, c["archivo"]
+    return tarea, None
 
 
 def _barra(hechos, total):
@@ -236,6 +302,10 @@ def _entregas():
             datos = json.load(f)
     except Exception:
         datos = {}
+    # Las anotaciones de antes del 2026-09-23 iban por nombre de archivo
+    # ('semana_03_v2'); ahora van por tarea. Se normalizan al leer para que
+    # quien entregó desde una _vN no pierda su «Entregado» local.
+    datos = {_tarea_de(str(k)): v for k, v in (datos or {}).items()}
     for codigo, ts in (_publicados().get("entregas") or {}).items():
         cuando = _hora_legible(ts)
         if cuando:
@@ -403,12 +473,27 @@ def _tarjeta(nb, d, activo, entregado, base_url, correccion=False):
     pendiente = (f'<div class="aviso-fila">Dejaste {abandonos} {plural} a '
                  f'medias</div>' if abandonos else "")
 
+    # Hubo correcciones: la tarjeta abre la versión más nueva y esta línea,
+    # discreta, dice que las de antes siguen ahí (nunca se borran ni se
+    # mueven), para que nadie crea que perdió su trabajo.
+    anteriores = nb.get("anteriores") or []
+    if anteriores:
+        enlaces = ", ".join(
+            f'<a href="{html.escape(_enlace(a, base_url))}">{html.escape(a)}</a>'
+            for a in anteriores)
+        texto = ("tienes guardada una versión anterior: " if len(anteriores) == 1
+                 else "tienes guardadas versiones anteriores: ")
+        previas = f'<div class="anteriores">{texto}{enlaces}</div>'
+    else:
+        previas = ""
+
     return (f'<div class="tarjeta">'
             f'<div class="cabeza"><div><span class="nombre">{titulo}</span>{marca}'
             f'{pendiente}</div>'
             f'<a class="abrir" href="{html.escape(_enlace(nb["archivo"], base_url))}">'
             f'Abrir cuadernillo</a></div>'
-            f'<div class="datos">{progreso}{nota}{entrega}{valoracion}</div></div>')
+            f'<div class="datos">{progreso}{nota}{entrega}{valoracion}</div>'
+            f'{previas}</div>')
 
 
 def _html(datos, aviso, base_url="/"):
@@ -501,6 +586,8 @@ def _html(datos, aviso, base_url="/"):
  .relleno{{height:100%;background:{AZUL};border-radius:4px}}
  .pie{{font-size:12.5px;color:{GRIS};margin-top:4px}}
  .aviso-fila{{font-size:13px;color:{AMBAR};margin-top:3px}}
+ .anteriores{{font-size:12.5px;color:#8b94a1;margin-top:10px}}
+ .anteriores a{{font-weight:500;color:#8b94a1;text-decoration:underline}}
  .comps{{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}}
  .sub2{{color:{GRIS};font-size:14.5px;margin:-6px 0 14px}}
  .comp{{background:#fff;border:1px solid {BORDE};border-radius:6px;padding:13px 15px}}
@@ -691,11 +778,14 @@ class EntregarHandler(_BaseHandler):
             codigo = ""
         codigo = codigo.strip()
 
-        disponibles = {c["id"]: c["archivo"] for c in _cuadernillos_en_disco()}
+        # Se entrega el archivo en el que el alumno pulsó el botón (custom.js
+        # manda su nombre); con varias versiones en disco, eso es lo que acaba
+        # de guardar. La tarea de nbgrader es el código base, sin _vN.
+        tarea, archivo = _archivo_a_entregar(codigo)
         self.set_header("Content-Type", "application/json; charset=utf-8")
-        if codigo not in disponibles:
+        if not archivo:
             pub = _publicados()
-            if pub.get("consultado") and _tarea_de(codigo) not in (pub.get("cuadernillos") or {}):
+            if pub.get("consultado") and tarea not in (pub.get("cuadernillos") or {}):
                 msg = ("Este cuadernillo ya no está activo en el curso (fue "
                        "retirado por tu profesor).")
             else:
@@ -703,16 +793,18 @@ class EntregarHandler(_BaseHandler):
             self.finish(json.dumps({"ok": False, "mensaje": msg}))
             return
 
-        ok, error = _entregar(codigo, disponibles[codigo])
+        ok, error = _entregar(codigo, archivo)
         if not ok:
             self.finish(json.dumps({"ok": False, "mensaje": error}))
             return
 
+        # La constancia va por tarea: es como la devuelve el servicio y como
+        # la busca la tarjeta (una por tarea).
         cuando = datetime.now().strftime("%d/%m a las %H:%M")
-        _anotar_entrega(codigo, cuando)
+        _anotar_entrega(tarea, cuando)
         self.finish(json.dumps({"ok": True, "mensaje":
                                 f"ok:Entregado. Tu profesor ya tiene "
-                                f"{_titulo(codigo)}. Puedes seguir trabajando y "
+                                f"{_titulo(tarea)}. Puedes seguir trabajando y "
                                 f"volver a entregar si lo cambias."}))
 
 
@@ -725,7 +817,9 @@ class CorreccionHandler(_BaseHandler):
     """
     @web.authenticated
     def get(self, tarea):
-        tarea = urllib.parse.unquote(tarea or "").strip()
+        # Puede llegar el nombre de una versión (semana_03_v3): la corrección
+        # es de la tarea.
+        tarea = _tarea_de(urllib.parse.unquote(tarea or "").strip())
         if tarea not in {c["id"] for c in _cuadernillos_en_disco()}:
             self.set_status(404)
             self.set_header("Content-Type", "text/html; charset=utf-8")
@@ -816,7 +910,9 @@ class ValorarHandler(_BaseHandler):
 
     @web.authenticated
     def get(self, codigo):
-        codigo = urllib.parse.unquote(codigo or "").strip()
+        # custom.js enlaza aquí con el nombre del cuadernillo abierto
+        # (semana_03_v3); la valoración es de la tarea, como la tarjeta.
+        codigo = _tarea_de(urllib.parse.unquote(codigo or "").strip())
         if codigo not in {c["id"] for c in _cuadernillos_en_disco()}:
             self.set_status(404)
             self.set_header("Content-Type", "text/html; charset=utf-8")
@@ -830,7 +926,7 @@ class ValorarHandler(_BaseHandler):
 
     @web.authenticated
     def post(self, codigo):
-        codigo = urllib.parse.unquote(codigo or "").strip()
+        codigo = _tarea_de(urllib.parse.unquote(codigo or "").strip())
         base = self.settings.get("base_url", "/").rstrip("/")
         if codigo not in {c["id"] for c in _cuadernillos_en_disco()}:
             self.set_status(404)

@@ -14,7 +14,9 @@ contenedor del ALUMNO, al arrancar y cada vez que abre su panel, y:
      tenía y el docente corrigió el contenido, la versión nueva va al lado
      (<id>_v2.ipynb): su trabajo está dentro del anterior y no se toca.
   5. Escribe el índice (inicio.ipynb) y una nota local de qué hay publicado
-     (.ava_publicados.json), que el panel lee sin volver a preguntar.
+     (.ava_publicados.json), que el panel lee sin volver a preguntar. En los
+     dos aparece UNA entrada por tarea: la versión más nueva; las anteriores
+     se nombran en una línea aparte (archivo, anteriores en la nota).
   6. Imprime en stdout el código del cuadernillo activo, que el entrypoint
      exporta como CUADERNILLO_CODIGO para que la telemetría lo etiquete.
 
@@ -142,13 +144,15 @@ def _escribir_indice(entregados, activo):
     else:
         lineas += ["| | Cuadernillo | Abrir |", "|---|---|---|"]
         for c in entregados:
+            # Una fila por tarea, enlazando SOLO la version mas nueva. Si hubo
+            # correcciones, las versiones que el alumno ya tenia siguen en su
+            # carpeta (nunca se borran ni se mueven) y se nombran en una linea
+            # discreta debajo, para que nadie crea que perdio su trabajo.
             marca = "**Esta semana**" if c["id"] == activo else ""
             enlace = f"[abrir]({c['archivo']})"
-            if c.get("anterior"):
-                # Hubo una correccion. Se enlaza la version nueva y, aparte, la
-                # que el alumno ya tenia: su trabajo esta ahi y no se toca.
-                enlace += (f"<br/>corregido &middot; "
-                           f"[tu version anterior]({c['anterior']})")
+            anteriores = c.get("anteriores") or ([c["anterior"]] if c.get("anterior") else [])
+            if anteriores:
+                enlace += "<br/><small>" + _nota_anteriores(anteriores) + "</small>"
             lineas.append(f"| {marca} | {_titulo_bonito(c['id'])} | {enlace} |")
         lineas += [
             "",
@@ -165,6 +169,16 @@ def _escribir_indice(entregados, activo):
         pass
 
 
+def _nota_anteriores(anteriores):
+    """La linea que acompana a una tarea con correcciones: nombra las versiones
+    viejas que el alumno conserva. Texto plano con enlaces; la comparten el
+    indice y el panel para que digan lo mismo."""
+    enlaces = ", ".join(f"[{a}]({a})" for a in anteriores)
+    if len(anteriores) == 1:
+        return f"tienes guardada una versión anterior: {enlaces}"
+    return f"tienes guardadas versiones anteriores: {enlaces}"
+
+
 def _sha(ruta):
     with open(ruta, "rb") as f:
         return hashlib.sha256(f.read()).hexdigest()[:12]
@@ -173,6 +187,57 @@ def _sha(ruta):
 def _tarea_de(codigo):
     """'semana_02_v3' -> 'semana_02'."""
     return re.sub(r"_v\d+$", "", codigo)
+
+
+def _numero_version(archivo):
+    """'semana_02_v3.ipynb' -> 3; 'semana_02.ipynb' (la base) -> 1."""
+    m = re.search(r"_v(\d+)\.ipynb$", archivo)
+    return int(m.group(1)) if m else 1
+
+
+def versiones_en_disco(tarea, archivos):
+    """Los archivos de `archivos` que son versiones de `tarea`, de la mas vieja
+    a la mas nueva POR NOMBRE: 'semana_02.ipynb', '_v2', '_v3'...
+
+    Una liberacion nueva nunca pisa la anterior: va al lado como <id>_vN.ipynb
+    (ver main). Asi que, salvo un registro perdido, la de numero mas alto es
+    la ultima que le llego al alumno.
+    """
+    propios = [a for a in archivos
+               if a.endswith(".ipynb") and _tarea_de(a[:-6]) == tarea]
+    return sorted(propios, key=_numero_version)
+
+
+def _archivo_vigente(codigo, version, registro):
+    """En que archivo vive (o va a vivir) la version publicada de `codigo`.
+
+    Reglas, en orden:
+      1. Si alguno de los archivos que el alumno ya tiene esta registrado con
+         esta misma version, es ese (la mas nueva si hubiera varios).
+      2. Si ninguno de sus archivos tiene registro (registro perdido, o de
+         otro volumen), se asume que el mas nuevo por nombre es el vigente:
+         es el lado seguro, porque lo contrario seria entregarle copias
+         repetidas en cada arranque.
+      3. Si no, la version publicada es una correccion que aun no tiene: va a
+         un archivo nuevo al lado, <codigo>_v{N+1}.ipynb. NUNCA se pisa lo
+         que ya tiene, porque su trabajo esta dentro.
+    Sin archivos en disco, es la base <codigo>.ipynb.
+    """
+    try:
+        en_disco = versiones_en_disco(codigo, os.listdir(CARPETA))
+    except OSError:
+        en_disco = []
+    if not en_disco:
+        return f"{codigo}.ipynb"
+    if not version:
+        return en_disco[-1]
+    for archivo in reversed(en_disco):
+        if registro.get(archivo) == version:
+            return archivo
+    # Un registro vacio ("") no es una version distinta: es que no se sabe.
+    if not any(registro.get(a) for a in en_disco):
+        return en_disco[-1]
+    return f"{codigo}_v{_numero_version(en_disco[-1]) + 1}.ipynb"
 
 
 def _limpiar_retirados(liberadas, registro, previos):
@@ -337,25 +402,14 @@ def main():
             if not _disponible(info, ahora):
                 continue
 
-            archivo = f"{codigo}.ipynb"
-            destino = os.path.join(CARPETA, archivo)
             version = info.get("version", "")
-            anterior = None
-
-            if os.path.exists(destino):
-                if version and registro.get(archivo, version) != version:
-                    # El docente corrigio el cuadernillo despues de que este
-                    # alumno ya lo tenia. NO se sobrescribe: su trabajo esta
-                    # dentro. La version nueva se entrega al lado y el indice
-                    # enlaza las dos.
-                    anterior = archivo
-                    n = 2
-                    while os.path.exists(os.path.join(CARPETA, f"{codigo}_v{n}.ipynb")):
-                        if registro.get(f"{codigo}_v{n}.ipynb") == version:
-                            break          # esa correccion ya se le habia entregado
-                        n += 1
-                    archivo = f"{codigo}_v{n}.ipynb"
-                    destino = os.path.join(CARPETA, archivo)
+            # Si el docente corrigio el cuadernillo despues de que este alumno
+            # ya lo tenia, NO se sobrescribe: su trabajo esta dentro. La
+            # version nueva va al lado (<codigo>_vN.ipynb) y es la UNICA que
+            # se enlaza; las que ya tenia se nombran aparte (ver
+            # _escribir_indice) y se quedan donde estan.
+            archivo = _archivo_vigente(codigo, version, registro)
+            destino = os.path.join(CARPETA, archivo)
 
             if not os.path.exists(destino):
                 origen = _origen(codigo, info, descargas)
@@ -367,7 +421,16 @@ def main():
                     continue
                 registro[archivo] = version
 
-            entregados.append({"id": codigo, "archivo": archivo, "anterior": anterior})
+            try:
+                anteriores = [a for a in versiones_en_disco(codigo, os.listdir(CARPETA))
+                              if a != archivo]
+            except OSError:
+                anteriores = []
+            # El panel lee de aqui que archivo abrir y cuales son los viejos,
+            # sin repetir esta logica.
+            info["archivo"] = archivo
+            info["anteriores"] = anteriores
+            entregados.append({"id": codigo, "archivo": archivo, "anteriores": anteriores})
     finally:
         for tmp in descargas.values():
             shutil.rmtree(tmp, ignore_errors=True)

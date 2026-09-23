@@ -264,11 +264,6 @@ else:
     # =========================================================================
     c.seccion(5, "Tres ejercicios", 23, """Aquí se juega tu nota: **35 puntos** en tres ejercicios, de menos a más.
 
-Cada celda de solución trae la línea `raise NotImplementedError(...)`: le dice
-a la plataforma que el ejercicio **aún no se ha hecho**, para que una plantilla
-en blanco nunca cuente como un intento. Escribe tu solución y **bórrala**; si
-la dejas, tu código no llega a evaluarse.
-
 Si te atascas, `pista("E1")`, `pista("E2")` o `pista("E5")` te dan hasta tres
 ayudas escalonadas — pedirlas no resta puntos.""")
 
@@ -293,7 +288,7 @@ escribe tu respuesta y deja que la prueba te corrija.
 | `c` | `nota >= 3.0 and faltas <= 3` |
 | `d` | `becado or nota >= 4.5` |
 | `e` | `not becado` |""",
-        partida='''# Escribe tu respuesta en cada llave y recuerda borrar la línea raise NotImplementedError
+        partida='''# Escribe tu respuesta en cada llave.
 RESPUESTAS = {
     "a": ...,
     "b": ...,
@@ -363,7 +358,7 @@ FinAlgoritmo
 ```
 
 Con 5 horas debe salir 6000. Con 10 horas, 8000.""",
-        partida='''# Escribe tu pseudocódigo completo y recuerda borrar la línea raise NotImplementedError
+        partida='''# Escribe tu pseudocódigo completo entre las triples comillas.
 ALGORITMO_E2 = """
 """''',
         solucion='''ALGORITMO_E2 = """
@@ -422,7 +417,7 @@ texto** explicando la situación: no basta con decir sí o no, hay que decir
 **El orden manda.** Si le falta el prerrequisito, eso es lo primero que hay que
 decirle, aunque además deba plata. Y si aprobó pero no hay cupo, el estado
 financiero da igual.""",
-        partida='''# Escribe tu función y recuerda borrar la línea raise NotImplementedError
+        partida='''# Escribe tu función.
 def matricula(aprobo, cupo, paz_y_salvo):
     ...''',
         solucion='''def matricula(aprobo, cupo, paz_y_salvo):
