@@ -4,11 +4,20 @@
 Curso 41333 Algoritmos y Programación · Ingeniería en IA · UIS 2026-2
 Unidad 2 — Fundamentos para la solución de problemas.
 
-80 puntos de nbgrader en ocho ejercicios, 80 XP lúdicos y la insignia
+80 puntos de nbgrader en ocho ejercicios, 32 XP lúdicos y la insignia
 «Traductora / Traductor de algoritmos». Cubre lo que en la planeación vieja eran
 tres cuadernos (planteamiento, pseudocódigo y diagramas), así que va partido en
 dos partes con un corte explícito: la Parte A se hace después de la Clase 1 y la
 Parte B después de la Clase 2.
+
+Recorte del 2026-09-22, por indicación del profesor: menos lectura y menos
+demostraciones, más hacer. Los ocho ejercicios están CONGELADOS —19 alumnos ya
+entregaron— y no se tocó ninguna llamada `c.ejercicio(...)`. Lo que se fue:
+tres de los cuatro quices de calentamiento, la gráfica de la madrugada, las
+figuras que repetían lo que ya dibuja `ps.diagrama`, los ensayos previos a E1,
+E2 y E3, el segundo trazador, los dos comparadores, el segundo error sembrado,
+el Reto B y la tabla de cobertura. Por eso la meta de XP bajó de 80 a 32: es lo
+que suman los dos quices y el ensayo que quedan.
 
 Tres decisiones que se salen del documento de diseño y por qué:
 
@@ -19,12 +28,11 @@ Tres decisiones que se salen del documento de diseño y por qué:
   Como el módulo se ejecuta en el espacio de nombres del notebook y no se
   importa, `contenido.py` reconstruye la fachada `ps` con la que el estudiante
   lo llama.
-- La gráfica del gancho era matplotlib; aquí es un SVG escrito en Python puro
-  (`grafica_madrugada`), por la misma razón que en la semana 1: matplotlib son
-  ~80 MB de RAM por kernel y la VM del curso tiene 2 GB para todos.
 - Los widgets del diseño se llamaban `ava.parsons` y `ava.analisis_eps`. En el
   motor de este repositorio son `ava.ordenar` y un ensayo propio de la semana
   (`ensayo_eps`), que es donde vive el formulario E-P-S.
+- Sin matplotlib, por la misma razón que en la semana 1: son ~80 MB de RAM por
+  kernel y la VM del curso tiene 2 GB para todos.
 """
 import os
 import sys
@@ -43,7 +51,7 @@ def construir(motor_comprimido=True):
         codigo="semana_02",
         titulo="Del problema al algoritmo",
         semana=2,
-        meta_xp=80,
+        meta_xp=32,
         insignia="Traductora / Traductor de algoritmos",
         tutor_ia=True,
         motor_comprimido=motor_comprimido,
@@ -59,103 +67,61 @@ def construir(motor_comprimido=True):
     c.md("""# Del problema al algoritmo
 ### Semana 2 · Unidad 2 · Fundamentos para la solución de problemas
 
-Esta semana aprendes a decir lo mismo en tres idiomas: **pseudocódigo** (para
-pensar), **diagrama de flujo** (para ver) y **Python** (para ejecutar).
+Esta semana dices lo mismo en tres idiomas: **pseudocódigo** (para pensar),
+**diagrama de flujo** (para ver) y **Python** (para ejecutar). Y el pseudocódigo
+de este cuadernillo **se ejecuta de verdad**.
 
-Y hay algo que quizá no te esperas: el pseudocódigo de este cuadernillo **se
-ejecuta de verdad**. Lo escribes en español, oprimes un botón y corre.
-
-**Empieza ejecutando la celda de abajo**: haz clic sobre ella y presiona
-`Shift+Enter`. Después avanza celda por celda, sin saltarte ninguna.
+**Empieza ejecutando la celda de abajo** (`Shift+Enter`) y avanza celda por
+celda, sin saltarte ninguna.
 """)
 
     c.arranque()
     c.code("portada()")
 
-    c.md("""## Al terminar este cuadernillo vas a poder…
+    c.md("""## Al terminar vas a poder…
 
-1. Leer un problema en español y decir en voz alta **qué datos entran, qué se
-   hace con ellos y qué sale** — sin escribir una sola línea de código.
-2. Distinguir una **variable** de una **constante** y de una **restricción**, y
-   ponerle a cada una un nombre que se entienda.
-3. Escribir un algoritmo en **pseudocódigo en español** y **ejecutarlo aquí
-   mismo** para ver si hace lo que creías.
-4. Dibujar el **diagrama de flujo** de ese algoritmo usando los cinco símbolos
-   correctos, y reconocer cuándo un diagrama está mal armado.
-5. Hacer una **prueba de escritorio**: seguir tu propio algoritmo con lápiz y
-   papel, instrucción por instrucción, anotando cuánto vale cada variable.
-6. Traducir el mismo algoritmo a **Python**, sabiendo que `input()` siempre te
-   entrega **texto** y que tú decides con `int()` o `float()` en qué se
-   convierte.
-7. Explicar por qué `x = x + 2` no es una ecuación mentirosa. 🙂
+1. Leer un problema y decir **qué entra, qué se hace y qué sale**.
+2. Escribir un algoritmo en **pseudocódigo en español**, ejecutarlo y ver su
+   **diagrama de flujo**.
+3. Hacer una **prueba de escritorio** con lápiz y papel.
+4. Traducirlo a **Python**, sabiendo que `input()` siempre entrega **texto**.
 
-### Este cuadernillo se hace en dos sentadas
-
-Son unas dos horas y cubre las dos clases de la semana. No intentes hacerlo de una:
+### Se hace en dos partes
 
 | | Cuándo | Qué trae |
 |---|---|---|
-| **Parte A** | después de la **Clase 1** | secciones 1, 2 y 3 — plantear, analizar, variables y E-P-S |
-| **Parte B** | después de la **Clase 2** | secciones 4 a 8 — pseudocódigo, diagramas, memoria, tipos, `input()` y los ocho ejercicios |
+| **Parte A** | después de la **Clase 1** | secciones 1 a 3: plantear, analizar, E-P-S |
+| **Parte B** | después de la **Clase 2** | secciones 4 a 8: pseudocódigo, diagramas, tipos, `input()` y los ocho ejercicios |
 
-Hay una tarjeta que marca el corte cuando llegues.
+Es hora y media en total, casi toda en los ejercicios. Una tarjeta marca el
+corte.
 
-> **Dos marcadores distintos, no los confundas.** Los **XP** son del juego: los
-> ganas con los quices y los ensayos. Los **puntos** son tu nota: salen solo de
-> los ocho ejercicios y viajan solos a Moodle.
->
-> Este cuadernillo tiene **80 puntos** y **80 XP**. La insignia se llama
-> «Traductora / Traductor de algoritmos».
+> Los **XP** son del juego (los dos quices y el ensayo). Los **puntos** son tu nota:
+> salen solo de los ocho ejercicios. Este cuadernillo tiene **80 puntos** y
+> **32 XP**; la insignia es «Traductora / Traductor de algoritmos».
 """)
 
     # =========================================================================
     # Bloque 1 — Sección 1: calentamiento (Parte A)
     # =========================================================================
-    c.seccion(1, "Calentamiento", 7, """Cuatro preguntas rápidas de la semana pasada. No tienen nota: dan XP y te
-dicen si estás listo para lo de hoy.
+    c.seccion(1, "Calentamiento", 1, """Una pregunta de la semana pasada. No tiene nota: da XP y, si se te atasca,
+vuelve al cuadernillo de la Semana 1 antes de seguir.""")
 
-Si algo aquí se te atasca, **esa es la señal**: vuelve al cuadernillo de la
-Semana 1 antes de seguir. Lo de hoy se apoya en eso.""")
-
-    c.code("quiz_herramientas()")
     c.code("quiz_tipos()")
-
-    c.code('''# Esta línea está rota, igual que la de la semana pasada.
-# Quítale el # del principio, arréglala y ejecútala.
-# print("Buenos días, Bucaramanga)''')
-
-    c.code("orden_errores()")
-
-    c.md("""El tercero es el peligroso. Un error de sintaxis lo ve Python; un error de
-lógica solo lo ves **tú**, y solo si haces una prueba de escritorio. Ese es,
-casualmente, uno de los temas de hoy.
-""")
 
     # =========================================================================
     # Bloque 2 — Sección 2: el gancho
     # =========================================================================
-    c.seccion(2, "¿A qué hora tengo que salir de la casa?", 6, """Vives en **Girón**. Tu primera clase en la UIS es a las **6:00 a. m.** y el
-profesor cierra la puerta en punto.
+    c.seccion(2, "¿A qué hora tengo que salir de la casa?", 1,"""Vives en **Girón** y tu clase en la UIS es a las **6:00 a. m.** Caminas
+**8 minutos** a la parada, el bus tarda **45**, de la portería al salón son
+**10** y quieres un **colchón de 15**. ¿A qué hora sales?
 
-- De tu casa a la parada: **8 minutos** caminando.
-- De la parada a la UIS en bus: **45 minutos** (si el tráfico se porta bien).
-- De la portería al salón: **10 minutos**.
-- Y quieres un **colchón de 15 minutos**, porque el bus no siempre se porta
-  bien.
+**Las 4:42.** Lo hiciste de cabeza. Ahora hazlo para los 30.000 estudiantes de
+la UIS, cada uno con su ruta y su hora: ahí hace falta **un algoritmo**, una
+receta escrita una sola vez que sirva para todos.
 
-¿A qué hora suena el despertador?""")
-
-    c.code("grafica_madrugada()")
-
-    c.md("""**Las 4:42.** Ese cálculo lo hiciste de cabeza en veinte segundos.
-
-Ahora hazlo para los **30.000 estudiantes de la UIS**: cada uno vive en un
-barrio distinto, toma rutas distintas y tiene clase a horas distintas. Ahí ya no
-alcanza la cabeza ni la calculadora. Ahí se necesita **un algoritmo**: una
-receta que sirva para todos, escrita una sola vez.
-
-Ejecuta la celda de abajo. No es Python.
-""")
+Ejecuta la celda de abajo. No es Python: es **pseudocódigo**, español con
+reglas. Y sin embargo corre, y el computador dibuja su diagrama solo.""")
 
     c.code('''CODIGO_GANCHO = """Algoritmo AQueHoraSalgo
     Definir hora_clase_min, minutos_bus, minutos_caminata Como Entero
@@ -180,113 +146,53 @@ ps.ejecutar_pseudo(CODIGO_GANCHO, entradas=["360", "45", "8"]).imprimir()
 display(HTML(ps.diagrama(CODIGO_GANCHO)))   # el diagrama se dibuja SOLO''',
            etiquetas=("ava-figura",))
 
-    c.md("""Lo que acabas de ver **no es Python**. Es **pseudocódigo**: español con reglas.
-Y sin embargo se ejecutó, y sin embargo el computador dibujó su diagrama de
-flujo sin que nadie lo dibujara.
-
-Eso es lo que vas a saber hacer al final de esta sesión: **escribir un algoritmo
-en español, verlo correr, verlo dibujado y traducirlo a Python** — que es
-exactamente lo que se hace en la vida real antes de programar cualquier cosa
-seria.
-""")
-
     # =========================================================================
     # Bloque 3 — Sección 3: concepto en corto (Parte A)
     # =========================================================================
-    c.seccion(3, "Concepto en corto", 22, """Antes de escribir nada hay que pensar. Esta sección es la parte del oficio que
-se hace **sin computador**, y es la que el 90 % de los novatos se salta.""")
+    c.seccion(3, "Concepto en corto", 3, """Antes de escribir código hay que pensar. Cuatro pasos, siempre los mismos:
 
-    c.figura("s02_d1_cadv",
-             "Cuatro pasos, siempre los mismos. Y si en «verificar» algo no "
-             "cuadra, se devuelve uno a «comprender».")
-
-    c.md("""### Cuatro pasos, siempre los mismos
-
-**1. Comprender.** Vuelve a contar el problema **con tus propias palabras**, sin
-mirar el enunciado. Si no puedes, todavía no lo entendiste — y programar sin
-entender es la forma más cara de perder una tarde.
-
-**2. Analizar.** Tres preguntas: ¿qué datos **entran**? ¿qué debe **salir**?
-¿qué **restricciones** hay (qué valores no tienen sentido)?
-
-**3. Diseñar.** Escribe el **pseudocódigo** y dibuja el **diagrama**. Todavía no
-programes. Esta etapa se salta el 90 % de los novatos, y es la razón por la que
-se demoran el triple.
-
-**4. Verificar.** Antes de ejecutar nada, haz la **prueba de escritorio**:
-recorre tu propio algoritmo con lápiz y papel, con un caso cuyo resultado ya
-conozcas. Si no da, arregla el diseño; no el código, que todavía no existe.
-
-Y si en «verificar» algo no cuadra, se devuelve uno a «comprender». Por eso la
-flecha punteada del dibujo.
-""")
-
-    c.md("""### Un problema bien planteado
-
-Compara estos dos enunciados:
-
-| Mal planteado | Bien planteado |
-|---|---|
-| «Calcular lo del parqueadero» | «Dado el número de **horas** que un carro estuvo en el parqueadero de la UIS y la **tarifa por hora**, calcular cuánto debe pagar, sabiendo que hay un **recargo fijo** de $1.000 por el uso de la barrera.» |
-
-El segundo dice **qué entra**, **qué sale** y **qué reglas hay**. El primero no
-dice nada: ¿lo del parqueadero de quién? ¿cobrado cómo? ¿desde cuándo?
-
-**Tu primer trabajo como programador no es escribir código: es convertir el
-primer enunciado en el segundo.** A eso se le llama plantear el problema.
-""")
+1. **Comprender**: cuenta el problema con tus palabras, sin mirar el enunciado.
+2. **Analizar**: ¿qué datos **entran**? ¿qué **sale**? ¿qué **restricciones** hay?
+3. **Diseñar**: escribe el pseudocódigo y mira el diagrama. Todavía no programes.
+4. **Verificar**: prueba de escritorio con un caso cuyo resultado ya conozcas.
+   Si no da, vuelve a comprender.""")
 
     c.md("""### La ficha de análisis
 
-Antes de diseñar nada, llena estas cinco casillas. Es literalmente el formato
-que vas a usar en el ejercicio E3 y en el taller presencial.
+Es el formato del ejercicio E3 y del taller presencial. Ejemplo: *en el
+parqueadero de la UIS se cobra una tarifa por hora más un recargo fijo por la
+barrera; dadas las horas, calcular cuánto se paga.*
 
 | Casilla | Pregunta | Ejemplo (parqueadero) |
 |---|---|---|
-| **Objetivo** | ¿Qué debe lograr el algoritmo, en una frase? | Calcular el valor a pagar por el parqueadero. |
-| **Entradas** | ¿Qué datos necesito que alguien me dé? | `horas`, `tarifa_hora`, `recargo_fijo` |
+| **Objetivo** | ¿Qué debe lograr, en una frase? | Calcular el valor a pagar. |
+| **Entradas** | ¿Qué datos me tienen que dar? | `horas`, `tarifa_hora`, `recargo_fijo` |
 | **Salidas** | ¿Qué entrego? | `total` |
-| **Restricciones** | ¿Qué valores no tienen sentido? | `horas` ≥ 0; `tarifa_hora` > 0; `horas` es un entero |
-| **Casos de prueba** | ¿Con qué datos voy a comprobar que funciona? | 3 h a $2.500 + $1.000 → **8.500**; 0 h → **1.000** |
+| **Restricciones** | ¿Qué valores no tienen sentido? | `horas` ≥ 0; `tarifa_hora` > 0 |
+| **Casos de prueba** | ¿Con qué datos compruebo? | 3 h a $2.500 + $1.000 → **8.500**; 0 h → **1.000** |
 
-Fíjate en la última fila. **Los casos de prueba se escriben ANTES de
-programar**, cuando todavía puedes pensar con calma en qué debería dar. Si los
-inventas después, vas a «comprobar» que tu programa hace justo lo que hace.
+Los casos de prueba se escriben **antes** de programar. Y tres cosas que no se
+confunden: una **variable** cambia de una ejecución a otra (`horas`); una
+**constante** no cambia mientras el algoritmo corre y va en MAYÚSCULAS
+(`TARIFA_HORA <- 2500`); una **restricción** se escribe en la ficha, todavía no
+en el código (validar es de la Semana 3).
+
+Los nombres de variable van en minúsculas, con guion bajo, sin tildes y que se
+entiendan: `costo_pasaje`, no `x` ni `dato1`.
+
+Ahora te toca a ti: clasifica los datos del problema de esta mañana.
 """)
 
-    c.md("""### Variables, constantes y restricciones
+    # El recorte quitó figura_eps() y el bloque largo que explicaba la sigla, pero
+    # el ensayo de abajo y el ejercicio 3 (congelado: 19 entregas) la exigen. Esta
+    # es la versión mínima: la sigla, su significado y el problema de esta mañana
+    # ya descompuesto, para que el alumno vea una vez cómo se llena antes de llenarlo.
+    c.md("""### E-P-S: Entrada · Proceso · Salida
 
-| Concepto | Qué es | En el problema del parqueadero | Cómo se escribe |
-|---|---|---|---|
-| **Variable** | Un dato que **cambia** de una ejecución a otra | `horas` (cada carro se queda un rato distinto) | `Definir horas Como Entero` |
-| **Constante** | Un dato que **no cambia** mientras el algoritmo corre | `TARIFA_HORA <- 2500` | `Constante TARIFA_HORA <- 2500` — en MAYÚSCULAS |
-| **Restricción** | Una condición que los datos **deben cumplir** para que el problema tenga sentido | `horas` no puede ser negativa; `horas` es un número entero de horas | Se escribe en la **ficha de análisis**, todavía no en el código (validar es de la Semana 3) |
-
-Las restricciones no se programan hoy —para eso hacen falta los condicionales,
-que llegan la semana entrante— pero **sí se escriben hoy**. Un problema mal
-delimitado produce un programa que funciona con los datos del profesor y explota
-con los del mundo real.
-""")
-
-    c.code("figura_cajas()")
-
-    c.md("""### Cómo se llama una variable
-
-**Reglas que obliga el computador:** sin espacios, sin tildes ni eñes, no
-empieza por número, no se llama igual que una palabra reservada (`print`,
-`input`, `if`…).
-
-**Reglas que obliga la decencia:** en minúsculas, palabras unidas con guion
-bajo, y que se entienda: `costo_pasaje`, `total_a_pagar`, `minutos_bus`.
-
-Tres nombres que no debes usar nunca, aunque funcionen: **`x`** (¿x de qué?),
-**`dato1`** (¿dato de qué?) y **`aux`** (auxiliar de qué). El código se escribe
-una vez y se lee veinte.
-""")
-
-    c.code("figura_eps()")
-
-    c.md("""### E-P-S aplicado al problema de esta mañana
+Antes de escribir un algoritmo se separa el problema en tres partes: qué **entra**
+(los datos que te dan), qué **proceso** se hace con ellos (las operaciones, en orden),
+y qué **sale** (el resultado). Las **constantes** son datos fijos que no se leen.
+El problema de esta mañana, descompuesto así:
 
 | | El problema de esta mañana |
 |---|---|
@@ -294,68 +200,27 @@ una vez y se lee veinte.
 | **Constantes** | `PORTERIA` = 10 · `COLCHON` = 15 |
 | **Proceso** | `trayecto <- minutos_bus + minutos_caminata + PORTERIA` ⏎ `salida_min <- hora_clase_min - trayecto - COLCHON` |
 | **Salida** | `salida_min` = 282, o sea las **4:42** |
-| **Restricciones** | los minutos no pueden ser negativos; `salida_min` debería dar más de 0 (si no, tocaría salir el día anterior) |
-| **Casos de prueba** | (360, 45, 8) → 282 · (420, 60, 5) → 330 |
 
-Ahora te toca a ti. Ensaya con el formulario de abajo: es el mismo que vas a
-llenar en el ejercicio E3.
+Ahora te toca a ti: el formulario de abajo es el mismo que vas a llenar en el ejercicio 3.
 """)
 
     c.code("ensayo_eps()")
-
-    c.md("""### ¿Por qué tres formas de escribir lo mismo?
-
-Porque sirven para cosas distintas y en momentos distintos.
-
-- **El pseudocódigo** es para **pensar**. Nadie lo ejecuta, así que no te
-  castiga por un punto y coma mal puesto; te deja concentrarte en la lógica. Y
-  como está en español, se lo puedes mostrar a alguien que no programa.
-- **El diagrama de flujo** es para **ver**. Un rombo con dos flechas te muestra
-  de un vistazo que hay dos caminos; en texto, esa misma idea hay que
-  reconstruirla leyendo.
-- **Python** es para **ejecutar**. Es el único de los tres que el computador
-  entiende de verdad.
-
-Un buen programador se mueve entre los tres todo el tiempo. Y en un examen
-escrito —donde no hay computador— los dos primeros son los únicos que tienes.
-""")
-
-    c.figura("s02_d7_tres_idiomas",
-             "Las tres representaciones del mismo algoritmo. Se va de una a "
-             "otra todo el tiempo.")
-
-    c.code("ps.comparador(CODIGO_GANCHO)", etiquetas=("ava-figura",))
 
     c.code("tarjeta_corte()")
 
     # =========================================================================
     # Bloque 4 — Sección 4: laboratorio (Parte B)
     # =========================================================================
-    c.seccion(4, "Laboratorio", 40, """Bienvenido a la Parte B. De aquí en adelante todo se toca.
-
-El hilo es un solo programa —el de la papelería de la Carrera 9— y con él vas a
-hacer cuatro cosas, en este orden: **predecir** qué hace, **ejecutarlo**,
-**investigarlo** rompiéndolo a propósito y **modificarlo**.""")
+    c.seccion(4, "Laboratorio", 11, """Bienvenido a la Parte B. De aquí en adelante todo se toca. El hilo es un solo
+programa —el de la papelería de la Carrera 9— y con él vas a **predecir**,
+**ejecutar**, **investigar** y **modificar**.""")
 
     c.md("""### 4.1 Pseudocódigo: español con reglas
 
-El pseudocódigo es un punto medio entre el español y un lenguaje de
-programación. Es lo bastante libre para escribirlo rápido y lo bastante estricto
-para que no queden ambigüedades.
-
-Compara:
-
-| Español de todos los días | Pseudocódigo |
-|---|---|
-| «pregúntale cuántas copias y cóbrale» | `Escribir "¿Cuántas copias?"` ⏎ `Leer copias` ⏎ `total <- copias * PRECIO_COPIA + ANILLADO` ⏎ `Escribir "Total: $", total` |
-
-La primera frase se la puedes decir a un cajero, y funciona porque el cajero
-**rellena los huecos** con su experiencia: sabe cuánto vale la copia, sabe que
-hay que cobrar el anillado, sabe que hay que decirle el total en voz alta. **El
-computador no rellena huecos.** Todo lo que no digas, no pasa.
-
-Con **seis palabras** te alcanza para todo lo de hoy: `Algoritmo`, `Definir`,
-`Constante`, `Leer`, `Escribir` y la flecha `<-`.
+Al cajero le dices «pregúntale cuántas copias y cóbrale» y él rellena los
+huecos. **El computador no rellena huecos**: todo lo que no digas, no pasa. Con
+seis palabras te alcanza para hoy: `Algoritmo`, `Definir`, `Constante`, `Leer`,
+`Escribir` y la flecha `<-`.
 """)
 
     c.code("chuleta()")
@@ -364,7 +229,6 @@ Con **seis palabras** te alcanza para todo lo de hoy: `Algoritmo`, `Definir`,
 
 ```
 Algoritmo CostoDeFotocopias
-    // La papelería de la Carrera 9, frente a la UIS
     Definir copias, total Como Entero
     Constante PRECIO_COPIA <- 100
     Constante ANILLADO <- 2500
@@ -378,15 +242,21 @@ Algoritmo CostoDeFotocopias
 FinAlgoritmo
 ```
 
-Vas a sacar **40 copias** y las vas a mandar a anillar. Antes de ejecutar nada,
-responde:
+Vas a sacar **40 copias** anilladas. Antes de ejecutar, responde:
 """)
 
     c.code("quiz_prediccion()")
 
-    c.md("""### Ejecutar
+    c.md("""### Ejecutar e investigar
 
-Ahora sí. El `"40"` de la última línea es lo que el usuario iba a teclear.
+El `"40"` es lo que el usuario iba a teclear. Ejecuta, y después cámbiala y
+reejecútala:
+
+1. Pon `entradas=["0"]`. ¿Tiene sentido el resultado?
+2. **Borra la línea `Leer copias`**: la caja existe pero está vacía. Lee el error.
+3. Sube `Leer copias` **arriba** del `Escribir`. Sigue funcionando, pero pide el
+   dato antes de decir qué quiere: eso es un **error de lógica**, y el
+   computador no te avisa.
 """)
 
     c.code('''PAPELERIA = """Algoritmo CostoDeFotocopias
@@ -406,189 +276,69 @@ FinAlgoritmo"""
 # El "40" es lo que el usuario iba a teclear. Cámbialo y vuelve a ejecutar.
 ps.ejecutar_pseudo(PAPELERIA, entradas=["40"]).imprimir()''')
 
-    c.md("""### Investigar
-
-Sobre la celda de arriba (cámbiala y reejecútala cuantas veces quieras):
-
-1. Cambia `entradas=["40"]` por `entradas=["1"]`. ¿Tiene sentido el resultado?
-   ¿Y con `["0"]`?
-2. Sube `PRECIO_COPIA` a 150. ¿Cuántas líneas tuviste que tocar? Esa es
-   exactamente la razón por la que existen las constantes.
-3. **Borra la línea `Leer copias`** y ejecuta. Lee el error con calma: te va a
-   decir que la caja `copias` existe pero está vacía.
-4. **Cambia `total <- copias * PRECIO_COPIA` por `total = copias *
-   PRECIO_COPIA`** (signo igual en vez de flecha) y ejecuta. Guarda ese mensaje
-   en la memoria: lo vas a volver a ver.
-5. Sube la línea `Leer copias` **arriba** del `Escribir "¿Cuántas copias...?"`.
-   El programa sigue funcionando… pero ahora le pide el dato al usuario **antes
-   de decirle qué quiere**. Eso no es un error de sintaxis: es un **error de
-   lógica**. El computador no te va a avisar.
-""")
-
     c.md("""### Modificar — ahora escribes tú
 
-Este es tu banco de trabajo. Escribe pseudocódigo a la izquierda, pon las
-entradas a la derecha y usa los cuatro botones. **Reto de calentamiento:** haz
-que el algoritmo también muestre cuánto cuestan las copias **sin** el anillado.
+Tu banco de trabajo: pseudocódigo a la izquierda, entradas a la derecha, cuatro
+botones. **Reto:** haz que también muestre cuánto cuestan las copias **sin** el
+anillado.
 """)
 
     c.code('ps.laboratorio(PAPELERIA, entradas=["40"])', etiquetas=("ava-figura",))
 
     c.md("""### 4.2 Prueba de escritorio (trazado manual)
 
-Es seguir tu propio algoritmo **como si tú fueras el computador**: instrucción
-por instrucción, anotando en una tabla cuánto vale cada variable después de cada
-paso.
-
-Suena primitivo. Es la herramienta más poderosa que vas a aprender este
-semestre, por una razón: **encuentra los errores de lógica**, que son los únicos
-que el computador no te va a señalar. Cuando un programa «corre pero da mal», la
-prueba de escritorio es lo que lo salva.
-
-Con el trazador de abajo puedes ver una hecha por el computador. Después te va a
-tocar hacerlas tú, en papel, en el examen. Fíjate bien en **cuándo** cambia cada
-caja.
+Es seguir tu algoritmo **como si tú fueras el computador**, anotando cuánto vale
+cada variable después de cada instrucción. Es la herramienta que caza los
+**errores de lógica**, los únicos que el computador no señala. Mira una hecha
+por el trazador; en el examen la haces tú, en papel.
 """)
 
     c.code('ps.trazador(PAPELERIA, entradas=["40"])', etiquetas=("ava-figura",))
 
-    c.md("""### La misma tabla, en tu cuaderno
+    c.md("""Tres reglas para que la tabla sirva: **una fila por instrucción ejecutada**;
+en cada fila, el valor de **todas** las variables; y un guion (`—`) cuando la
+caja existe pero está vacía. No es cero: cero es un valor.
 
-| Paso | Instrucción | `copias` | `total` | Salida |
-|---|---|---|---|---|
-| 1 | `Definir copias, total Como Entero` | — | — | |
-| 2 | `Constante PRECIO_COPIA <- 100` | — | — | |
-| 3 | `Constante ANILLADO <- 2500` | — | — | |
-| 4 | `Escribir "¿Cuántas copias...?"` | — | — | ¿Cuántas copias vas a sacar? |
-| 5 | `Leer copias` | 40 | — | |
-| 6 | `total <- copias * PRECIO_COPIA + ANILLADO` | 40 | 6500 | |
-| 7 | `Escribir "Total a pagar: $", total` | 40 | 6500 | Total a pagar: $6500 |
+### 4.3 Los cinco símbolos del diagrama de flujo
 
-Tres reglas para que la tabla sirva:
-
-1. **Una fila por instrucción ejecutada**, no por línea escrita.
-2. En cada fila, el valor de **todas** las variables, incluso las que no
-   cambiaron. Así se ve de un vistazo cuál cambió.
-3. Un guion (`—`) significa «la caja existe pero está vacía». No es cero: cero
-   es un valor.
+Un diagrama de flujo es un lenguaje con cinco palabras:
 """)
-
-    c.md("""### 4.3 Los cinco símbolos del diagrama de flujo
-
-Un diagrama de flujo no es un dibujo bonito: es un lenguaje, y tiene exactamente
-cinco palabras.
-""")
-
-    c.figura("s02_d3_simbolos",
-             "Los cinco símbolos. La forma dice qué hace el bloque, antes de "
-             "leer una sola letra.")
 
     c.code("tabla_simbolos()")
 
-    c.md("""Y este es el diagrama del programa que acabas de ejecutar. **No lo dibujó
-nadie**: lo dedujo el computador de tu pseudocódigo.
+    c.md("""Este es el diagrama del programa que acabas de ejecutar. **No lo dibujó
+nadie**: lo dedujo el computador de tu pseudocódigo. Si el diagrama queda raro,
+el algoritmo está raro.
 """)
 
     c.code("display(HTML(ps.diagrama(PAPELERIA)))", etiquetas=("ava-figura",))
 
-    c.figura("s02_d5_papeleria",
-             "El mismo algoritmo dibujado a mano con la convención de la clase. "
-             "Compara los dos: son el mismo diagrama.")
+    c.md("""Reglas de un diagrama bien armado: **un solo INICIO**; **todo camino llega al
+FIN**; las flechas tienen punta y una sola dirección; **del rombo salen dos
+flechas rotuladas, y solo dos**; **una caja, una instrucción**.
 
-    c.md("""### Reglas para que un diagrama de flujo sea correcto
+**El puente a Flowgorithm.** En la Clase 2 armas este mismo diagrama en
+Flowgorithm, bloque por bloque:
 
-1. **Un solo INICIO.** Si tu diagrama tiene dos puntos de arranque, no es un
-   algoritmo: son dos.
-2. **Todo camino llega al FIN.** Si una rama se queda colgando, hay un caso que
-   tu algoritmo no resuelve.
-3. **Las flechas tienen punta y una sola dirección.** Una línea sin punta no
-   dice nada.
-4. **Del rombo salen dos flechas rotuladas, y solo dos.** Si necesitas tres
-   respuestas, necesitas dos rombos.
-5. **Una caja, una instrucción.** El diagrama debe poder leerse en voz alta como
-   una lista de órdenes.
+| Nuestro pseudocódigo | Bloque de Flowgorithm | Forma |
+|---|---|---|
+| `Algoritmo` / `FinAlgoritmo` | *Main* (ya viene puesto) | óvalos verdes |
+| `Definir x Como Entero` | **Declare** · `x` · `Integer` | rectángulo de esquinas dobles |
+| `Constante PASAJE <- 3200` | **Assign** en MAYÚSCULAS (no hay constantes) | rectángulo |
+| `Leer x` / `Escribir e` | **Input** / **Output** | paralelogramo |
+| `x <- expr` | **Assign** · `x` ← `expr` | rectángulo |
+| `Entero / Real / Cadena / Logico` | `Integer / Real / String / Boolean` | — |
 
-Dos diagramas que rompen esas reglas:
+### 4.4 Una variable es una caja con nombre
 """)
-
-    c.figura("s02_d6a_rombo_mudo",
-             "Del rombo sale una sola flecha: el algoritmo no dice qué hacer "
-             "cuando la respuesta es No.")
-
-    c.figura("s02_d6b_caja_multiple",
-             "Dos cosas están mal: la caja roja hace cuatro cosas —debería ser "
-             "cuatro cajas— y hay un segundo FIN al que no llega ninguna "
-             "flecha. Si nadie puede llegar ahí, sobra.")
-
-    c.md("""### El diagrama no se dibuja: se deduce
-
-Vuelve al banco de trabajo (la celda del editor), cámbiale una línea a tu
-pseudocódigo y oprime **Ver diagrama**. El dibujo cambia solo.
-
-Eso es lo que hay que entender: **el diagrama de flujo no es una tarea aparte,
-es una foto de tu algoritmo**. Si el diagrama queda raro, no es que lo hayas
-dibujado mal: es que el algoritmo está raro.
-""")
-
-    c.md("""### 4.3.4 El puente a Flowgorithm
-
-| Nuestro pseudocódigo | Bloque de Flowgorithm | Forma en pantalla | Menú |
-|---|---|---|---|
-| `Algoritmo` / `FinAlgoritmo` | *Main* (ya viene puesto) | óvalos verdes arriba y abajo | — |
-| `Definir x Como Entero` | **Declare** · `x` · tipo `Integer` | rectángulo con esquinas dobles | clic derecho → Declare |
-| `Constante PASAJE <- 3200` | **Assign** en MAYÚSCULAS (Flowgorithm no tiene constantes) | rectángulo | clic derecho → Assign |
-| `Leer x` | **Input** · variable `x` | paralelogramo | clic derecho → Input |
-| `Escribir e` | **Output** · expresión `e` | paralelogramo | clic derecho → Output |
-| `x <- expr` | **Assign** · `x` ← `expr` | rectángulo | clic derecho → Assign |
-| `Si c Entonces … Sino … FinSi` | **If** con ramas *True* / *False* | rombo | clic derecho → If |
-| `Mientras c Hacer … FinMientras` | **While** | rombo con retorno | clic derecho → While |
-| `Entero / Real / Cadena / Logico` | `Integer / Real / String / Boolean` | — | — |
-| `Verdadero / Falso` | `true / false` | — | — |
-| `<>` | `!=` | — | — |
-| `Y / O / NO` | `AND / OR / NOT` | — | — |
-
-**Flowgorithm no corre aquí, y está bien.** Flowgorithm es un programa de
-escritorio para Windows; este cuadernillo vive en un navegador sobre Linux. En
-la Clase 2 vas a construir el diagrama en Flowgorithm en los equipos de la sala.
-Lo que haces aquí es **llegar con el algoritmo ya pensado y probado**: el
-diagrama que ves arriba lo dibujó el computador a partir de tu pseudocódigo, así
-que armarlo en Flowgorithm es copiar bloque por bloque usando esta tabla.
-""")
-
-    c.md("""### 4.4 Una variable es una caja con nombre""")
 
     c.code("figura_cajas()")
 
-    c.md("""Cuando escribes `copias <- 40`, el computador hace tres cosas: busca la caja
-rotulada `copias`, **bota lo que hubiera adentro** y mete el 40. No hay
-«historial»: el valor anterior desaparece. Por eso el orden de las instrucciones
-lo es todo.
-
-El **nombre** lo eliges tú, y es lo único que vas a ver dentro de seis meses
-cuando releas tu propio código. `x`, `dato1` y `aux` no le dicen nada a nadie.
-`costo_pasaje` sí.
-""")
-
-    c.code("figura_incremento()")
-
-    c.md("""### El renglón más raro de toda la programación
-
-```
-viajes <- viajes + 1
-```
-
-En la clase de matemáticas, `x = x + 1` es **falso siempre**: no hay número que
-sea igual a sí mismo más uno. En programación esa línea no es una ecuación: es
-**una orden**, y se lee de derecha a izquierda:
-
-1. **Primero** se mira qué hay adentro de la caja `viajes` (digamos, 3).
-2. **Después** se calcula `3 + 1`, que da 4.
-3. **Por último** se guarda el 4 en la caja `viajes`, borrando el 3.
-
-Por eso escribimos `<-` y no `=`: la flecha **apunta hacia la caja**. Cuando
-pases a Python vas a escribir `viajes = viajes + 1`, con un signo igual que en
-realidad significa lo mismo que la flecha. Recuérdalo así: **en programación,
-`=` no pregunta, ordena.**
+    c.md("""`copias <- 40` busca la caja `copias`, **bota lo que hubiera adentro** y mete
+el 40. No hay historial. Por eso el renglón más raro de la programación,
+`viajes <- viajes + 1`, no es una ecuación falsa: es una **orden** que se lee de
+derecha a izquierda —mira qué hay en la caja, súmale 1, guarda el resultado en
+la misma caja—. En Python es `viajes = viajes + 1`: **`=` no pregunta, ordena.**
 """)
 
     c.code('''# Ejecuta esto tal cual. Después cambia el orden de las dos últimas líneas
@@ -598,119 +348,42 @@ print("Antes: ", viajes)
 viajes = viajes + 1
 print("Después:", viajes)''')
 
-    c.code('''ps.trazador("""Algoritmo ContarViajes
-    Definir viajes Como Entero
-    viajes <- 3
-    viajes <- viajes + 1
-    viajes <- viajes + 1
-    Escribir "Total de viajes: ", viajes
-FinAlgoritmo""")''', etiquetas=("ava-figura",))
-
     c.md("""### 4.5 Tipos: qué le cabe a cada caja
 
 | Pseudocódigo | Python | Qué guarda | Ejemplos | Cuidado |
 |---|---|---|---|---|
-| `Entero` | `int` | números sin decimales | `40`, `-3`, `0` | `3200` sin puntos ni comas: `3.200` es otra cosa |
-| `Real` | `float` | números con decimales | `3.85`, `-0.5` | el separador decimal es el **punto**, no la coma |
-| `Cadena` | `str` | texto | `"Ana"`, `"3200"` | `"3200"` es texto, **no** es el número 3200 |
-| `Logico` | `bool` | verdadero o falso | `Verdadero`, `Falso` | en Python se escriben `True` y `False`, con mayúscula |
+| `Entero` | `int` | sin decimales | `40`, `-3` | `3200` sin puntos: `3.200` es otra cosa |
+| `Real` | `float` | con decimales | `3.85` | el separador decimal es el **punto** |
+| `Cadena` | `str` | texto | `"Ana"`, `"3200"` | `"3200"` es texto, **no** el número |
+| `Logico` | `bool` | verdadero o falso | `True`, `False` | con mayúscula inicial |
+
+Para pasar de texto a número la conversión es **explícita**: la pides tú, con
+`int("40")`, `float("3.85")` o, al revés, `str(40)`.
 """)
 
-    c.code('''# type() te dice de qué tipo es una caja. Ejecuta y mira la diferencia
-# entre el número 3200 y el texto "3200".
-print(type(3200))       # <class 'int'>
-print(type(3.85))       # <class 'float'>
-print(type("3200"))     # <class 'str'>
-print(type(True))       # <class 'bool'>
+    c.code('''# type() te dice de qué tipo es una caja. Ejecuta y mira la diferencia.
+print(type(3200), type(3.85), type("3200"), type(True))
 
-# Y ahora la trampa clásica:
-print(3200 + 100)       # 3300  -> suma
-print("3200" + "100")   # 3200100 -> ¡pega los textos!''')
-
-    c.md("""**`"3200" + "100"` da `3200100`.** No es un error de Python: es que a los
-textos, el `+` los **pega**. Si lo que quieres es sumar, primero tienes que
-convertir el texto en número. Eso es una **conversión explícita**, y «explícita»
-significa que la pides tú, a mano, con todas sus letras.
-
-### Las tres conversiones
-
-| Quiero pasar de… | …a | Python | Pseudocódigo | Falla si… |
-|---|---|---|---|---|
-| texto | entero | `int("40")` → `40` | `ConvertirAEntero("40")` | el texto no es un número entero: `int("cuarenta")`, `int("3.5")`, `int("")` |
-| texto | real | `float("3.85")` → `3.85` | `ConvertirAReal("3.85")` | el texto no parece un número: `float("tres")` |
-| número | texto | `str(40)` → `"40"` | `ConvertirATexto(40)` | nunca falla |
-""")
-
-    c.code('''# Ida y vuelta entre tipos. Ejecuta y mira los tipos que imprime.
-texto = "3200"
-numero = int(texto)          # texto -> entero
-otra_vez = str(numero)       # entero -> texto
-
-print(texto, type(texto))
-print(numero, type(numero))
-print(otra_vez, type(otra_vez))
-print("¿Son iguales?", texto == otra_vez)
-
-# Y ahora, la conversión que decide si sumas o pegas:
-print(int("3200") + int("100"))   # 3300
-print("3200" + "100")             # 3200100''')
+print(3200 + 100)                 # 3300    -> suma
+print("3200" + "100")             # 3200100 -> ¡pega los textos!
+print(int("3200") + int("100"))   # 3300    -> la conversión decide''')
 
     c.md("""### 4.6 `Leer` y `Escribir`, `input()` y `print()`
 
-En pseudocódigo, `Leer copias` sabe que tiene que guardar un **número** porque
-arriba escribiste `Definir copias Como Entero`. Le dijiste de qué tipo era la
-caja antes de llenarla.
+En este cuadernillo tu programa **no te pregunta nada**: lo que el usuario iba a
+teclear se lo entregas de antemano, en una lista, con `ps.usar_entradas([...])`.
+Esa lista es un **caso de prueba**, se puede repetir, y el código es idéntico al
+que correrías en VS Code: `input()` sigue siendo `input()`.
 
-Mira las dos columnas, fila por fila:
-""")
+> **`input()` siempre te entrega TEXTO.** Aunque el usuario teclee `40`, llega
+> `"40"`. Si quieres sumar, tú decides: `int(input())`. En pseudocódigo `Leer`
+> sabía el tipo porque lo declaraste con `Definir`; Python no lo adivina.
 
-    c.code("ps.comparador(PAPELERIA)", etiquetas=("ava-figura",))
-
-    c.md("""### Por qué aquí no tecleas
-
-En este cuadernillo tu programa **no te va a preguntar nada**: los datos que el
-usuario iba a teclear se los entregas tú de antemano, en una lista.
-
-```python
-ps.usar_entradas(["40"])     # esto es "el usuario va a teclear 40"
-copias = int(input())        # y esto es exactamente el input() de siempre
-```
-
-Tres razones, y las tres son buenas:
-
-1. **Puedes probar el mismo programa con muchos usuarios distintos, en un
-   segundo.** Cambias la lista y vuelves a ejecutar. Esa lista tiene nombre
-   propio en ingeniería: es un **caso de prueba**, justo lo que definiste en la
-   ficha de análisis de la Parte A. Un programa serio se prueba con diez casos,
-   no con uno; nadie va a teclear diez veces a mano.
-2. **Tus pruebas se pueden repetir.** Si el corrector automático tuviera que
-   teclear, no podría corregir. Todo el software profesional del mundo se prueba
-   así: los datos entran desde un archivo o una lista, no desde un teclado.
-3. **El código es idéntico.** `input()` sigue siendo `input()`. Cuando corras
-   este mismo programa en tu computador, en VS Code, te va a preguntar de
-   verdad, y no tendrás que cambiarle **ni una letra**.
-
-Y el detalle que sí tienes que grabarte:
-
-> **`input()` siempre te entrega TEXTO.** Aunque el usuario teclee `40`, lo que
-> llega a tu programa es `"40"`, con comillas. Si quieres sumar, tú decides:
-> `int(input())`.
-
-¿Y por qué en pseudocódigo `Leer copias` sí sabe que es un número? Porque arriba
-escribiste `Definir copias Como Entero`: **le dijiste de qué tipo era la caja
-antes de llenarla**. Python no tiene esa declaración, así que no puede adivinar,
-y te pasa la responsabilidad a ti. Ese es, en una frase, todo el asunto de las
-conversiones explícitas.
-
-Y una costumbre profesional, ya que estamos: fíjate en que casi todos los
-ejercicios de hoy te piden una **función con parámetros**
-(`hora_de_salida(hora_clase, bus, ...)`) en vez de una función que pregunta. Es
-a propósito: una función que recibe sus datos se puede probar, reutilizar y
-combinar; una que pregunta, no.
+Por eso casi todos los ejercicios de hoy te piden una **función con parámetros**
+en vez de una que pregunta: la que recibe sus datos se puede probar.
 """)
 
     c.code('''# El MISMO algoritmo de la papelería, ahora en Python.
-# Compara línea por línea con el pseudocódigo de arriba.
 ps.usar_entradas(["40"])          # esto es "el usuario va a teclear 40"
 
 PRECIO_COPIA = 100
@@ -721,27 +394,13 @@ copias = int(input())             # input() da TEXTO; int() lo vuelve número
 
 total = copias * PRECIO_COPIA + ANILLADO
 
-print("Total a pagar: $", total, sep="")''')
-
-    c.md("""### `print()` hace más de lo que parece
-
-```python
-print("Total:", 6500)             # Total: 6500      <- pone un espacio entre los pedazos
-print("Total:", 6500, sep="")     # Total:6500       <- sin separador
-print("Total: $", 6500, sep="")   # Total: $6500
-print("cargando", end="")         # no salta de línea al terminar
-```
-
-`sep` es lo que `print` mete **entre** los pedazos (por defecto, un espacio) y
-`end` es lo que pone **al final** (por defecto, un salto de línea). El
-`Escribir` del pseudocódigo se comporta como `sep=""`: pega los pedazos tal cual.
-""")
+print("Total a pagar: $", total, sep="")   # sep="" pega los pedazos, como Escribir''')
 
     c.md("""### 4.7 Lee el error
 
-Las dos celdas que siguen **fallan a propósito**. Ejecútalas, lee el mensaje
-rojo con calma y después arréglalas. Aprender a leer un error es la mitad del
-oficio.
+La celda que sigue **falla a propósito**. Ejecútala, lee la **última línea** del
+mensaje rojo (ahí está el apellido del error) y arréglala cambiando
+`"diecinueve"` por `"19"`.
 """)
 
     c.code('''# Esta celda falla a propósito. Ejecútala y lee el mensaje rojo antes de arreglarla.
@@ -749,75 +408,24 @@ edad_escrita = "diecinueve"
 edad = int(edad_escrita)
 print("El año entrante cumples", edad + 1)''', etiquetas=("error-sembrado",))
 
-    c.md("""```
-ValueError: invalid literal for int() with base 10: 'diecinueve'
-```
-
-Se lee de abajo hacia arriba. La última línea es el diagnóstico: **`ValueError`**
-significa *«el tipo de dato era el correcto (un texto) pero el valor no me
-sirve»*. Y te muestra exactamente cuál: `'diecinueve'`.
-
-`int()` sabe convertir `"19"`, pero no sabe español. Tampoco sabe convertir
-`"19.5"` (eso es `float()`) ni `""` (una cadena vacía no es ningún número).
-
-Compáralo con el `NameError` de la semana pasada: aquel decía *«ese nombre no
-existe»*; este dice *«el nombre existe, pero lo que tiene adentro no me sirve»*.
-Aprender a distinguir los apellidos de los errores (`NameError`, `TypeError`,
-`ValueError`, `SyntaxError`) te ahorra horas.
-
-**Arréglalo:** cambia `"diecinueve"` por `"19"` y ejecuta otra vez.
-""")
-
-    c.code('''# Y este es el otro clásico. ¿Cuál es la diferencia con el de arriba?
-edad = "19"
-print("El año entrante cumples", edad + 1)   # TypeError''',
-           etiquetas=("error-sembrado",))
-
-    c.md("""```
-TypeError: can only concatenate str (not "int") to str
-```
-
-Aquí ni siquiera intentaste convertir: le pediste a Python que sumara un texto y
-un número, y se negó. Otros lenguajes adivinan en estos casos —y por adivinar
-producen errores silenciosos que aparecen tres meses después—. Python prefiere
-frenar.
-
-| Error | Qué te está diciendo | Ejemplo típico |
+    c.md("""| Error | Qué te está diciendo | Ejemplo típico |
 |---|---|---|
-| `SyntaxError` | «no entendí ni siquiera lo que escribiste» | falta una comilla o un paréntesis |
-| `NameError` | «ese nombre no existe» | escribiste `gasto_semanal` y la variable es `gasto_semana` |
-| `TypeError` | «esos dos tipos no se pueden mezclar así» | `"19" + 1` |
-| `ValueError` | «el tipo está bien, pero ese valor no me sirve» | `int("diecinueve")` |
-
-Cuando algo falle, lee **la última línea primero**: ahí está el apellido del
-error y el diagnóstico. Las de arriba solo dicen dónde.
+| `SyntaxError` | «no entendí lo que escribiste» | falta una comilla |
+| `NameError` | «ese nombre no existe» | `gasto_semanal` por `gasto_semana` |
+| `TypeError` | «esos dos tipos no se mezclan así» | `"19" + 1` |
+| `ValueError` | «el tipo está bien, el valor no me sirve» | `int("diecinueve")` |
 """)
 
     # =========================================================================
     # Bloque 5 — Sección 5: los ocho ejercicios (80 puntos)
     # =========================================================================
-    c.seccion(5, "Ocho ejercicios", 37, """Aquí es donde se juega tu nota: **80 puntos** repartidos en ocho ejercicios.
-Cada uno son dos celdas — la tuya y la de prueba.
+    c.seccion(5, "Ocho ejercicios", 73, """Aquí se juega tu nota: **80 puntos** en ocho ejercicios, cada uno con dos
+celdas: la tuya y la de prueba.
 
-Tres reglas de la casa:
-
-- **Los intentos no restan.** Ejecuta la celda de prueba tantas veces como
-  quieras.
-- **Las pistas tampoco.** Cada ejercicio trae tres, de la que hace pensar a la
-  que casi resuelve. Se piden con `pista("E1")`, `pista("E2")`… y **no gastan
-  preguntas del tutor**.
-- Si ejecutas una celda de ejercicio sin haberla tocado, te va a salir
-  `NotImplementedError`. No es un fallo del cuadernillo: es un error de
-  ejecución **puesto a propósito** que significa «aquí falta tu parte». Bórralo
-  cuando escribas tu respuesta.
-
-Varios ejercicios se corrigen **ejecutando** tu pseudocódigo, no leyéndolo. Si
-el orden está mal, te lo va a decir el propio intérprete.""")
-
-    # --- Ensayo de E1 -----------------------------------------------------
-    c.md("""Antes del ejercicio 1, un ensayo sin nota para equivocarte gratis:
-""")
-    c.code("ensayo_e1()")
+- **Los intentos no restan** y **las pistas tampoco**: `pista("E1")`,
+  `pista("E2")`… no gastan preguntas del tutor.
+- Una celda sin tocar da `NotImplementedError`: significa «aquí falta tu parte».
+- Varios ejercicios se corrigen **ejecutando** tu pseudocódigo, no leyéndolo.""")
 
     # --- Ejercicio 1 ------------------------------------------------------
     c.ejercicio(
@@ -883,9 +491,6 @@ print("E1 correcto: el algoritmo quedó en orden y se ejecuta.")''',
         ],
     )
 
-    # --- Ensayo de E2 -----------------------------------------------------
-    c.code("quiz_simbolos()")
-
     # --- Ejercicio 2 ------------------------------------------------------
     c.ejercicio(
         numero=2, competencias=[], titulo="Cada símbolo con su significado", estrellas=1, puntos=5,
@@ -936,9 +541,6 @@ print("E2 correcto: ya reconoces los cinco símbolos.")''',
             "ordena.",
         ],
     )
-
-    # --- Ensayo de E3 -----------------------------------------------------
-    c.code("quiz_ficha()")
 
     # --- Ejercicio 3 ------------------------------------------------------
     c.ejercicio(
@@ -1265,10 +867,6 @@ print("E6 correcto: cada dato quedó en su tipo y la ficha se armó bien.")''',
     )
 
     # --- Ejercicio 7 ------------------------------------------------------
-    c.figura("s02_d4_gancho",
-             "El algoritmo del gancho, dibujado. Es el que vas a traducir a "
-             "Python en el ejercicio 7.")
-
     c.ejercicio(
         numero=7, competencias=['I3'], titulo="Traduce el algoritmo a Python", estrellas=3, puntos=15,
         enunciado="""Este es el algoritmo del gancho, el de «¿a qué hora salgo de la casa?»:
@@ -1505,27 +1103,11 @@ display(HTML(ps.diagrama(pseudo_e8)))''',
     # =========================================================================
     # Bloque 6 — Sección 6: el reto
     # =========================================================================
-    c.seccion(6, "El reto", None, """*(opcional, sin nota)*
-
-### Reto A — Llévate tu diagrama a la clase
-
-El algoritmo que escribiste en E8 es tuyo. Ejecuta la celda de abajo y vas a
-obtener dos cosas:
-
-1. **El guion**: la lista exacta de bloques que tienes que arrastrar en
-   Flowgorithm, en orden.
-2. **El archivo `mi_algoritmo.fprg`**: descárgalo desde el explorador de
-   archivos de Jupyter (menú *File → Open*, después clic derecho sobre el
-   archivo → *Download*) y ábrelo en la sala de cómputo.
-
-En la Clase 2 vas a construir ese mismo diagrama y a ejecutarlo dentro de
-Flowgorithm. Vas a llegar con la tarea medio hecha, y —más importante— vas a
-poder comparar: **el mismo algoritmo en dos herramientas distintas se ve
-distinto y hace lo mismo.**
-
-> **Si el `.fprg` no abre**, no pierdas el tiempo peleando con él: el formato
-> depende de la versión de Flowgorithm instalada en la sala. El guion impreso no
-> depende de nada y es el camino seguro.""")
+    c.seccion(6, "El reto", 1, """*(opcional, sin nota)* **Llévate tu diagrama a la clase.** La celda de abajo
+imprime el **guion** —los bloques que tienes que arrastrar en Flowgorithm, en
+orden— y deja el archivo `mi_algoritmo.fprg` (descárgalo desde *File → Open*,
+clic derecho → *Download*). Si el `.fprg` no abre en la sala, el guion impreso
+es el camino seguro.""")
 
     c.code('''# Si todavía no hiciste E8, se usa el algoritmo de la papelería.
 mi_algoritmo = pseudo_e8 if "pseudo_e8" in globals() else PAPELERIA
@@ -1533,105 +1115,28 @@ mi_algoritmo = pseudo_e8 if "pseudo_e8" in globals() else PAPELERIA
 ps.guion_flowgorithm(mi_algoritmo)
 ps.exportar_flowgorithm(mi_algoritmo, "mi_algoritmo.fprg")''')
 
-    c.md("""### Reto B — Un vistazo a la semana entrante *(míralo, no lo estudies)*
-
-Todo lo de hoy fue **secuencia**: una instrucción detrás de otra, sin desvíos.
-La semana entrante aparece el rombo, y con él la palabra `Si`:
-
-```
-Algoritmo AlcanzaElSaldo
-    Definir saldo Como Entero
-    Constante PASAJE <- 3200
-
-    Escribir "¿Cuánto tienes en la tarjeta?"
-    Leer saldo
-
-    Si saldo >= PASAJE Entonces
-        Escribir "Te alcanza. Sube tranquilo."
-    Sino
-        Escribir "No te alcanza. Toca recargar."
-    FinSi
-FinAlgoritmo
-```
-
-Ejecuta la celda de abajo con `["12000"]` y después con `["1500"]`, y mira el
-diagrama: vas a ver el rombo con sus dos flechas, **Sí** y **No**. No tienes que
-entenderlo hoy. Solo mira cómo se ve un algoritmo que toma decisiones.
-""")
-
-    c.code('''RETO_SI = """Algoritmo AlcanzaElSaldo
-    Definir saldo Como Entero
-    Constante PASAJE <- 3200
-
-    Escribir "¿Cuánto tienes en la tarjeta?"
-    Leer saldo
-
-    Si saldo >= PASAJE Entonces
-        Escribir "Te alcanza. Sube tranquilo."
-    Sino
-        Escribir "No te alcanza. Toca recargar."
-    FinSi
-FinAlgoritmo"""
-
-# Cambia "12000" por "1500" y vuelve a ejecutar.
-ps.trazador(RETO_SI, entradas=["12000"])''', etiquetas=("ava-figura",))
-
     # =========================================================================
     # Bloque 7 — Sección 7: el tutor
     # =========================================================================
-    c.seccion(6, "Habla con el asistente", 4, """Tienes **5 preguntas** en este cuadernillo (las ves en el botón de abajo a la
-derecha). Cinco no es poco: es justo lo que alcanza si preguntas bien. Aquí van
-cinco que valen la pena, una por cada cosa importante de hoy:
+    c.seccion(7, "Habla con el asistente", 1, """Tienes **5 preguntas** en este cuadernillo (botón de abajo a la derecha). Dos
+que valen la pena:
 
-1. *«Te voy a explicar con mis palabras qué es la estructura
-   Entrada-Proceso-Salida. Dime qué me está faltando, sin darme la respuesta
-   completa.»*
-2. *«Escribí este pseudocódigo [pégalo]. No me lo corrijas: hazme tres preguntas
+1. *«Escribí este pseudocódigo [pégalo]. No me lo corrijas: hazme tres preguntas
    que me ayuden a encontrar yo mismo el error.»*
-3. *«Mi diagrama de flujo tiene un rombo del que sale una sola flecha. ¿Por qué
-   eso está mal? Explícamelo con un ejemplo de la vida diaria.»*
-4. *«Hice la prueba de escritorio del ejercicio 5 y me dio distinto al
-   corrector. Pregúntame paso por paso qué anoté, para que yo vea dónde me
-   desvié.»*
-5. *«¿Por qué `input()` siempre devuelve texto? Dame otro ejemplo, distinto al
-   del cuadernillo, donde eso cause un error.»*
+2. *«Hice la prueba de escritorio del ejercicio 5 y me dio distinto al
+   corrector. Pregúntame paso por paso qué anoté.»*
 
-**Lo que no vale la pena preguntar:** *«dame la respuesta del E7»*. Te la va a
-dar —está programado para no hacerlo, pero eventualmente cede—, y el día del
-parcial el que va a estar sentado ahí eres tú.
-
-Fíjate en el patrón de las cinco: ninguna pide una solución. Todas piden **que
-te pregunte a ti**. Ese es el uso que sirve.
-
-Y antes de gastar una: **haz clic en la celda del ejercicio donde estás
-atascado**. El panel toma solo el enunciado, tu código y el último error. Si
-preguntas desde otra parte, el asistente responde a ciegas.""")
+Ninguna pide la solución: todas piden **que te pregunte a ti**. Y antes de
+gastar una, **haz clic en la celda del ejercicio donde estás atascado**: el
+panel toma el enunciado, tu código y el último error.""")
 
     # =========================================================================
     # Bloque 8 — Sección 8: cierre
     # =========================================================================
-    c.seccion(7, "Cierre", 5, """Antes de reclamar tu insignia, marca honestamente lo que ya puedes hacer. Esto
-no tiene nota: es tu plan para la semana.""")
+    c.seccion(8, "Cierre", 1, """Marca honestamente lo que ya puedes hacer. No tiene nota: es tu plan para la
+semana.""")
 
     c.code("radar_salida()")
-
-    c.md("""### Lo que cubriste hoy""")
-
-    c.code("tabla_cobertura()")
-
-    c.md("""### Para profundizar *(fuentes confiables)*
-
-- **PSeInt** (`pseint.sourceforge.net`) — el intérprete de pseudocódigo en
-  español más usado en Latinoamérica. La sintaxis que aprendiste hoy es
-  prácticamente la suya: si lo instalas, ya sabes usarlo.
-- **Flowgorithm** (`flowgorithm.org`) — el que van a usar en la sala. La sección
-  *Documentation* tiene la referencia de cada bloque.
-- *How to Think Like a Computer Scientist* (Runestone Academy), capítulos 1 y 2
-  — libro de CS1 abierto, con ejercicios ejecutables.
-- **Python Tutor** (`pythontutor.com`) — visualiza la memoria de un programa de
-  Python paso a paso, igual que el trazador de hoy pero para Python de verdad.
-  Muy recomendado para las próximas semanas.
-""")
 
     c.code("cierre()")
 

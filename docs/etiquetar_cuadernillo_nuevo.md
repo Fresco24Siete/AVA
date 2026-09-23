@@ -54,6 +54,12 @@ profesor enseña menos de lo que hay. Nada más.
 Reemplaza el mapeo de los cuadernillos que vengan en el archivo y **no toca los
 demás**, así que es seguro correrlo tantas veces como haga falta.
 
+**Si quitas un ejercicio, su etiqueta no se pierde.** `build.py` conserva en el
+mapeo los ids que ya no existen en el generador (los marca como retirados al
+construir), porque sus intentos siguen en la base bajo ese id y sin la etiqueta
+quedarían fuera del análisis. Por lo mismo, **no reutilices un número** para un
+ejercicio distinto en una semana que ya tenga telemetría: el id es la identidad.
+
 ---
 
 ## Los códigos, y cuál de ellos es un problema

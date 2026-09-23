@@ -4,10 +4,16 @@
 Curso 41333 Algoritmos y Programación · Ingeniería en IA · UIS 2026-2
 Unidad 1 — Fundamentos computacionales y entorno de desarrollo.
 
-25 puntos de nbgrader en siete ejercicios, 70 XP lúdicos y la insignia
+25 puntos de nbgrader en siete ejercicios, 40 XP lúdicos y la insignia
 «Despegue». El motor (`motor/ava_motor.py`) y el contenido propio de la semana
 (`contenido.py`) se incrustan en la celda de arranque: al alumno le llega un
 solo archivo.
+
+Recorte del 2026-09-22 (instrucción del profesor: cuadernillos más cortos y más
+prácticos). Los siete ejercicios están CONGELADOS —ya los entregaron 19
+alumnos—: se recortó solo lo que hay alrededor (teoría, demostraciones, quices,
+textos de sección). Los 40 XP son los que de verdad se pueden ganar
+(diagnóstico 10, tres celdas rotas 24, un quiz 6).
 
 Dos decisiones que se salen del documento de diseño y por qué:
 
@@ -35,7 +41,7 @@ def construir(motor_comprimido=True):
         codigo="semana_01",
         titulo="Hola, máquina",
         semana=1,
-        meta_xp=70,
+        meta_xp=40,
         insignia="Despegue",
         tutor_ia=True,
         motor_comprimido=motor_comprimido,
@@ -48,13 +54,9 @@ def construir(motor_comprimido=True):
     c.md("""# Hola, máquina
 ### Semana 1 · Unidad 1 · Fundamentos computacionales y entorno de desarrollo
 
-Bienvenido a Algoritmos y Programación. Esto que estás viendo es un
-**cuadernillo interactivo**: un documento donde el texto y el código conviven y
-donde el código se ejecuta aquí mismo, en tu navegador, sin instalar nada.
-
-En los próximos **diez minutos** vas a ejecutar tu primer programa. Hoy. Tú.
-Y antes de que termine el cuadernillo vas a saber qué pasa por dentro de la
-máquina cuando lo haces.
+Esto es un **cuadernillo interactivo**: el texto y el código conviven, y el
+código se ejecuta aquí mismo, en tu navegador. Hoy ejecutas tu primer programa
+y sabes qué pasa por dentro de la máquina cuando lo haces.
 
 **Empieza ejecutando la celda de abajo**: haz clic sobre ella y presiona
 `Shift+Enter`.
@@ -63,172 +65,91 @@ máquina cuando lo haces.
     c.arranque()
     c.code("iniciar()")
 
-    c.md("""## Al terminar este cuadernillo vas a poder…
+    c.md("""**Al terminar vas a poder:** ejecutar código y decir **quién lo ejecuta**;
+guardar valores en **variables** de cuatro tipos; leer un programa **como lo lee
+el intérprete**; distinguir **editor, terminal, intérprete e IDE**; crear y leer
+un **archivo** desde código; reconocer los **tres tipos de error**; y escribir
+tu primera **función** completa.
 
-- Ejecutar código Python en un cuadernillo y explicar **quién lo ejecuta**.
-- Guardar valores en **variables** y distinguir los cuatro tipos básicos:
-  texto, entero, decimal y booleano.
-- Leer un programa **como lo lee el intérprete** —de arriba abajo, una línea a
-  la vez— y predecir con qué valores termina.
-- Distinguir un **editor**, una **terminal**, un **intérprete** y un **IDE**, y
-  decir para qué sirven Python, VS Code y Jupyter sin repetir un eslogan.
-- Crear, escribir y leer un **archivo** desde código.
-- Reconocer los **tres tipos de error** —sintaxis, ejecución y lógica— y saber
-  cuál de los tres nadie te va a avisar.
-- Escribir tu primera **función** completa: recibe datos, calcula y devuelve.
-
-**Lo que NO se te pide hoy:** escribir programas largos, memorizar fechas ni
-saber nada de antemano. Si nunca has programado, este cuadernillo está escrito
-para ti; si ya programaste, los ejercicios 5 a 7 te van a exigir.
-""")
-
-    c.md("""> **Dos marcadores distintos, no los confundas.** Los **XP** son del juego: los
-> ganas explorando, respondiendo quices y rompiendo cosas. Los **puntos** son tu
-> nota: salen solo de los siete ejercicios y viajan solos a Moodle. Puedes
-> terminar con 70 XP y 0 puntos, o al revés. Lo ideal es lo primero *y* lo
-> segundo.
->
-> Este cuadernillo tiene **25 puntos** y **70 XP**. La insignia se llama «Despegue».
+> Los **XP** son del juego: los ganas respondiendo y rompiendo cosas. Los
+> **puntos** son tu nota: salen solo de los siete ejercicios y viajan solos a
+> Moodle. Este cuadernillo tiene **25 puntos** y **40 XP**; la insignia se llama
+> «Despegue».
 """)
 
     # =========================================================================
     # Bloque 1 — Sección 1: primer éxito y punto de partida
     # =========================================================================
-    c.seccion(1, "Tu primer programa", 13, """Desde 1978, casi todo el que aprende a programar empieza igual: haciendo que la
-máquina salude. Es un ritual de iniciación y hoy te toca a ti.
-
-Ejecuta la celda de abajo (clic + `Shift+Enter`).""")
-
-    c.code('print("¡Hola, mundo!")')
-
-    c.md("""¿Salió el texto ahí abajo? **Eso fue un programa.** Uno de verdad: una
-instrucción (`print`) que le ordenó a un computador mostrar algo, y el
-computador obedeció.
-
-Ahora lo importante: los programas **se modifican**. Haz que te salude a ti.
-Cambia solo lo que está entre comillas y ejecuta.
-""")
+    c.seccion(1, "Tu primer programa", 4, """Casi todo el que aprende a programar empieza haciendo que la máquina salude.
+Ejecuta la celda (clic + `Shift+Enter`). Después cambia lo que está entre
+comillas por tu nombre y vuelve a ejecutarla.""")
 
     c.code('''mi_nombre = "escribe tu nombre aquí"   # <- cambia SOLO lo que está entre comillas
 
+print("¡Hola, mundo!")
 print("Hola,", mi_nombre + ".", "Bienvenido a Algoritmos y Programación.")''')
 
-    c.md("""Acabas de usar tu primera **variable** (`mi_nombre`): una cajita con nombre
-donde guardas un dato. Volveremos a ellas en la semana 2; hoy solo saluda.
+    c.md("""**Eso fue un programa**: una instrucción (`print`) y el computador obedeció. Y
+usaste tu primera **variable** (`mi_nombre`): un nombre que guarda un dato.
 
-Fíjate en algo que va a gobernar todo el semestre: **el computador no adivinó
-nada.** Hizo exactamente lo que decía la instrucción, ni más ni menos. Cuando
-algo salga mal —y va a salir mal— la causa casi siempre será esa.
-""")
+Fíjate en que el computador **no adivinó nada**: hizo exactamente lo que decía
+la instrucción. Cuando algo salga mal, la causa casi siempre será esa.
 
-    c.md("""### 1.2 Tu punto de partida
+### 1.2 Tu punto de partida
 
-Antes de enseñarte nada, quiero saber de dónde arrancas. Esto **no tiene nota y
-no se compara con nadie**: es una foto tuya, de hoy, y en la semana 16 la vamos
-a volver a mirar juntos.
-
-Aquí no hay respuestas malas. Hay respuestas *de hoy*. Si no sabes algo,
-responde lo que te parezca y sigue: exactamente para eso existe el curso.
-
-Responde las siete y presiona el botón del final. **+10 XP por completarlo,
-elijas lo que elijas.**
+Siete preguntas **sin nota** sobre de dónde arrancas; en la semana 16 las
+volvemos a mirar. Responde lo que te parezca y presiona el botón del final:
+**+10 XP**. *Se usa de forma anónima y con tu consentimiento; no participar no
+afecta tu nota.*
 """)
 
     c.code("diagnostico()")
 
-    c.md("""*En el curso real, este punto de partida —junto con un cuestionario un poco más
-completo en Moodle— es la línea base con la que vamos a medir cuánto creciste
-durante el semestre. Se usa de forma anónima y con tu consentimiento informado;
-el profesor te lo explica en la primera clase, y no participar no afecta tu
-nota en absoluto.*
-""")
-
     # =========================================================================
     # Bloque 2 — Sección 2: el gancho
     # =========================================================================
-    c.seccion(2, "¿Qué pasó cuando presionaste Shift+Enter?", 4, """Escribiste una línea en español-ish, presionaste dos teclas y apareció un
-saludo. Entre esas dos cosas ocurrieron, como mínimo, **siete pasos** repartidos
-en cuatro piezas distintas, y ninguna de ellas entiende la palabra `print`.
+    c.seccion(2, "¿Qué pasó cuando presionaste Shift+Enter?", 1, """Escribiste una línea, presionaste dos teclas y apareció un saludo. Entre las dos
+cosas hay cuatro piezas, y ninguna entiende la palabra `print`: las tres
+primeras son **software** y la cuarta es **hardware**, un pedazo de silicio que
+solo sabe sumar en binario. **Tú pones la idea; ella pone la velocidad.**
 
-Ejecuta la celda para verlos.""")
+Ejecuta la celda para verlas.""")
 
     c.figura("s01_d4_shift_enter",
              "Los tres primeros pasos son software. El cuarto es hardware.")
 
-    c.md("""Los tres primeros pasos son **software**: programas que se pasan tu texto unos a
-otros. El cuarto es **hardware**: un pedazo de silicio que solo sabe sumar
-números binarios y no tiene idea de que existe el español.
-
-Y es rapidísimo. Ejecuta esto y no toques nada: solo léelo y **predice** cuánto
-va a tardar.
-""")
-
-    c.code('''import time
-
-inicio = time.perf_counter()
-total = 0
-for i in range(1_000_000):     # un millón de vueltas
-    total = total + i
-fin = time.perf_counter()
-
-print("Sumé el primer millón de números.")
-print("Resultado:", total)
-print("Tardé:", round(fin - inicio, 3), "segundos")''')
-
-    c.md("""Si tú hicieras esas sumas a mano, a una por segundo, sin dormir ni comer,
-tardarías **once días y medio**. Tu procesador tardó una fracción de segundo.
-
-Esa desproporción es toda la historia de este curso: la máquina es
-absurdamente rápida y absurdamente bruta. **Tú pones la idea; ella pone la
-velocidad.** El resto del cuadernillo es entender cómo tu idea llega hasta ese
-pedazo de silicio.
-""")
-
     # =========================================================================
     # Bloque 3 — El entorno de Python
     # =========================================================================
-    c.seccion(3, "¿Dónde se escribe todo esto?", 21, """Ya ejecutaste código y ya sabes que quien lo ejecuta es el kernel. Falta
-ponerle nombre a las herramientas, porque durante el semestre se van a nombrar
-todo el tiempo y se confunden con facilidad.
+    c.seccion(3, "¿Dónde se escribe todo esto?", 3, """Quien ejecuta tu código es el **intérprete** (el kernel de este cuadernillo).
+Cuatro palabras que se confunden todo el tiempo:
 
-Cuatro palabras, y las tres aplicaciones que vas a usar de verdad.""")
+| Palabra | Qué es | Analogía |
+|---|---|---|
+| **Editor** | Un programa para escribir el texto de tu código | El cuaderno |
+| **Terminal** | Una ventana donde le das órdenes escritas al sistema operativo | La ventanilla de atención |
+| **Intérprete** | El programa que lee tu código **y lo ejecuta línea por línea** | El traductor simultáneo |
+| **IDE** | Un paquete que trae editor + terminal + intérprete + depurador | El taller completo |
 
-    c.md("""### 3C. ¿Dónde se escribe todo esto?
-
-Cuatro palabras que se confunden todo el tiempo y que a partir de hoy vas a
-distinguir:
-
-| Palabra | Qué es | Analogía | Si desaparece… |
-|---|---|---|---|
-| **Editor** | Un programa para escribir texto (tu código) | El cuaderno | Escribes en Notas y ya, pero sin colores ni ayudas |
-| **Terminal** | Una ventana donde le das órdenes escritas al sistema operativo | La ventanilla de atención | Tienes que hacer todo con clics |
-| **Intérprete** | El programa que lee tu código **y lo ejecuta línea por línea** | El traductor simultáneo | Tu código es un texto muerto |
-| **IDE** | Un paquete que trae editor + terminal + intérprete + depurador | El taller completo | Tienes las herramientas sueltas |
-
-Ejecuta el diagrama para verlo armado.
-""")
+Ejecuta el diagrama para verlo armado.""")
 
     c.figura("s01_d5_entorno",
              "El IDE no es una herramienta más: es la caja que contiene a las otras.")
 
-    c.md("""### Los tres nombres que vas a oír todo el semestre
+    c.md("""Y los tres nombres que vas a oír todo el semestre:
 
-| | Qué es exactamente | Para qué sirve | ¿Lo estás usando ahora? |
-|---|---|---|---|
-| **Python** | Un **lenguaje** y su **intérprete** (el programa `python`) | Entender y ejecutar tu código | Sí: es el motor debajo de este cuadernillo |
-| **VS Code** | Un **editor** que con extensiones se comporta como IDE | Escribir proyectos de varios archivos, en tu propio computador | No: eso lo instalas en la sección 8 |
-| **Jupyter** | Un **entorno de cuadernos**: texto + código + resultados en un solo documento | Aprender, explorar datos, mostrar resultados | Sí: esto **es** Jupyter |
+| | Qué es exactamente | ¿Lo estás usando ahora? |
+|---|---|---|
+| **Python** | Un **lenguaje** y su **intérprete** (el programa `python`) | Sí: es el motor debajo de este cuadernillo |
+| **VS Code** | Un **editor** que con extensiones se comporta como IDE | No: lo instalas en tu computador (sección 7) |
+| **Jupyter** | Un **entorno de cuadernos**: texto + código + resultados en un solo documento | Sí: esto **es** Jupyter |
 
-Cuidado con una confusión muy común: **Python no es VS Code.** Puedes usar
-Python sin VS Code (lo estás haciendo) y puedes tener VS Code sin Python (te
-serviría para escribir, no para ejecutar).
-""")
+**Python no es VS Code**: puedes usar Python sin VS Code (lo estás haciendo).
 
-    c.md("""### La terminal, sin salir del cuadernillo
+### La terminal, sin salir del cuadernillo
 
-En Jupyter, una línea que empieza con `!` no va al intérprete de Python: va
-**directo a la terminal del sistema**. Es la forma más segura de conocerla.
-Ejecuta la celda y lee cada respuesta.
+Una línea que empieza con `!` no va al intérprete de Python: va **directo a la
+terminal del sistema**. Ejecuta la celda y lee cada respuesta.
 """)
 
     c.code("""!pwd                 # "print working directory": ¿en qué carpeta estoy parado?
@@ -236,24 +157,14 @@ Ejecuta la celda y lee cada respuesta.
 !python --version    # ¿qué intérprete de Python tengo instalado?
 !which python        # ¿y dónde está ese programa exactamente?""")
 
-    c.md("""Léelo con calma, porque acabas de ver **tres cosas del temario oficial de la
-semana** en cuatro líneas:
+    c.md("""- `pwd`: tu **carpeta de trabajo**. Un programa que dice `open("notas.txt")`
+  sin más señas lo busca ahí.
+- `ls`: tus archivos. Ahí está `cuadernillo.ipynb`: **este documento es un
+  archivo**, con nombre, extensión (`.ipynb`), ruta y contenido.
+- `python --version` y `which python`: el **intérprete**, y en qué carpeta vive.
 
-- `pwd` te contestó algo como `/home/jovyan/work`. Esa es tu **carpeta de
-  trabajo**: cuando un programa dice `abrir("notas.txt")` sin más señas, lo
-  busca ahí. A eso se le llama *ruta relativa*.
-- `ls` te mostró tus archivos. Ahí está `cuadernillo.ipynb`: **este documento es
-  un archivo**, igual que cualquier otro.
-- `python --version` te contestó `Python 3.11.x`: ese es el **intérprete** del
-  que hablábamos, y `which` te dijo en qué carpeta vive el programa.
-
-Un archivo tiene **nombre**, **extensión** (`.txt`, `.py`, `.ipynb`), **ruta** y
-**contenido**. La extensión no cambia lo que el archivo *es*: es una promesa
-sobre lo que hay adentro.
+Crear un archivo desde código son tres verbos: **abrir, hacer algo, cerrar**.
 """)
-
-    c.figura("s01_d6_archivos",
-             "Abrir, hacer algo, cerrar. Dos veces: una para escribir y otra para leer.")
 
     c.code('''# Crea un archivo, escribe en él y vuelve a leerlo. Tres verbos: abrir, escribir, cerrar.
 with open("prueba.txt", "w", encoding="utf-8") as f:
@@ -262,38 +173,20 @@ with open("prueba.txt", "w", encoding="utf-8") as f:
 print(open("prueba.txt", encoding="utf-8").read())
 !ls -l prueba.txt''')
 
-    c.code('''quiz(
-    "Q4", 6,
-    "Estás en la sala de cómputo y quieres ejecutar un archivo <code>tarea.py</code> "
-    "que ya escribiste. ¿Qué necesitas SÍ o SÍ?",
-    ["Un editor", "El intérprete de Python", "Un IDE", "Una terminal"],
-    "El intérprete de Python",
-    "Escribir el archivo ya lo hiciste. Para <b>ejecutarlo</b> solo hay un "
-    "candidato: el intérprete. El editor, el IDE y la terminal son comodidades.",
-    pistas=["Fíjate en el verbo: no quieres *escribirlo* otra vez, quieres "
-            "*ejecutarlo*. ¿Cuál de los cuatro es el único que ejecuta?"],
-)''')
-
     # =========================================================================
     # Bloque 4 — Los tres errores
     # =========================================================================
-    c.seccion(4, "Los tres errores", 17, """Vas a equivocarte muchísimo este semestre. No es una amenaza, es aritmética:
-equivocarse es el 80 % de programar, también para quien lleva veinte años.
+    c.seccion(4, "Los tres errores", 7, """Equivocarse es el 80 % de programar, también para quien lleva veinte años. Lo
+que separa a quien avanza de quien se bloquea es **saber qué clase de error
+tiene enfrente**. Hay exactamente tres.
 
-Lo que separa a quien avanza de quien se bloquea no es equivocarse menos: es
-**saber qué clase de error tiene enfrente**. Hay exactamente tres, y se
-comportan de forma muy distinta.
-
-Las tres celdas que siguen están rotas **a propósito**. Ejecútalas tal cual. No
-puedes dañar nada: si algo se enreda, `Kernel → Restart` y el cuadernillo queda
-como nuevo.""")
+Las tres celdas que siguen están rotas **a propósito**. Ejecútalas tal cual; si
+algo se enreda, `Kernel → Restart` y el cuadernillo queda como nuevo.""")
 
     c.md("""### Error 1 de 3 — de sintaxis
 
-**Predice antes de ejecutar:** en la celda de abajo hay dos líneas. La segunda
-está mal escrita. ¿Crees que la primera alcanzará a imprimirse?
-
-Ejecuta y compruébalo.
+**Predice antes de ejecutar:** la segunda línea está mal escrita. ¿Se imprimirá
+la primera?
 """)
 
     c.code('''print("Esta línea está perfecta. ¿Se imprimirá?")
@@ -302,39 +195,20 @@ nota = 4.2
 if nota >= 3.0
     print("Aprobado")''', etiquetas=("error-sembrado",))
 
-    c.md("""**No se imprimió nada.** Ni siquiera la primera línea, que estaba perfecta.
+    c.md("""**No se imprimió nada**, ni siquiera la primera línea. Python revisa **todo** el
+texto antes de ejecutar **una sola línea**; si algo no es Python, se planta y no
+arranca. El mensaje te dice **dónde** (`line 4`, y el `^` señala el carácter) y
+**qué** (`SyntaxError: expected ':'`).
 
-Esa es la firma del **error de sintaxis**: Python revisa **todo** el texto antes
-de ejecutar **una sola línea**, como quien lee un párrafo completo antes de
-empezar a leerlo en voz alta. Si encuentra algo que no es español —perdón, que
-no es Python— se planta y no arranca.
-
-Cómo se lee el mensaje, de arriba abajo:
-
-| Parte | Qué te está diciendo |
-|---|---|
-| `Cell In[12], line 4` | **dónde**: celda 12, línea 4 |
-| `if nota >= 3.0` | la línea culpable, copiada |
-| `^` | el dedo señalando el punto exacto |
-| `SyntaxError: expected ':'` | **qué**: esperaba dos puntos |
-
-Python te dijo qué le falta, en qué línea y en qué carácter. Es lo más parecido
-a un profesor particular que vas a encontrar gratis.
-
-**Los cuatro sospechosos de siempre:** falta `:` al final de un `if`/`for`/`def`;
-falta una comilla; falta un paréntesis de cierre; falta o sobra una sangría.
-
-Arregla la celda de arriba (ponle los dos puntos), ejecútala de nuevo y mira
-cómo ahora **sí** se imprime la primera línea. Después ejecuta la celda de abajo
-para cobrar tus XP.
+Arregla la celda de arriba (ponle los dos puntos), ejecútala de nuevo y cobra
+tus XP en la celda de abajo.
 """)
 
     c.code('registrar("errores_sintaxis")   # +8 XP cuando la celda de arriba compile')
 
     c.md("""### Error 2 de 3 — de ejecución
 
-**Predice:** la celda de abajo tiene cuatro `print` numerados. ¿Cuántos alcanzan
-a salir?
+**Predice:** cuatro `print` numerados. ¿Cuántos alcanzan a salir?
 """)
 
     c.code('''print("Paso 1: recibo la nota del parcial")
@@ -344,48 +218,22 @@ print("Paso 2: la muestro tal cual ->", nota_texto)
 print("Paso 3: le sumo un punto  ->", nota_texto + 1)
 print("Paso 4: aquí nunca llego")''', etiquetas=("error-sembrado",))
 
-    c.md("""**Salieron dos de cuatro.** Ahí está toda la diferencia con el error anterior:
-aquí el programa **sí arrancó**, corrió un rato y se estrelló en la línea 5.
-Nunca llegó al paso 4.
+    c.md("""**Salieron dos de cuatro.** Aquí el programa **sí arrancó** y se estrelló a
+mitad de camino: **error de ejecución**. El traceback se lee **de abajo hacia
+arriba**: la última línea es la respuesta (`TypeError`: «me pediste pegar un
+texto con un número») y la flecha `---->` es el lugar. `nota_texto` es `"4.2"`
+**con comillas**: para Python es texto, no número.
 
-A esto se le llama **error de ejecución** (o *de tiempo de ejecución*, o
-*excepción*). La sintaxis estaba impecable: el problema apareció cuando los
-**datos reales** llegaron a la instrucción.
-
-Cómo se lee un traceback: **de abajo hacia arriba**.
-
-1. **La última línea es la respuesta.** `TypeError: can only concatenate str
-   (not "int") to str`. Traducido: «me pediste pegar un texto con un número, y
-   eso no lo sé hacer».
-2. **La flecha `---->` es el lugar.** Señala la línea exacta.
-3. Lo de arriba es el camino que trajo el programa hasta ahí. Hoy no lo
-   necesitas; en la semana 9 sí.
-
-¿Por qué falló? `nota_texto` es `"4.2"` **con comillas**: para Python es un
-texto, no un número. Un texto y un número no se suman, igual que no se suman
-tres manzanas y la palabra «manzana».
-
-**Los cuatro sospechosos de siempre:**
-
-| Mensaje | Qué pasó |
-|---|---|
-| `NameError` | usaste un nombre que no existe (¿lo escribiste mal? ¿olvidaste comillas?) |
-| `TypeError` | mezclaste tipos que no se mezclan |
-| `ZeroDivisionError` | dividiste por cero |
-| `IndexError` | pediste el elemento 4 de una lista de 3 |
-
-**Arréglalo:** quítale las comillas a `"4.2"` para que sea un número de verdad,
-y ejecuta otra vez. Deben salir los cuatro pasos.
+**Arréglalo:** quítale las comillas a `"4.2"` y ejecuta otra vez. Deben salir
+los cuatro pasos.
 """)
 
     c.code('registrar("errores_ejecucion")   # +8 XP cuando la celda de arriba corra entera')
 
     c.md("""### Error 3 de 3 — de lógica *(el peligroso)*
 
-**Predice, y esta vez apúntalo mentalmente:** si sacaste 4.0, 4.0 y 4.0 en tus
-tres parciales, ¿cuál es tu promedio?
-
-Ya lo sabes: 4.0. No hace falta calculadora. Ahora ejecuta la celda.
+**Predice:** con 4.0, 4.0 y 4.0 en tus tres parciales, ¿cuál es tu promedio?
+Ya lo sabes. Ahora ejecuta la celda.
 """)
 
     c.code('''n1, n2, n3 = 4.0, 4.0, 4.0
@@ -394,41 +242,26 @@ promedio = n1 + n2 + n3 / 3
 
 print("Tu promedio del semestre es:", promedio)''')
 
-    c.md("""Léelo otra vez: **9.33 de promedio, con tres notas de 4.0.**
-
-Y ahora lo verdaderamente inquietante: **¿dónde está el mensaje rojo?**
-
-No hay. No hay error de sintaxis (la línea está perfectamente escrita) ni error
-de ejecución (sumar y dividir números es legal). Python hizo **exactamente** lo
-que le pediste: por la regla de precedencia, primero dividió `n3 / 3` y después
-sumó. `4.0 + 4.0 + 1.333…`
-
-Tú querías `(n1 + n2 + n3) / 3`. Escribiste otra cosa. Y la máquina, que no
-tiene opinión sobre tus promedios, obedeció sin chistar.
+    c.md("""**9.33 de promedio con tres notas de 4.0, y ningún mensaje rojo.** La línea
+está bien escrita y sumar y dividir es legal: Python hizo **exactamente** lo que
+le pediste. Por precedencia, primero dividió `n3 / 3` y después sumó. Tú querías
+`(n1 + n2 + n3) / 3`.
 
 Eso es un **error de lógica**: el programa corre, entrega un resultado, y el
-resultado está mal. **Nadie te avisa. Nunca.**
-
-#### ¿Y entonces cómo se cazan?
-
-Instalando tu propia alarma. Un **caso de prueba** es una situación cuyo
-resultado correcto conoces de antemano, como los tres cuatros. Ejecuta:
+resultado está mal. **Nadie te avisa.** Se cazan con tu propia alarma: un **caso
+de prueba** cuyo resultado conoces de antemano, como los tres cuatros. Ejecuta:
 """)
 
     c.code('assert promedio == 4.0, "Con tres notas de 4.0 el promedio TIENE que dar 4.0"',
            etiquetas=("error-sembrado",))
 
     c.md("""**Acabas de fabricar el mensaje rojo que Python no te iba a dar.** Eso es
-`assert`: una frase que dice «esto tiene que ser cierto; si no lo es, grita».
-
-Y aquí está el secreto del cuadernillo: **las celdas de prueba de los ejercicios
-que vienen son exactamente esto.** Cuando ejecutes `test_ejercicio_1` y te
-salga verde, es que un montón de `assert` que escribimos nosotros se
-cumplieron. Cuando salga rojo, uno falló y te dirá cuál.
+`assert`: «esto tiene que ser cierto; si no, grita». **Las celdas de prueba de
+los ejercicios que vienen son exactamente esto.**
 
 Ahora **arregla** la celda del promedio (paréntesis) y vuelve a ejecutar las dos
-celdas: la del promedio y la del `assert`. Cuando el `assert` no diga nada,
-ganaste: en programación, **el silencio es la buena noticia**.
+celdas. Cuando el `assert` no diga nada, ganaste: **el silencio es la buena
+noticia**.
 """)
 
     c.code('registrar("errores_logica")   # +8 XP cuando el assert pase')
@@ -438,31 +271,15 @@ ganaste: en programación, **el silencio es la buena noticia**.
 | | **Sintaxis** | **Ejecución** | **Lógica** |
 |---|---|---|---|
 | ¿Cuándo aparece? | Antes de ejecutar nada | A mitad del programa | Nunca «aparece» |
-| ¿Alcanzó a correr algo? | No, ni una línea | Sí, hasta el punto del choque | Sí, **todo** |
+| ¿Alcanzó a correr algo? | No, ni una línea | Sí, hasta el choque | Sí, **todo** |
 | ¿Quién te avisa? | Python, con `SyntaxError` | Python, con un traceback | **Nadie. Solo tú.** |
-| ¿Dónde miras? | La línea y el `^` | La última línea del traceback | Tus casos de prueba |
-| Analogía | Una frase sin verbo: no se entiende | Una receta que pide un huevo y no hay huevos | Una receta que sale perfecta… de otro plato |
-| Se caza con | Leer el mensaje | Leer el mensaje | `assert` y casos conocidos |
+| Se caza con | Leer el mensaje | La última línea del traceback | `assert` y casos conocidos |
 
-Ejecuta el árbol de decisión y guárdalo: te va a servir todo el semestre.
+Ejecuta el árbol de decisión: te sirve todo el semestre.
 """)
 
     c.figura("s01_d8_arbol_errores",
              "Cuatro preguntas y sabes con cuál de los tres estás peleando.")
-
-    c.md("""#### Un error de lógica de 125 millones de dólares
-
-En 1999 la NASA perdió la sonda **Mars Climate Orbiter**. El software no falló:
-corrió perfecto, sin un solo mensaje de error, durante nueve meses de viaje. El
-problema fue que un equipo entregaba los datos de empuje en libras-fuerza y el
-otro los leía como si fueran newtons. La sonda entró demasiado bajo en la
-atmósfera de Marte y se desintegró.
-
-Ni sintaxis, ni ejecución. **Lógica.** Nadie avisó.
-
-Por eso, a partir de hoy, la pregunta que te vas a hacer siempre no es «¿corrió
-mi programa?» sino **«¿corrió, y además está bien?»**.
-""")
 
     c.code('''quiz(
     "Q5", 6,
@@ -481,18 +298,13 @@ mi programa?» sino **«¿corrió, y además está bien?»**.
     # =========================================================================
     # Bloque 5 — Los siete ejercicios (25 puntos)
     # =========================================================================
-    c.seccion(5, "Siete ejercicios", 31, """Aquí es donde se juega tu nota: **25 puntos** repartidos en siete ejercicios.
-Cada uno son dos celdas — la tuya y la de prueba — y la de prueba es solo un
-montón de `assert` como el que acabas de fabricar.
+    c.seccion(5, "Siete ejercicios", 65, """Aquí es donde se juega tu nota: **25 puntos** en siete ejercicios. Cada uno son
+dos celdas —la tuya y la de prueba— y la de prueba es un montón de `assert`
+como el que acabas de fabricar.
 
-Tres reglas de la casa:
-
-- **Los intentos no restan.** Ejecuta la celda de prueba tantas veces como
-  quieras.
-- **Las pistas tampoco.** Cada ejercicio trae tres, de la que hace pensar a la
-  que casi resuelve. Se piden con `pista("E1")`, `pista("E2")`…
-- Si ejecutas una celda de ejercicio sin haberla tocado, te va a salir
-  `NotImplementedError: ...`. No es un fallo del cuadernillo: es un error de
+- **Los intentos no restan.** Ejecuta la celda de prueba las veces que quieras.
+- **Las pistas tampoco.** Se piden con `pista("E1")`, `pista("E2")`…
+- Una celda de ejercicio sin tocar da `NotImplementedError`: es un error de
   ejecución **puesto a propósito** que significa «aquí falta tu parte». Bórralo
   cuando escribas tu respuesta.
 """)
@@ -656,6 +468,7 @@ assert TRAZA["b"] == 13, "la ultima linea le asigna a b el valor de suma"''',
             "que `doble` es 26 y `b` termina valiendo lo mismo que `suma`.",
         ],
     )
+
     # --- Ejercicio 4 ------------------------------------------------------
     c.ejercicio(
         numero=4, competencias=[], titulo="Diagnostica los tres", estrellas=2, puntos=3,
@@ -770,12 +583,6 @@ assert abs(promedio_de_tres(1.0, 2.0, 4.5) - 2.5) < 1e-9''',
         ],
     )
 
-    c.md("""*¿Notaste que te probamos con cuatro casos distintos y no con uno?* Con un solo
-caso podrías haber escrito `resultado = 4.0` y pasar. Con cuatro, la única forma
-de pasar es calcular de verdad. Así se evita hacer trampa… y así se diseñan las
-pruebas en la vida real.
-""")
-
     # --- Ejercicio 6 ------------------------------------------------------
     c.ejercicio(
         numero=6, competencias=[], titulo="Crea un archivo con código", estrellas=3, puntos=4,
@@ -851,12 +658,6 @@ assert "Zulma Ríos" in _c3 and "Luis Peña" not in _c3''',
         ],
     )
 
-    c.md("""Ejecuta `!ls -l` y ahí está tu archivo, con su tamaño y su fecha. Ábrelo desde
-el explorador de archivos de Jupyter (la pestaña del principio) y verás el
-mismo texto. **Una sola cosa, vista desde tres lugares distintos**: tu código,
-la terminal y el explorador.
-""")
-
     # --- Ejercicio 7 ------------------------------------------------------
     c.ejercicio(
         numero=7, competencias=['I3', 'I1'], titulo="Tu primer programa completo", estrellas=4, puntos=4,
@@ -911,183 +712,73 @@ assert ficha("Jose", [5.0, 5.0, 5.0]) == "Jose: promedio 5.00 — Aprobado"''',
             "estado: la nota 3.0 exacta APRUEBA, asi que la comparacion es `>=`, no `>`.",
         ],
     )
+
     # =========================================================================
-    # Bloque 6 — El tutor
+    # Bloque 6 — El tutor de IA
     # =========================================================================
-    c.seccion(6, "Tus cinco preguntas", 4, """Abajo a la derecha de la pantalla hay un botón con un robot. Es **Ava**, el
-tutor de inteligencia artificial del curso. Tres cosas que tienes que saber
-antes de tocarlo:
+    c.seccion(6, "Tus cinco preguntas", 1, """Abajo a la derecha hay un botón con un robot. Es **Ava**, el tutor de
+inteligencia artificial del curso. Tres cosas antes de tocarlo:
 
-**1. Tienes cinco preguntas por cuadernillo. Cinco. No cinco por ejercicio.**
-El contador va abajo en el panel. Se gasta una pregunta solo cuando Ava
-alcanza a responder: si se cae la conexión, no pierdes nada.
+1. **Tienes cinco preguntas por cuadernillo**, no por ejercicio. Se gasta una
+   solo cuando Ava alcanza a responder.
+2. **Ava no te da la respuesta**: responde con preguntas y pistas. En la
+   evaluación escrita Ava no entra contigo al salón.
+3. **Haz clic en la celda del ejercicio** antes de preguntar: así Ava ve el
+   enunciado, tu código y tu último error.
 
-**2. Ava no te va a dar la respuesta, ni suplicándole.** Está configurado como
-tutor socrático: responde con preguntas y pistas. No es tacañería. En la
-evaluación escrita —que pesa el 30 %— Ava no entra contigo al salón. Cada vez
-que le pides la solución, el que aprende es él; cada vez que le pides una
-pregunta, el que aprende eres tú.
-
-**3. Ava ve tu pantalla, pero solo si le apuntas.** Antes de preguntar, **haz
-clic en la celda del ejercicio en el que estás atascado**. El panel toma
-automáticamente el enunciado, el código que llevas escrito y el último error
-que te salió. Si preguntas desde cualquier otra parte del cuadernillo, Ava
-responde a ciegas y gastas una pregunta en un «¿en qué ejercicio vas?».""")
-
-    c.md("""### Antes de gastar una pregunta, haz estas tres cosas
-
-Son gratis y resuelven, con mucho, la mayoría de los atascos:
-
-1. **Lee la última línea del mensaje rojo.** Esa línea es la respuesta. Todo lo
-   de arriba es contexto.
-2. **Usa las tres pistas del ejercicio** (`pista("E3")`). Van de lo
-   general a lo concreto y no cuestan nada.
-3. **Explícale tu código en voz alta a la pared.** Suena ridículo y funciona:
-   la mitad de los errores aparecen solos al obligarte a decir qué hace cada
-   línea. Los programadores le dicen «depuración del patito de hule».
-
-### Presupuesto sugerido para este cuadernillo
-
-| Ejercicio | Preguntas sugeridas | Por qué |
-|---|---|---|
-| 1 (variables y tipos) | **0** | Las comillas deciden el tipo: está explicado en el enunciado |
-| 2 (las cuatro herramientas) | **0** | Es de concepto y la respuesta está en la sección 3. Si dudas, relee — es más rápido |
-| 3 (trazar el intérprete) | **0–1** | Si tu traza no cuadra, la pregunta buena es sobre el orden de ejecución, no sobre el resultado |
-| 4 (tipos de error) | **0** | La tabla comparativa de la sección 4 lo resuelve |
-| 5 (arreglar la lógica) | **1** | Aquí sí vale la pena si no ves qué está mal |
-| 6 (archivos) | **1** | El manejo de `open` es nuevo y es normal atascarse |
-| 7 (tu primera función) | **1–2** | Guarda estas: es el ejercicio más largo del cuadernillo |
-
-### Cómo se pregunta bien
-
-| Pregunta que te va a servir | Pregunta que desperdicia el turno |
-|---|---|
-| «Me sale `TypeError: can only concatenate str to str` en el ejercicio 5. **No me des la solución: hazme una pregunta** que me ayude a ver qué tipo de dato tengo.» | «Hazme el ejercicio 5.» |
-| «Creo que mi error es de lógica porque no sale mensaje rojo pero el número está mal. ¿Cómo compruebo si tengo razón?» | «¿Está bien mi código?» *(sin decir cuál ni qué esperabas)* |
-| «Explícame con **otra analogía** la diferencia entre intérprete y compilador; la del traductor no me quedó clara.» | «Explícame todo el cuadernillo.» |
-| «Mi mapa conceptual tiene 9 relaciones y el test dice que falta conectar 'procesador'. ¿Qué preguntas debería hacerme sobre el procesador?» | «Dame las 9 relaciones del mapa.» |
-| «Voy a decirte lo que **creo** que hace mi código línea por línea. Dime en cuál me equivoco.» | «Corrige esto.» *(pegando el código sin más)* |
-
-Fíjate en el patrón de la columna buena: **dice dónde está, qué esperaba, qué
-pasó, y pide una pregunta en vez de una respuesta.**
-""")
-
-    c.code('''quiz(
-    "A1", 6,
-    "Llevas 20 minutos atascado en el ejercicio 6 y te quedan 2 preguntas. "
-    "¿Cuál es la mejor jugada?",
-    ["Pedirle a Ava el código resuelto y copiarlo",
-     "Hacer clic en la celda del ejercicio 6 y pedirle a Ava que me haga preguntas "
-     "sobre lo que ya escribí",
-     "Preguntarle a Ava desde donde esté, sin seleccionar nada",
-     "Saltarme el ejercicio"],
-    "Hacer clic en la celda del ejercicio 6 y pedirle a Ava que me haga preguntas "
-    "sobre lo que ya escribí",
-    "Le diste contexto (la celda) y le pediste el tipo de ayuda que sí te deja "
-    "aprendiendo. Las dos cosas, en una sola pregunta.",
-    pistas=["Dos cosas importan aquí: <b>dónde</b> haces clic antes de preguntar y "
-            "<b>qué</b> le pides. Solo una opción acierta en las dos."],
-)''')
+Antes de gastar una pregunta, lee la última línea del mensaje rojo y pide las
+pistas del ejercicio (`pista("E3")`): son gratis. Y pregunta bien: «Me sale
+`TypeError` en el ejercicio 5. **No me des la solución: hazme una pregunta** que
+me ayude a ver qué tipo de dato tengo», no «Hazme el ejercicio 5».""")
 
     # =========================================================================
     # Bloque 7 — Cierre
     # =========================================================================
-    c.seccion(7, "Cierre", 8, """Antes de reclamar tu insignia, tres preguntas que solo te interesan a ti:
-
-1. **¿Qué puedes hacer hoy que no podías esta mañana?** (respóndete en voz
-   alta; si la respuesta es «nada», vuelve a la sección 3B)
-2. **¿Cuál de los tres tipos de error te parece más peligroso, y por qué?**
-3. **Si tuvieras que explicarle a alguien de tu casa qué es el software, ¿qué
-   ejemplo usarías?**""")
+    c.seccion(7, "Cierre", 3, """Antes de reclamar tu insignia, respóndete en voz alta: **¿qué puedes hacer hoy
+que no podías esta mañana?** y **¿cuál de los tres tipos de error te parece más
+peligroso, y por qué?**""")
 
     c.md("""## Tu entorno de trabajo
 
-Este cuadernillo corre en un computador de la universidad al que entras por el
-navegador. Alguien —nosotros— ya instaló ahí Python, Jupyter y todo lo demás,
-y por eso hoy pudiste programar a los diez minutos sin pelear con un instalador.
+Este cuadernillo corre en un servidor de la UIS donde ya está instalado todo, y
+**de aquí sale tu nota**. Para trabajar por tu cuenta y sin internet necesitas
+**tu propio Python**: se instala en la clase 2 y **no cuenta para la nota**.
 
-Eso es deliberado: **en la semana 1 nadie debería perder su primera clase
-porque un `.exe` falló.**
+**Ruta 1 — Tengo computador y puedo instalar**
 
-Pero también sería mentirte decir que ya tienes un entorno. El día que quieras
-programar sin internet, hacer tu proyecto final, o trabajar después de que este
-curso termine, vas a necesitar **tu propio Python**. Por eso la lista tiene dos
-columnas:
-
-| | **Columna A — El entorno del AVA** | **Columna B — Tu entorno local** |
-|---|---|---|
-| Dónde | En el navegador, servidor de la UIS | En tu computador |
-| Quién lo instaló | Nosotros | Tú, en la clase 2 |
-| Para qué sirve | Aprender y **ser calificado** | Trabajar por tu cuenta, sin internet |
-| ¿De aquí sale tu nota? | **Sí** | **No** |
-| ¿Es obligatorio? | Sí, y ya lo tienes | Sí para tu formación, **no para tu nota de hoy** |
-
-### Columna B — la instalación local, con dos rutas honestas
-
-**Ruta 1 — Tengo computador y puedo instalar** *(en la clase 2 o en casa)*
-
-1. Instala **Python** desde `python.org/downloads`. En Windows, marca la
-   casilla **«Add python.exe to PATH»** en la primera pantalla. Es la casilla
-   que, si no marcas, te va a costar media hora después.
-2. Abre una **terminal** (en Windows: `cmd`; en Mac/Linux: Terminal) y escribe
+1. Instala **Python** desde `python.org/downloads`. En Windows, marca la casilla
+   **«Add python.exe to PATH»** en la primera pantalla.
+2. Abre una **terminal** (`cmd` en Windows; Terminal en Mac/Linux) y escribe
    `python --version`. Si contesta con un número, ganaste.
 3. Instala **VS Code** desde `code.visualstudio.com` y, dentro, la extensión
    **Python** de Microsoft.
-4. Crea una carpeta `algoritmos-uis` y dentro un archivo `hola.py` con una
-   línea: `print("Hola desde mi propio computador")`.
-5. Ejecútalo de **tres formas distintas**, que es el punto del ejercicio:
-   · desde la terminal, con `python hola.py`
-   · desde VS Code, con el botón de ejecutar
-   · desde Jupyter, instalándolo con `pip install notebook` y corriendo
-     `jupyter notebook`
-6. Fíjate en lo que **no** cambia: las tres veces es el mismo intérprete
-   ejecutando el mismo archivo. Editor, terminal y cuaderno son tres puertas al
-   mismo cuarto.
+4. Crea la carpeta `algoritmos-uis` y dentro un archivo `hola.py` con una línea:
+   `print("Hola desde mi propio computador")`.
+5. Ejecútalo de **tres formas**: `python hola.py` en la terminal, el botón de
+   ejecutar de VS Code, y Jupyter (`pip install notebook` y luego
+   `jupyter notebook`). Las tres veces es el mismo intérprete: editor, terminal
+   y cuaderno son tres puertas al mismo cuarto.
 
-**Ruta 2 — No tengo computador propio, o no puedo instalar**
-
-Esto no te deja atrás y no te cuesta un punto. Tienes tres opciones, en orden:
-
-1. **La sala de cómputo de la UIS**, en la franja de la clase 2: el profesor
-   reserva 20 minutos para hacer la ruta 1 en equipo. Es la opción oficial.
-2. **Versión portátil**: WinPython y VS Code Portable caben en una USB y no
-   requieren permisos de administrador.
-3. **Ninguna por ahora**: sigue con la columna A, que es la que califica, y
-   haz la ruta 1 cuando puedas. Avísale al profesor por Moodle para que lo
-   sepa; no es un problema, es información.
+**Ruta 2 — No tengo computador propio, o no puedo instalar:** la sala de cómputo
+en la clase 2 (el profesor reserva 20 minutos para hacer la ruta 1 en equipo), o
+WinPython y VS Code Portable en una USB. Avísale al profesor por Moodle; no es
+un problema, es información.
 """)
 
-    c.code("""verificar_entorno()     # columna A, automática
-lista_comprobacion()    # columna B, autodeclarada + texto para Moodle""")
+    c.code("""verificar_entorno()     # el entorno del AVA, automático
+lista_comprobacion()    # tu entorno local, autodeclarado + texto para Moodle""")
 
     c.code("reclamar_insignia()")
 
-    c.md("""### Para profundizar — y para aprender a elegir fuentes
+    c.md("""**Para profundizar**, en fuentes confiables: la documentación oficial de Python
+(`docs.python.org/es/3/`), *How to Think Like a Computer Scientist* (edición
+Runestone, gratuita) y Real Python (`realpython.com`). La IA generativa —Ava
+incluido— también es una fuente, y se equivoca con mucha seguridad: todo dato
+concreto que te dé, verifícalo en la documentación oficial.
 
-Una competencia de este curso es **investigar en fuentes confiables**, no en el
-primer video que salga. Cuatro para empezar:
-
-- **Computer History Museum** (`computerhistory.org`) — la historia completa,
-  con documentos originales. Es un museo: no le paga nadie por convencerte.
-- **La documentación oficial de Python** (`docs.python.org/es/3/`) — en
-  español. Aburrida y exacta: la fuente definitiva cuando algo no funciona.
-- **How to Think Like a Computer Scientist**, edición Runestone — libro de CS1
-  abierto, gratuito e interactivo.
-- **Real Python** (`realpython.com`) — tutoriales serios, con autor firmado.
-
-**Cómo saber si una fuente es confiable**, en tres preguntas:
-*¿quién la publica y qué gana con eso?* · *¿dice de dónde saca lo que afirma?*
-· *¿de cuándo es?* (en informática, cinco años es una eternidad).
-
-Y una advertencia específica de 2026: **la IA generativa también es una fuente,
-y es una fuente que se equivoca con mucha seguridad.** Ava incluido. Todo lo
-que te diga sobre un dato concreto —una fecha, una función, un parámetro—
-verifícalo en la documentación oficial. Toma treinta segundos.
-""")
-
-    c.md("""---
+---
 *Semana 1 · AVA Algoritmos y Programación 41333 · UIS 2026-2*
-*Puntos de este cuadernillo: 25. XP: 70. Tu nota viaja sola a Moodle.*
+*Puntos de este cuadernillo: 25. XP: 40. Tu nota viaja sola a Moodle.*
 """)
 
     return c

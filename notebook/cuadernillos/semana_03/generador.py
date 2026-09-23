@@ -4,7 +4,7 @@
 Curso 41333 Algoritmos y Programación · Ingeniería en IA · UIS 2026-2
 Unidad 3 — Operadores y estructuras condicionales.
 
-40 puntos de nbgrader en cuatro ejercicios, 90 XP lúdicos y la insignia
+35 puntos de nbgrader en tres ejercicios, 5 XP lúdicos y la insignia
 «Quien decide». Todo lo que aparece aquí se apoya solo en lo de las semanas 1 y
 2: variables, tipos, entrada, salida, pseudocódigo y prueba de escritorio. No
 hay ciclos —son de la semana 4— ni listas ni funciones propias más allá de las
@@ -14,6 +14,14 @@ Una decisión de diseño: cada estructura aparece **dos veces seguidas**, primer
 en pseudocódigo y justo después en Python. No en secciones separadas. La
 confusión más cara del semestre es escribir `=` donde va `==`, y se cura viendo
 las dos formas pegadas, no en dos capítulos distintos.
+
+Recorte del 2026-09-22 (instrucción del profesor: ~30 minutos y más práctica):
+se fue la teoría que ningún ejercicio medía (precedencia, round/abs/sqrt, el
+anidado largo), dos de los tres quices de calentamiento y las demostraciones
+repetidas. Los ejercicios conservan su NÚMERO porque la semana ya está liberada
+y hay telemetría bajo esos ids: quedan el 1, el 2 y el 5; el 3 («La cadena de
+notas») se quitó porque medía lo mismo que el 5 —una cadena de decisiones en la
+que el orden manda— y el 4 no existe.
 """
 import os
 import sys
@@ -32,7 +40,7 @@ def construir(motor_comprimido=True):
         codigo="semana_03",
         titulo="Decidir",
         semana=3,
-        meta_xp=90,
+        meta_xp=5,
         insignia="Quien decide",
         tutor_ia=True,
         motor_comprimido=motor_comprimido,
@@ -48,11 +56,8 @@ def construir(motor_comprimido=True):
     c.md("""# Decidir
 ### Semana 3 · Unidad 3 · Operadores y estructuras condicionales
 
-Hasta ahora todos tus algoritmos hacían siempre lo mismo: leer, calcular,
-escribir. Siempre en el mismo orden, pasara lo que pasara.
-
-Esta semana tus programas empiezan a **decidir**. Y con eso dejan de ser una
-receta y empiezan a parecerse a algo que piensa.
+Hasta ahora tus algoritmos hacían siempre lo mismo: leer, calcular, escribir.
+Esta semana empiezan a **decidir**.
 
 **Empieza ejecutando la celda de abajo.**
 """)
@@ -64,44 +69,32 @@ receta y empiezan a parecerse a algo que piensa.
 
 - Escribir una **expresión booleana** y saber si vale Verdadero o Falso antes de
   ejecutarla.
-- Combinar condiciones con **y**, **o** y **no**, y predecir el resultado.
+- Combinar condiciones con **y**, **o** y **no**.
 - Escribir un **Si**, un **Si-Sino** y una **cadena Si-Sino Si**, en pseudocódigo
   y en Python.
-- Anidar condiciones sin perderte, y saber cuándo **no** conviene anidar.
-- Usar los operadores aritméticos —incluidos `div` y `mod`, que son nuevos— y
-  saber en qué orden los evalúa la máquina.
-- Usar `round`, `abs` y `math.sqrt` para las cuentas, y comparar decimales
-  sin que te traicione la coma.
 
 **Lo que NO se te pide todavía:** repetir algo muchas veces. Eso es la semana 4.
-Si un ejercicio te pide «para cada uno de los cien estudiantes», te equivocaste
-de cuadernillo.
 
-Este cuadernillo tiene **40 puntos** y **90 XP**. La insignia se llama
+Este cuadernillo tiene **35 puntos** y **5 XP**. La insignia se llama
 «Quien decide».
 """)
 
     # =========================================================================
     # Bloque 1 — Calentamiento
     # =========================================================================
-    c.seccion(1, "Calentamiento", 3, """Tres preguntas de la semana pasada. No tienen nota: dan XP y te dicen si
-puedes seguir o te conviene volver un cuadernillo atrás.""")
+    c.seccion(1, "Calentamiento", 1, """Una pregunta de la semana pasada. No tiene nota: da XP y te dice si puedes
+seguir.""")
 
-    c.code("quiz_eps()")
-    c.code("quiz_traza()")
     c.code("quiz_asignacion()")
 
     # =========================================================================
     # Bloque 2 — El gancho
     # =========================================================================
-    c.seccion(2, "¿Puedes matricular la materia?", 3, """En la UIS, para matricular una materia tienen que cumplirse **tres** cosas al
-mismo tiempo: haber aprobado el prerrequisito, tener cupo en el grupo y estar a
-paz y salvo financiero.
+    c.seccion(2, "¿Puedes matricular la materia?", 2, """En la UIS, para matricular una materia tienen que cumplirse **tres** cosas a
+la vez: haber aprobado el prerrequisito, tener cupo y estar a paz y salvo.
+Basta con que falle **una** para que la respuesta sea no.
 
-Tres condiciones. Y basta con que falle **una** para que la respuesta sea no.
-
-Antes de leer nada, ejecuta la celda de abajo y mira las cuatro filas. No hace
-falta que entiendas la sintaxis todavía: fíjate solo en cuándo sale Verdadero.""")
+Ejecuta la celda y fíjate solo en cuándo sale Verdadero.""")
 
     c.code('''evaluar(
     "True and True and True",     # aprobó, hay cupo, está a paz y salvo
@@ -111,32 +104,22 @@ falta que entiendas la sintaxis todavía: fíjate solo en cuándo sale Verdadero
 )''')
 
     c.md("""Una sola vez salió Verdadero: cuando las tres se cumplían. Eso es la palabra
-**y**, y es la mitad de lo que vas a aprender hoy. La otra mitad es **o**, que
-se conforma con una.
-
-El resto del cuadernillo es ponerle nombre a lo que acabas de ver y aprender a
-escribirlo en los dos idiomas del curso.
+**y**. La otra mitad de hoy es **o**, que se conforma con una.
 """)
 
     # =========================================================================
     # Bloque 3 — Concepto en corto
     # =========================================================================
-    c.seccion(3, "Concepto en corto", 8, """Lo que hay que entender antes de tocar nada. Tres ideas, y ninguna es larga.""")
+    c.seccion(3, "Concepto en corto", 3, """Tres ideas, y ninguna es larga.""")
 
     c.md("""### 3A. Una expresión booleana es una pregunta con dos respuestas posibles
 
-`nota >= 3.0` no es un cálculo: es una **pregunta**. Y como toda pregunta de
-sí o no, se contesta con uno de dos valores: **Verdadero** o **Falso**. Nada más.
-
-Ese tipo ya lo conoces: es el `bool` de la semana 1, el de `True` y `False`.
-
-Lo que cambia hoy es que ya no lo vas a escribir a mano, sino **calcularlo**
-comparando. Ejecuta y compruébalo:
+`nota >= 3.0` no es un cálculo: es una **pregunta**, y se contesta con
+**Verdadero** o **Falso**. Es el `bool` de la semana 1, pero ahora lo
+**calculas** comparando:
 """)
 
-    c.code('''nota = 4.2
-
-evaluar(
+    c.code('''evaluar(
     "4.2 >= 3.0",
     "4.2 == 3.0",
     "4.2 != 3.0",
@@ -145,58 +128,38 @@ evaluar(
 
     c.md("""> **El error que va a cometer media clase.** En matemáticas `=` compara. En
 > programación `=` **guarda** y `==` compara. Si escribes `if nota = 3.0` Python
-> te va a parar en seco con un error de sintaxis. Es de los errores buenos: te
-> avisa. El malo sería que funcionara.
+> te para en seco con un error de sintaxis.
 
 ### 3B. Los operadores, los tres grupos
 
-Ejecuta la chuleta. No te la aprendas: ejecuta la celda cada vez que dudes.
+Ejecuta la chuleta cada vez que dudes. Dos son nuevos: **`div`** (`//`) divide
+y tira los decimales, `7 // 2` es `3`; **`mod`** (`%`) da el residuo, `7 % 2`
+es `1`, y por eso «¿es par?» se escribe `numero % 2 == 0`.
 """)
 
     c.code("chuleta_operadores()")
 
-    c.md("""Dos de la tabla son nuevos y merecen un momento, porque resuelven problemas que
-hasta ahora no sabías plantear:
+    c.md("""### 3C. Y, o, no
 
-- **`div`** (en Python `//`) divide y tira los decimales. `7 // 2` es `3`, no
-  `3.5`. Sirve para «¿cuántos buses completos de 40 puestos necesito para 130
-  personas?».
-- **`mod`** (en Python `%`) da el **residuo**. `7 % 2` es `1`. Sirve para «¿este
-  número es par?» — lo es cuando `numero % 2 == 0`— y para repartir en turnos.
-
-### 3C. Y, o, no
-
-Ejecuta la celda: el color hace el resumen mejor que cualquier párrafo.
+Ejecuta la celda: el color hace el resumen mejor que cualquier párrafo. Y
+**no** simplemente le da la vuelta: `no Verdadero` es Falso.
 """)
 
     c.code("tablas_de_verdad()")
 
-    c.md("""Y **no** simplemente le da la vuelta: `no Verdadero` es Falso.
-
-> **Cuidado con la trampa del español.** «Si la nota no es 3 ni 4» **no** se
-> escribe `nota != 3 or nota != 4`. Esa condición es Verdadera siempre: si la
-> nota es 3, no es 4, así que el `o` se conforma. Lo correcto es `y`:
-> `nota != 3 and nota != 4`. Cuando el enunciado dice «ni… ni…», casi siempre va
-> **y**.
-
-Compruébalo tú, con `nota = 3`:
+    c.md("""> **Cuidado con la trampa del español.** «Si la nota no es 3 ni 4» no se
+> escribe `nota != 3 or nota != 4` —eso es Verdadero siempre— sino
+> `nota != 3 and nota != 4`. Cuando el enunciado dice «ni… ni…», casi siempre
+> va **y**.
 """)
-
-    c.code('''evaluar(
-    "3 != 3 or 3 != 4",     # la trampa: sale Verdadero y no debería
-    "3 != 3 and 3 != 4",    # lo correcto: sale Falso, que es lo que queremos
-)''')
 
     # =========================================================================
     # Bloque 4 — Laboratorio
     # =========================================================================
-    c.seccion(4, "Laboratorio", 14, """De aquí en adelante todo se toca. Cada estructura aparece dos veces seguidas:
-primero en pseudocódigo, y justo debajo en Python. Léelas juntas — es la forma
-más rápida de que se te queden las dos.""")
+    c.seccion(4, "Laboratorio", 4, """Cada estructura aparece dos veces seguidas: primero en pseudocódigo, y justo
+debajo en Python. Léelas juntas.""")
 
     c.md("""### 4A. El Si simple: hacer algo, o no hacer nada
-
-**Pseudocódigo**
 
 ```
 Si nota >= 3.0 Entonces
@@ -204,24 +167,14 @@ Si nota >= 3.0 Entonces
 FinSi
 ```
 
-**Python**
-
 ```python
 if nota >= 3.0:
     print("Aprobaste")
 ```
 
-Tres diferencias que hay que ver de una vez:
-
-| | Pseudocódigo | Python |
-|---|---|---|
-| La palabra | `Si … Entonces` | `if …:` — los dos puntos son obligatorios |
-| El cierre | `FinSi` | No hay: cierra la **sangría** |
-| Lo de dentro | Va indentado por claridad | Va indentado **por obligación** |
-
-En Python la sangría no es decoración: **es** la sintaxis. Lo que está corrido
-cuatro espacios pertenece al `if`; lo que vuelve al margen, no. Ejecuta y mira
-la diferencia:
+`Si … Entonces` es `if …:` —los dos puntos son obligatorios— y `FinSi` no
+existe: en Python cierra la **sangría**. Lo que está corrido cuatro espacios
+pertenece al `if`; lo que vuelve al margen, no. Ejecuta y mira la diferencia:
 """)
 
     c.code('''nota = 2.5
@@ -232,8 +185,6 @@ print("Esta linea NO es del if: sale siempre")''')
 
     c.md("""### 4B. Si-Sino: dos caminos, siempre se toma uno
 
-**Pseudocódigo**
-
 ```
 Si nota >= 3.0 Entonces
     Escribir "Aprobaste"
@@ -242,8 +193,6 @@ Sino
 FinSi
 ```
 
-**Python**
-
 ```python
 if nota >= 3.0:
     print("Aprobaste")
@@ -251,14 +200,12 @@ else:
     print("Reprobaste")
 ```
 
-Ejecútalo de verdad en el motor de pseudocódigo, que además te dibuja el
-diagrama de flujo:
+Ejecútalo en el motor de pseudocódigo, que además te dibuja el diagrama de
+flujo:
 """)
 
     # El diagrama lo pidió el profesor mirando esta misma sección: «viendo ahí
-    # la flechita es más fácil ver por qué sí se ejecuta». Y el párrafo de
-    # arriba ya lo prometía desde siempre, así que la celda estaba faltando a
-    # su palabra: imprimía la salida y nada más.
+    # la flechita es más fácil ver por qué sí se ejecuta».
     c.code('''ALGORITMO = """
 Algoritmo Aprobar
     Definir nota Como Real
@@ -280,10 +227,10 @@ ava.figura(ps.diagrama(ALGORITMO), "Si-Sino: dos caminos, y siempre se toma uno"
 
     c.md("""### 4C. La cadena Si-Sino Si: más de dos caminos
 
-Cuando hay tres o más respuestas posibles, encadenas. **El orden importa**: se
-prueba de arriba abajo y se queda con la **primera** que se cumple.
-
-**Pseudocódigo**
+Cuando hay tres o más respuestas, encadenas. Se prueba de arriba abajo y se
+queda con la **primera** que se cumple, así que va **de lo más exigente a lo
+menos exigente**: si pusieras `nota >= 3.0` primero, un 4.8 entraría por ahí y
+nunca llegaría a «Excelente».
 
 ```
 Si nota >= 4.5 Entonces
@@ -295,22 +242,7 @@ Sino
 FinSi
 ```
 
-**Python** — aquí `elif` es la abreviatura de `else if`:
-
-```python
-if nota >= 4.5:
-    print("Excelente")
-elif nota >= 3.0:
-    print("Aprobado")
-else:
-    print("Reprobado")
-```
-
-> **Por qué el orden importa.** Si pusieras `nota >= 3.0` primero, un 4.8
-> entraría por ahí y nunca llegaría a «Excelente»: 4.8 también es mayor que 3.
-> En una cadena, **de lo más exigente a lo menos exigente**.
-
-Compruébalo cambiando el 4.8 por otras notas:
+En Python `elif` es la abreviatura de `else if`. Cambia el 4.8 por otras notas:
 """)
 
     c.code('''nota = 4.8
@@ -322,98 +254,23 @@ elif nota >= 3.0:
 else:
     print("Reprobado")''')
 
-    c.md("""### 4D. Anidar: una decisión dentro de otra
-
-A veces una respuesta solo tiene sentido si antes se cumplió otra cosa. Eso es
-anidar: un `if` **dentro** de otro `if`.
-
-```python
-if aprobo_prerrequisito:
-    if hay_cupo:
-        print("Puedes matricular")
-    else:
-        print("Aprobaste el prerrequisito, pero no hay cupo")
-else:
-    print("Primero tienes que aprobar el prerrequisito")
-```
-
-> **Cuándo NO anidar.** Si tus dos condiciones tienen que cumplirse a la vez y
-> te da igual cuál falló, no anides: únelas con `and`. Estas dos hacen lo mismo,
-> y la segunda se lee mejor:
->
-> ```python
-> if aprobo:
->     if hay_cupo:
->         print("Puedes matricular")
-> ```
-> ```python
-> if aprobo and hay_cupo:
->     print("Puedes matricular")
-> ```
->
-> Anida solo cuando necesitas **decir algo distinto** en cada caso, como en el
-> ejemplo de arriba.
-
-### 4E. Precedencia: en qué orden se evalúa
-
-`2 + 3 * 4` da 14, no 20: la multiplicación va primero. Lo mismo pasa con las
-comparaciones y con `y` / `o`. El orden completo, de primero a último:
-
-1. Paréntesis `( )`
-2. `*`, `/`, `//`, `%`
-3. `+`, `-`
-4. Comparaciones: `<`, `<=`, `>`, `>=`, `==`, `!=`
-5. `not`, luego `and`, luego `or`
-
-Lo que se te va a olvidar es que **`and` va antes que `or`**. Ejecuta:
-""")
-
-    c.code('''evaluar(
-    "True or False and False",      # se lee: True or (False and False)
-    "(True or False) and False",    # con parentesis cambia todo
-)''')
-
-    c.md("""### 4F. Tres funciones para cuentas
-
-Las decisiones de esta semana casi siempre comparan **números**, y tres
-funciones aparecen una y otra vez cuando esos números salen de un cálculo:
-""")
-
-    c.code('''print("round(3.14159, 2) =", round(3.14159, 2))   # redondea a 2 decimales
-print("abs(-7)            =", abs(-7))            # distancia al cero, sin signo
-
-import math
-print("math.sqrt(16)      =", math.sqrt(16))      # raiz cuadrada''')
-
-    c.md("""`round` es la que más vas a usar: el dinero se compara redondeado, no con sus
-catorce decimales. `abs` sirve para preguntar «¿se parecen?» sin que importe
-cuál es mayor: `abs(a - b) < 0.01` es *«a y b son practicamente el mismo
-numero»*, y así se comparan los decimales — **nunca** con `==`, porque
-`0.1 + 0.2` no da exactamente `0.3`.
-
-Para lo demás —raíces, senos, logaritmos— está `math`, que se pide una sola vez
-al principio del programa.
+    c.md("""> **Anidar** es meter un `if` dentro de otro. Hazlo solo cuando necesites
+> **decir algo distinto** en cada caso; si las dos condiciones tienen que
+> cumplirse a la vez y te da igual cuál falló, únelas con `and`.
 """)
 
     # =========================================================================
     # Bloque 5 — Ejercicios
     # =========================================================================
-    c.seccion(5, "Cuatro ejercicios", 18, """Aquí se juega tu nota: **40 puntos** en cuatro ejercicios de **10 puntos** cada uno, de menos a más.
+    c.seccion(5, "Tres ejercicios", 23, """Aquí se juega tu nota: **35 puntos** en tres ejercicios, de menos a más.
 
-### ⚠️ Importante: ¿Por qué existe `raise NotImplementedError` en las celdas de solución?
+Cada celda de solución trae la línea `raise NotImplementedError(...)`: le dice
+a la plataforma que el ejercicio **aún no se ha hecho**, para que una plantilla
+en blanco nunca cuente como un intento. Escribe tu solución y **bórrala**; si
+la dejas, tu código no llega a evaluarse.
 
-En cada ejercicio calificable encontrarás inicialmente en la celda de solución:
-```python
-# ESCRIBE TU CODIGO AQUI y borra la linea de abajo
-raise NotImplementedError("Todavia no has escrito tu respuesta")
-```
-
-**¿Por qué es fundamental esta celda/línea si aún no has escrito una solución al ejercicio?**
-1. **Identifica ejercicios pendientes sin ambigüedad:** Si ejecutas la celda sin resolverla o la entregas intacta, `raise NotImplementedError` le avisa explícitamente a nbgrader y a la plataforma AVA que el ejercicio **aún no se ha realizado**. Así el sistema reconoce que la plantilla está en blanco y no lo confunde con un intento fallido de programación.
-2. **Protección contra falsos aprobados:** Evita que una celda vacía o incompleta pueda ser evaluada por accidente o arroje aprobados falsos. Garantiza que solo se califique el código que tú escribas conscientemente.
-3. **¿Qué debes hacer al resolver el ejercicio?:** Escribe tu solución y **borra obligatoriamente la línea `raise NotImplementedError(...)`**. Si no la borras, Python detendrá la ejecución arrojando ese error y tu código no alcanzará a ser evaluado.
-
-Si te atascas, `pista("E1")`, `pista("E2")`, `pista("E3")` o `pista("E4")` te dan hasta tres ayudas escalonadas — pedirlas no resta puntos.""")
+Si te atascas, `pista("E1")`, `pista("E2")` o `pista("E5")` te dan hasta tres
+ayudas escalonadas — pedirlas no resta puntos.""")
 
     # --- Ejercicio 1 ------------------------------------------------------
     c.ejercicio(
@@ -491,9 +348,9 @@ assert RESPUESTAS["e"] is True, "'not' le da la vuelta a False"''',
         enunciado="""El parqueadero de la UIS cobra **$1.200 por hora**, pero si el vehículo estuvo
 **más de 8 horas** hay tarifa plana de **$8.000**.
 
-Completa el algoritmo. Guarda el pseudocódigo **completo** en la variable
+Completa el algoritmo y guarda el pseudocódigo **completo** en la variable
 `ALGORITMO_E2`, como texto entre triples comillas. La prueba lo va a **ejecutar**
-de verdad, con el motor del curso.
+con el motor del curso.
 
 ```
 Algoritmo Parqueadero
@@ -544,67 +401,16 @@ assert "9600" in _r8.salida, \\
         ],
     )
 
-    # --- Ejercicio 3 ------------------------------------------------------
+    # --- Ejercicio 5 ------------------------------------------------------
+    # Conserva su numero de siempre (commit e56c399): la semana esta liberada
+    # y la telemetria vive bajo ejercicio_5. Los numeros 3 y 4 no existen.
     c.ejercicio(
-        numero=3, competencias=['I3'], titulo="La cadena de notas", estrellas=2, puntos=10,
-        enunciado="""En algunos sistemas la nota numérica se traduce a letra:
-
-| Nota | Letra |
-|---|---|
-| 4.5 o más | `"A"` |
-| entre 4.0 y 4.49 | `"B"` |
-| entre 3.0 y 3.99 | `"C"` |
-| menos de 3.0 | `"F"` |
-
-Escribe `letra(nota)` que devuelva la letra correspondiente.
-
-**El orden de la cadena importa.** Piensa por dónde empezar: si pruebas primero
-la condición menos exigente, todas las notas altas se van a colar por ahí.""",
-        partida='''# Escribe tu función y recuerda borrar la línea raise NotImplementedError
-def letra(nota):
-    ...''',
-        solucion='''def letra(nota):
-    if nota >= 4.5:
-        return "A"
-    elif nota >= 4.0:
-        return "B"
-    elif nota >= 3.0:
-        return "C"
-    else:
-        return "F"''',
-        pruebas='''assert callable(letra), "letra debe ser una funcion"
-assert letra(4.8) == "A", "4.8 es A"
-assert letra(4.2) == "B", "4.2 es B"
-assert letra(3.5) == "C", "3.5 es C"
-assert letra(2.0) == "F", "2.0 es F"
-print("Las cuatro notas de ejemplo dan la letra correcta.")''',
-        pruebas_ocultas='''assert letra(4.5) == "A", "4.5 exacto ya es A: la tabla dice '4.5 o mas'"
-assert letra(4.49) == "B", "4.49 todavia no llega a A"
-assert letra(4.0) == "B", "4.0 exacto es B"
-assert letra(3.99) == "C"
-assert letra(3.0) == "C", "3.0 exacto es C, no F"
-assert letra(2.99) == "F"
-assert letra(0.0) == "F"
-assert letra(5.0) == "A"''',
-        pistas=[
-            "Cuatro respuestas posibles significan una cadena de tres preguntas mas un "
-            "`else` final para todo lo demas.",
-            "Empieza por la condicion MAS exigente. Si preguntas primero `nota >= 3.0`, "
-            "un 4.8 entra por ahi y nunca llega a ser A.",
-            "Cuidado con los bordes: la tabla dice «4.5 o mas», asi que 4.5 exacto es A. "
-            "Eso es `>=`, no `>`.",
-        ],
-    )
-
-    # --- Ejercicio 4 ------------------------------------------------------
-    c.ejercicio(
-        numero=4, competencias=['I3', 'I1'], titulo="¿Puede matricular?", estrellas=3, puntos=10,
+        numero=5, competencias=['I3'], titulo="¿Puede matricular?", estrellas=3, puntos=15,
         enunciado="""El del gancho, ahora en serio.
 
 `matricula(aprobo, cupo, paz_y_salvo)` recibe tres booleanos y **devuelve un
-texto** explicando la situación. No basta con decir sí o no: hay que decir
-**qué** falló, porque un sistema que solo dice «no» es un sistema que genera una
-fila en la oficina de registro.
+texto** explicando la situación: no basta con decir sí o no, hay que decir
+**qué** falló.
 
 | Situación | Devuelve |
 |---|---|
@@ -654,53 +460,34 @@ assert isinstance(matricula(True, True, True), str), "Debe devolver texto"''',
     # =========================================================================
     # Bloque 6 — El tutor
     # =========================================================================
-    c.seccion(6, "Habla con el asistente", 2, """Tienes **cinco preguntas** para todo este cuadernillo. Cinco, no cinco por
-ejercicio. Gástalas donde de verdad te atasques.""")
+    c.seccion(6, "Habla con el asistente", 1, """Tienes **cinco preguntas** para todo este cuadernillo. Guárdalas para el
+último ejercicio, que es el difícil: si te atascas en una predicción, ejecuta
+la expresión y mírala; si te atascas en pseudocódigo, el motor te dice la
+línea y qué esperaba.
 
-    c.md("""### En qué gastarlas
-
-Guárdalas para los dos últimos, que son los difíciles. Los primeros los resuelve
-releer la teoría: si te atascas en una predicción, ejecuta la expresión y mírala;
-si te atascas en pseudocódigo, el motor te dice la línea y qué esperaba. Ahí no
-hace falta gastar una pregunta.
-
-### Cómo se pregunta bien
-
-Mal: «no me sale el 4».
-Bien: «con `matricula(False, True, False)` mi función
+Mal: «no me sale el 5». Bien: «con `matricula(False, True, False)` mi función
 devuelve "Pendiente financiero" y esperaba "Falta el prerrequisito". ¿Qué tiene
-que ver el orden de mis `if`?»
-
-La segunda le dice al tutor qué probaste, qué salió y qué esperabas. Con eso te
-puede responder de verdad; con la primera solo puede adivinar.
-""")
+que ver el orden de mis `if`?». La segunda dice qué probaste, qué salió y qué
+esperabas; con la primera el tutor solo puede adivinar.""")
 
     # =========================================================================
     # Bloque 7 — Cierre
     # =========================================================================
-    c.seccion(7, "Cierre", 2, """Tres preguntas que solo te interesan a ti. Nadie las corrige.""")
+    c.seccion(7, "Cierre", 1, """Dos preguntas que solo te interesan a ti. Nadie las corrige.""")
 
     c.md("""- ¿Sabrías explicarle a alguien de tu casa **por qué** `=` y `==` no son lo
   mismo, sin usar la palabra «programación»?
-- De los cuatro ejercicios, ¿cuál te costó más? ¿Fue por la lógica o por la
-  sintaxis? No es lo mismo, y saber cuál de los dos te frena cambia cómo
-  estudias la semana que viene.
-- ¿Pusiste paréntesis donde dudabas, o los dejaste al azar y confiaste?
+- De los tres ejercicios, ¿cuál te costó más? ¿Fue por la lógica o por la
+  sintaxis? No es lo mismo, y saber cuál te frena cambia cómo estudias.
 
-### Lo que viene
-
-La semana 4 te da lo único que te falta para escribir cualquier programa:
-**repetir**. Con decisiones y repeticiones ya se puede escribir, literalmente,
-cualquier algoritmo. Lo demás del semestre es hacerlo bien.
-
-### Glosario de esta semana
+**Lo que viene:** la semana 4 te da lo único que te falta para escribir
+cualquier programa: **repetir**.
 
 | Palabra | Qué significa |
 |---|---|
 | **Expresión booleana** | Una pregunta que se contesta con Verdadero o Falso |
 | **Operador relacional** | El que compara dos valores: `==`, `!=`, `<`, `>`, `<=`, `>=` |
 | **Operador lógico** | El que combina respuestas: `and`, `or`, `not` |
-| **Precedencia** | El orden en que la máquina evalúa una expresión larga |
 | **Anidar** | Meter una decisión dentro de otra |
 | **`div` / `//`** | División que descarta los decimales |
 | **`mod` / `%`** | El residuo de una división |

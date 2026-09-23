@@ -2,7 +2,7 @@
 
 Qué es esto
 -----------
-Aquí vive solo lo de esta semana: los quices del calentamiento, la lista
+Aquí vive solo lo de esta semana: el quiz del calentamiento, la lista
 dibujada con sus índices, y el medidor de operaciones — que es el corazón
 pedagógico del cuadernillo.
 
@@ -12,11 +12,10 @@ semana el pseudocódigo se escribe y se lee, como pide el temario, pero no se
 ejecuta; todo lo calificable es Python. Se dice explícitamente en el cuadernillo
 para que nadie pierda media hora peleando con el motor.
 
-Y una decisión pedagógica: de los cuatro ordenamientos del temario, el
-estudiante **escribe** selección y burbuja, y **mide** merge y quicksort sin
-escribirlos. Los dos últimos son recursivos, y la recursión no se ha enseñado.
-Pedir que los implemente sería romper la regla de no usar lo que no se ha visto;
-pero medirlos sí se puede, y es donde está la lección que importa.
+Y una decisión pedagógica (recorte del 2026-09-22): ordenar se lee y se
+**mide**, no se escribe. Los ejercicios calificables son los de búsqueda. Merge
+y quicksort son recursivos y la recursión no se ha enseñado; medirlos sí se
+puede, y es donde está la lección que importa.
 
 Dependencias: biblioteca estándar. Sin matplotlib.
 """
@@ -49,34 +48,6 @@ def _s6_escapar(t):
 # =============================================================================
 # Calentamiento
 # =============================================================================
-def quiz_input():
-    ava = _s6_motor()
-    if ava is None:
-        return
-    return ava.quiz(
-        "s6_input", 5,
-        "El usuario escribe 25 en un `input()`. ¿Qué tipo tiene lo que llega?",
-        ["int", "float", "str", "Depende de lo que escriba"],
-        2,
-        "`input()` devuelve SIEMPRE texto, aunque el usuario escriba números. "
-        "Por eso hay que convertirlo con `int()` o `float()` antes de calcular.",
-    )
-
-
-def quiz_division():
-    ava = _s6_motor()
-    if ava is None:
-        return
-    return ava.quiz(
-        "s6_division", 5,
-        "¿Qué tipo devuelve `8 / 2` en Python?",
-        ["int, porque da 4 exacto", "float, siempre", "str", "Depende"],
-        1,
-        "La división `/` devuelve decimales SIEMPRE, aunque la cuenta sea "
-        "exacta: `8 / 2` es `4.0`, no `4`. El entero lo daría `8 // 2`.",
-    )
-
-
 def quiz_estructura():
     ava = _s6_motor()
     if ava is None:
@@ -258,7 +229,7 @@ def portada():
         'opacity:.82">Semana 6 · Unidad 6</div>'
         '<div style="font-size:26px;font-weight:700;margin:2px 0 6px">Buscar y ordenar</div>'
         '<div style="font-size:14.5px;line-height:1.5;opacity:.94">Listas, cadenas, busqueda y ordenamiento.<br>'
-        '<span style="opacity:.8">65 puntos · 95 XP · insignia «Quien ordena»</span></div></div>')
+        '<span style="opacity:.8">25 puntos · 5 XP · insignia «Quien ordena»</span></div></div>')
 
 
 # Alias: los cuadernillos 1 y 2 estrenaron dos nombres distintos para lo mismo

@@ -9,3 +9,6 @@ __pycache__/
 bitacora_semana1.txt
 mi_algoritmo.fprg
 .DS_Store
+
+# Copias de trabajo que crean los agentes de Claude Code; nunca van al repo.
+.claude/worktrees/

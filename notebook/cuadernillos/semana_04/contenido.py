@@ -4,8 +4,8 @@ Qué es esto
 -----------
 El motor común (`motor/ava_motor.py`) y el intérprete de pseudocódigo
 (`motor/pseudo_uis.py`) traen lo que sirve todas las semanas. Aquí vive solo lo
-de esta: los quices del calentamiento, el contador de vueltas dibujado y la
-tabla de traza de un ciclo.
+de esta: el quiz del calentamiento, el contador de vueltas dibujado y las
+tarjetas de contador, acumulador y bandera.
 
 Una nota que condiciona el cuadernillo entero: **el motor de pseudocódigo
 entiende `Mientras` pero no `Para`** (ver `pseudo_uis._INSTRUCCIONES`). No es
@@ -67,7 +67,7 @@ def _s4_escapar(t):
 
 
 # =============================================================================
-# Calentamiento — tres de la semana 3
+# Calentamiento — una de la semana 3
 # =============================================================================
 def quiz_igualdad():
     ava = _s4_motor()
@@ -85,34 +85,6 @@ def quiz_igualdad():
         "iguales y devuelven Verdadero o Falso.",
     )
 
-
-def quiz_cadena():
-    ava = _s4_motor()
-    if ava is None:
-        return
-    return ava.quiz(
-        "s4_cadena", 5,
-        "En una cadena `if / elif / else`, ¿cuántas ramas se ejecutan?",
-        ["Todas las que se cumplan", "Solo la primera que se cumple",
-         "Solo la última", "Ninguna, si no hay else"],
-        1,
-        "Se prueba de arriba abajo y en cuanto una se cumple, se ejecuta esa y "
-        "se salta el resto. Por eso el orden importa tanto.",
-    )
-
-
-def quiz_precedencia():
-    ava = _s4_motor()
-    if ava is None:
-        return
-    return ava.quiz(
-        "s4_precedencia", 5,
-        "¿Cuánto vale `10 % 3`?",
-        ["3", "1", "3.33", "0"],
-        1,
-        "`%` da el RESIDUO: 10 entre 3 son 3 con 1 de sobra. El 3 lo daría "
-        "`10 // 3`.",
-    )
 
 
 # =============================================================================
@@ -212,7 +184,7 @@ def portada():
         'opacity:.82">Semana 4 · Unidad 4</div>'
         '<div style="font-size:26px;font-weight:700;margin:2px 0 6px">Repetir</div>'
         '<div style="font-size:14.5px;line-height:1.5;opacity:.94">Ciclos, contadores y acumuladores.<br>'
-        '<span style="opacity:.8">65 puntos · 90 XP · insignia «Quien automatiza»</span></div></div>')
+        '<span style="opacity:.8">25 puntos · 5 XP · insignia «Quien automatiza»</span></div></div>')
 
 
 # Alias: los cuadernillos 1 y 2 estrenaron dos nombres distintos para lo mismo

@@ -250,7 +250,19 @@ def main(argv):
 
         # Un ejercicio sin competencia no da ningún error: simplemente
         # desaparece de los análisis. Por eso se avisa aquí.
-        mapeo[cuadernillo.codigo] = cuadernillo.competencias
+        # Un ejercicio que deja de existir en el generador no deja de existir
+        # en la telemetría: sus intentos siguen en la base bajo su id, y el JOIN
+        # que los clasifica necesita la etiqueta. Por eso el mapeo CONSERVA las
+        # etiquetas de los ids retirados en vez de borrarlas. Se decide por los
+        # ejercicios que existen, no por los etiquetados: si a un ejercicio vivo
+        # se le quita la etiqueta a propósito, no hay que resucitársela.
+        existentes = {f"ejercicio_{n}" for n, _ in cuadernillo._ejercicios}
+        retirados = {k: v for k, v in mapeo.get(cuadernillo.codigo, {}).items()
+                     if k not in existentes}
+        mapeo[cuadernillo.codigo] = {**retirados, **cuadernillo.competencias}
+        if retirados:
+            print(f"     Mapeo: se conservan {len(retirados)} id(s) retirado(s) con su "
+                  f"etiqueta, por el histórico: {', '.join(sorted(retirados))}")
         sin_etiquetar = [f"ejercicio_{n}" for n, _ in cuadernillo._ejercicios
                          if f"ejercicio_{n}" not in cuadernillo.competencias]
         if sin_etiquetar:

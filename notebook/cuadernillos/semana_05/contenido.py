@@ -6,8 +6,9 @@ La sesión 1 de esta unidad es la primera evaluación, así que el cuadernillo n
 trae examen: trae la **guía de repaso** con la que llegar a él, y el contenido
 nuevo de la sesión 2.
 
-Aquí vive solo lo de esta semana: el mapa de lo aprendido, la tabla de las tres
-estructuras, el autodiagnóstico por ejes y el visor de tipos.
+Aquí vive solo lo de esta semana: el mapa de lo aprendido, el autodiagnóstico
+y el visor de tipos. (La tabla de las tres estructuras y dos de los tres quices
+se fueron en el recorte del 2026-09-22: el cuadernillo bajó de 56 a 35 min.)
 
 Una decisión de enfoque que conviene conocer antes de editar: el temario oficial
 de la sesión 2 dice «lenguaje compilado e interpretado». El profesor pidió que
@@ -100,46 +101,6 @@ def mapa_del_curso():
 
 
 # =============================================================================
-# Las tres estructuras, en una tabla
-# =============================================================================
-_S5_ESTRUCTURAS = [
-    ("Secuencia", "una instrucción detrás de otra, siempre en el mismo orden",
-     "Leer, calcular, escribir", "todas las semanas"),
-    ("Decisión", "el programa elige entre dos o más caminos",
-     "Si / Sino · if / elif / else", "semana 3"),
-    ("Repetición", "una parte del programa se ejecuta muchas veces",
-     "Mientras / while · for", "semana 4"),
-]
-
-
-def las_tres_estructuras():
-    """Se dibujan juntas porque el punto que hay que entender es que son TRES.
-    No hay una cuarta: cualquier programa que exista se escribe con estas."""
-    filas = "".join(
-        f'<tr><td style="padding:8px 14px;font:600 14px {_S5_FUENTE};'
-        f'color:{_S5_VIOLETA};border-bottom:1px solid {_S5_BORDE}">{nombre}</td>'
-        f'<td style="padding:8px 14px;font:13.5px {_S5_FUENTE};'
-        f'border-bottom:1px solid {_S5_BORDE}">{que}</td>'
-        f'<td style="padding:8px 14px;font-family:{_S5_MONO};font-size:12.5px;'
-        f'border-bottom:1px solid {_S5_BORDE}">{_s5_escapar(como)}</td>'
-        f'<td style="padding:8px 14px;font:12.5px {_S5_FUENTE};color:{_S5_GRIS};'
-        f'border-bottom:1px solid {_S5_BORDE}">{donde}</td></tr>'
-        for nombre, que, como, donde in _S5_ESTRUCTURAS)
-    _s5_pintar(
-        f'<table style="border-collapse:collapse;border:1px solid {_S5_BORDE};'
-        f'width:100%;max-width:760px;margin:10px 0">'
-        f'<tr>' + "".join(
-            f'<th style="padding:7px 14px;background:#f4f6f8;text-align:left;'
-            f'font:600 12px {_S5_FUENTE}">{h}</th>'
-            for h in ("Estructura", "Qué hace", "Cómo se escribe", "Dónde se vio"))
-        + f'</tr>{filas}</table>'
-        f'<p style="font:13.5px {_S5_FUENTE};color:{_S5_GRIS};max-width:700px">'
-        f'No hay una cuarta. Cualquier programa que exista —un navegador, un '
-        f'videojuego, un modelo de inteligencia artificial— está escrito con '
-        f'estas tres y nada más.</p>')
-
-
-# =============================================================================
 # Autodiagnóstico
 # =============================================================================
 def quiz_errores():
@@ -154,39 +115,6 @@ def quiz_errores():
         2,
         "El de lógica es el único que no avisa. Por eso es el peligroso: hay que "
         "cazarlo probando, no esperando a que salga un mensaje.",
-    )
-
-
-def quiz_estructuras():
-    ava = _s5_motor()
-    if ava is None:
-        return
-    return ava.quiz(
-        "s5_estructuras", 5,
-        "¿Cuántas estructuras de control hacen falta para escribir cualquier "
-        "programa que exista?",
-        ["Una", "Dos", "Tres", "Depende del lenguaje"],
-        2,
-        "Secuencia, decisión y repetición. No hay una cuarta: todo lo demás son "
-        "comodidades construidas sobre estas tres.",
-    )
-
-
-def quiz_ciclo():
-    ava = _s5_motor()
-    if ava is None:
-        return
-    return ava.quiz(
-        "s5_ciclo", 5,
-        "¿Cuándo conviene un `for` en vez de un `while`?",
-        ["Cuando sabes de antemano cuántas vueltas vas a dar",
-         "Cuando el ciclo es corto",
-         "Cuando hay que sumar",
-         "Nunca: hacen lo mismo"],
-        0,
-        "Si sabes las vueltas antes de empezar, `for` te ahorra escribir "
-        "arranque, condición y paso por separado. Si depende de lo que pase "
-        "dentro, `while`.",
     )
 
 
@@ -243,7 +171,7 @@ def portada():
         'opacity:.82">Semana 5 · Unidad 5</div>'
         '<div style="font-size:26px;font-weight:700;margin:2px 0 6px">Consolidar</div>'
         '<div style="font-size:14.5px;line-height:1.5;opacity:.94">Media vuelta: repaso de las cuatro semanas y Python por dentro.<br>'
-        '<span style="opacity:.8">50 puntos · 85 XP · insignia «Media vuelta»</span></div></div>')
+        '<span style="opacity:.8">30 puntos · 5 XP · insignia «Media vuelta»</span></div></div>')
 
 
 # Alias: los cuadernillos 1 y 2 estrenaron dos nombres distintos para lo mismo

@@ -5,7 +5,7 @@ Qué es esto
 `motor/ava_motor.py` trae lo común a todas las semanas (barra de XP, quices,
 ordenar, pistas, tarjetas) y `motor/pseudo_uis.py` el mini-intérprete de
 pseudocódigo. **Este módulo no repite nada de eso.** Aquí vive solo lo de esta
-semana: los quices del calentamiento, la tabla de verdad interactiva, la
+semana: el quiz del calentamiento, la tabla de verdad interactiva, la
 chuleta de operadores y el evaluador de expresiones.
 
 Cómo se incrusta
@@ -86,40 +86,10 @@ def _s3_escapar(texto):
 
 
 # =============================================================================
-# Calentamiento — tres preguntas de la semana 2
+# Calentamiento — una pregunta de la semana 2
 # =============================================================================
-def quiz_eps():
-    ava = _s3_motor()
-    if ava is None:
-        return
-    return ava.quiz(
-        "s3_eps", 5,
-        "En la estructura Entrada-Proceso-Salida de un algoritmo que calcula el "
-        "total de una compra, ¿qué es el precio unitario?",
-        ["Una entrada", "Un proceso", "Una salida", "Una restricción"],
-        0,
-        "Es un dato que el algoritmo necesita recibir para poder empezar. El "
-        "proceso es la multiplicación; la salida es el total.",
-    )
-
-
-def quiz_traza():
-    ava = _s3_motor()
-    if ava is None:
-        return
-    return ava.quiz(
-        "s3_traza", 5,
-        "En una prueba de escritorio, ¿qué anotas en cada fila de la tabla?",
-        ["El valor de cada variable después de ejecutar una línea",
-         "El resultado final del algoritmo",
-         "Los errores que encontraste",
-         "El tiempo que tarda cada instrucción"],
-        0,
-        "Una fila por línea ejecutada y una columna por variable. Es la única "
-        "forma de ver dónde se tuerce un algoritmo sin ejecutarlo.",
-    )
-
-
+# Eran tres; el recorte del 2026-09-22 dejó una, la que apunta al error que
+# más cuesta esta semana: confundir la asignación con la comparación.
 def quiz_asignacion():
     ava = _s3_motor()
     if ava is None:
@@ -299,7 +269,7 @@ def portada():
         'opacity:.82">Semana 3 · Unidad 3</div>'
         '<div style="font-size:26px;font-weight:700;margin:2px 0 6px">Decidir</div>'
         '<div style="font-size:14.5px;line-height:1.5;opacity:.94">Expresiones booleanas, operadores y condicionales.<br>'
-        '<span style="opacity:.8">40 puntos · 90 XP · insignia «Quien decide»</span></div></div>')
+        '<span style="opacity:.8">35 puntos · 5 XP · insignia «Quien decide»</span></div></div>')
 
 
 # Alias: los cuadernillos 1 y 2 estrenaron dos nombres distintos para lo mismo
