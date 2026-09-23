@@ -19,11 +19,47 @@ el motor lúdico se incrustan dentro del propio notebook.
 """
 import base64
 import json
+import hashlib
 import os
+import re
 import zlib
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 RUTA_MOTOR = os.path.join(AQUI, "motor", "ava_motor.py")
+RUTA_ESQUEMA = os.path.join(AQUI, "..", "..", "database", "schema_v2.sql")
+
+
+def catalogo_competencias():
+    """{codigo: (codigo_oficial, descripcion)} leido de database/schema_v2.sql.
+
+    Se lee del esquema en vez de copiarlo aqui porque es el mismo texto que el
+    panel le ensena al docente: dos copias acabarian diciendo cosas distintas
+    sobre la misma competencia, y nadie sabria cual vale.
+    """
+    try:
+        with open(RUTA_ESQUEMA, encoding="utf-8") as f:
+            sql = f.read()
+    except OSError:
+        return {}
+    filas = re.findall(
+        r"\('(I\d)','(m[A-Z]+\d+)','([^']+)'\)", sql)
+    return {cod: (oficial, desc) for cod, oficial, desc in filas}
+
+
+def huella(ejercicio, llave, valor):
+    """La huella de una respuesta correcta, calculada al CONSTRUIR.
+
+    Tiene que dar exactamente lo mismo que `ava_motor.huella`, que es la que
+    corre dentro del cuadernillo. No se importa de allí porque ava_motor trae
+    IPython y aquí, construyendo, no hay IPython.
+
+    Que sean dos copias no se deja al azar: backend/tests/telemetria/
+    prueba_huella.py comprueba que coinciden. Si se separaran, el cuadernillo
+    diría que TODAS las respuestas están mal y nadie entendería por qué.
+    """
+    return hashlib.sha256(
+        f"{ejercicio}|{llave}|{valor!r}".encode("utf-8")
+    ).hexdigest()[:16]
 RUTA_SVG = os.path.join(AQUI, "diagramas", "svg")
 
 # Delimitadores en español; deben coincidir con los de notebook/nbgrader_config.py.
@@ -109,7 +145,12 @@ class Cuadernillo:
         self.celdas = []
         self._ejercicios = []         # (numero, puntos) para el resumen final
         self._pistas = {}             # clave -> pistas; se inyectan en el arranque
+        # exercise_id -> [competencias]. No va dentro del notebook ni viaja con
+        # cada intento: se emite aparte y se carga al backend, que lo resuelve
+        # por JOIN. Así, corregir una etiqueta corrige todo el histórico.
+        self.competencias = {}
         self._i_arranque = None       # dónde va la celda del motor
+        self._nota_respuesta_puesta = False   # «Cómo se responde», una sola vez
 
     # -- Celdas simples ------------------------------------------------------
     def md(self, texto):
@@ -151,14 +192,98 @@ class Cuadernillo:
         return self.md(cuerpo)
 
     # -- Piezas del motor ----------------------------------------------------
+    # Va delante de la celda del motor, que es lo primero de todo cuadernillo,
+    # así que sale en los seis sin tener que acordarse en cada generador.
+    #
+    # Las dos cosas que dice salieron de la primera clase real: seis estudiantes
+    # trabajaron el cuadernillo entero y no llegó ni una entrega --terminaban,
+    # daban por hecho que con eso bastaba, y cerraban--, y varios ejecutaban
+    # celdas sueltas sin correr las de arriba, lo que rompe todo porque cada
+    # celda usa lo que dejaron las anteriores.
+    INSTRUCCIONES = """> ### Antes de empezar, dos cosas
+>
+> **1. Ejecuta las celdas en orden, de arriba abajo.** Una por una, con
+> `Shift+Enter`. Cada celda usa lo que dejaron las de arriba, así que saltarte
+> una hace que las siguientes fallen aunque estén bien escritas.
+>
+> **2. Al terminar, entrega.** Tu trabajo **no le llega a tu profesor** hasta que
+> pulses **Guardar y entregar** — el botón está arriba y también al final del
+> cuadernillo. Puedes entregar las veces que quieras: siempre cuenta la última.
+"""
+
+    # Va justo antes del PRIMER ejercicio de cada cuadernillo, una sola vez.
+    #
+    # Lo pidió el profesor (22-sep): notas puntuales «para que los estudiantes
+    # no se confundan», con el ejemplo del raise NotImplementedError. Hasta
+    # ahora solo la semana 03 lo explicaba, y lo hacía en su propio generador;
+    # aquí sale en todos sin que cada semana tenga que acordarse.
+    #
+    # Lo que ve el alumno debajo de su plantilla lo pone «Generate» según
+    # notebook/nbgrader_config.py (ClearSolutions.code_stub): un comentario
+    # «ESCRIBE TU CODIGO AQUI y borra la linea de abajo» y la línea
+    # raise NotImplementedError("Todavia no has escrito tu respuesta").
+    # Esta nota explica esa línea; no se repite como comentario en la celda,
+    # porque el stub ya trae el suyo justo encima del raise.
+    NOTA_RESPUESTA = """> ### Cómo se responde un ejercicio
+>
+> Cada ejercicio son dos celdas. La primera es **la tuya**: trae la línea
+> `raise NotImplementedError(...)`, que solo significa «aquí falta tu
+> respuesta». **Bórrala** y escribe tu código en su lugar; si la dejas, tu
+> solución no llega a evaluarse. Ejecuta tu celda y después la **celda de
+> prueba** de abajo: ella te dice si vas bien, y puedes repetirla las veces
+> que quieras. Si te atascas, `pista("{clave}")`. No cambies el nombre de la
+> función ni muevas celdas.
+"""
+
     def arranque(self):
         """Primera celda de código: carga el motor y crea el objeto `ava`.
 
         Se deja marcada la posición: el contenido definitivo se arma en
         `a_dict()`, cuando ya se conocen las pistas de todos los ejercicios.
         """
+        self.md(self.INSTRUCCIONES)
+        self._i_competencias = len(self.celdas)
+        self.md("")                      # se rellena en a_dict()
         self._i_arranque = len(self.celdas)
         return self.code("", editable=False, etiquetas=("ava-motor",))
+
+    def _texto_competencias(self):
+        """Qué microcompetencia mide este cuadernillo, dicho al principio.
+
+        Lo pidió el profesor: «sería bueno incluir a qué tipo de
+        microcompetencia le estamos apuntando en este cuadernillo; así queda
+        explícito para nosotros y, cuando se haga la recopilación de
+        información, saber si lo medí o no lo medí».
+
+        Se arma de las etiquetas REALES de los ejercicios, no de una lista
+        escrita aparte: así no puede decir una cosa y medir otra.
+        """
+        usadas = sorted({c for cs in self.competencias.values() for c in cs})
+        if not usadas:
+            return ""
+
+        catalogo = catalogo_competencias()
+        cuantos = {}
+        for cs in self.competencias.values():
+            for c in cs:
+                cuantos[c] = cuantos.get(c, 0) + 1
+
+        filas = []
+        for cod in usadas:
+            oficial, desc = catalogo.get(cod, (cod, ""))
+            n = cuantos[cod]
+            filas.append(f"| **{oficial}** | {desc} | {n} |")
+
+        return (
+            "### Qué mide este cuadernillo\n\n"
+            "Cada ejercicio calificable está asociado a una microcompetencia del "
+            "programa. Estas son las de esta sesión:\n\n"
+            "| Microcompetencia | Qué significa | Ejercicios |\n"
+            "|---|---|---:|\n"
+            + "\n".join(filas)
+            + "\n\nNo hace falta que hagas nada con esto: está aquí para que sepas "
+              "qué se está midiendo y por qué estos ejercicios y no otros.\n"
+        )
 
     def _fuente_arranque(self):
         fuente = _incrustar([RUTA_MOTOR] + self.modulos, self.motor_comprimido)
@@ -166,6 +291,10 @@ class Cuadernillo:
             f'\nava = Motor(titulo={self.titulo!r}, meta_xp={self.meta_xp}, '
             f'insignia={self.insignia!r})\n'
             "quiz, ordenar, comprobar, pista = ava.quiz, ava.ordenar, ava.comprobar, ava.pista\n"
+            # revisar() y huella() NO se importan: el motor se incrusta con
+            # exec(), asi que sus funciones de nivel superior ya estan en el
+            # espacio global del cuadernillo. Un import fallaria, porque no
+            # existe ningun modulo 'ava_motor' que importar.
         )
         if self._pistas:
             # Las pistas viajan comprimidas y se registran aquí, no junto a cada
@@ -203,7 +332,8 @@ class Cuadernillo:
 
     # -- Ejercicios calificables --------------------------------------------
     def ejercicio(self, numero, titulo, enunciado, partida, solucion, pruebas,
-                  puntos=5, pistas=(), estrellas=1, pruebas_ocultas=""):
+                  puntos=5, pistas=(), estrellas=1, pruebas_ocultas="",
+                  competencias=()):
         """Un ejercicio autocalificado: enunciado + celda de solución + celda de prueba.
 
         `partida` es el código que verá el estudiante (lo que queda tras
@@ -213,6 +343,9 @@ class Cuadernillo:
         al calificar, para que no se pueda programar «contra la prueba».
         """
         clave = f"E{numero}"
+        if not self._nota_respuesta_puesta:
+            self.md(self.NOTA_RESPUESTA.format(clave=clave))
+            self._nota_respuesta_puesta = True
         nivel = "★" * estrellas + "☆" * (4 - estrellas)
         ayuda = (f'\n\n> ¿Atascado? Ejecuta `pista("{clave}")` en una celda nueva. '
                  f"Hay {len(pistas)}, de la que hace pensar a la que casi resuelve. "
@@ -254,6 +387,8 @@ class Cuadernillo:
             "execution_count": None, "outputs": [], "source": _lineas(cuerpo_test),
         })
         self._ejercicios.append((numero, puntos))
+        if competencias:
+            self.competencias[f"ejercicio_{numero}"] = list(competencias)
         return self
 
     # -- Salida --------------------------------------------------------------
@@ -267,6 +402,13 @@ class Cuadernillo:
                 "de progreso, ni pistas, ni verificadores."
             )
         self.celdas[self._i_arranque]["source"] = _lineas(self._fuente_arranque())
+        if getattr(self, "_i_competencias", None) is not None:
+            texto = self._texto_competencias()
+            if texto:
+                self.celdas[self._i_competencias]["source"] = _lineas(texto)
+            else:
+                # Sin etiquetas no se deja una celda vacia en medio.
+                self.celdas.pop(self._i_competencias)
         return {
             "cells": self.celdas,
             "metadata": {

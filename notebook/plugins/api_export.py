@@ -1,3 +1,28 @@
+# =============================================================================
+# OBSOLETO (2026-09-20) — ver docs/flujos_obsoletos.md
+# =============================================================================
+# Este plugin ya NO se registra. La linea que lo activaba esta comentada en
+# notebook/nbgrader_config.py.
+#
+# Que era: el exportador de nbgrader. Al ejecutar `nbgrader export`, subia el
+# gradebook al backend con POST a METRICS_API_URL.
+#
+# Por que se retira, dos motivos independientes:
+#
+#   1. Nadie lo ejecutaba. `nbgrader export` no aparece en ningun script,
+#      Dockerfile ni comando del AVA: la unica referencia en todo el
+#      repositorio era su propio registro.
+#   2. Apuntaba a METRICS_API_URL = .../internal/metrics, una ruta que no
+#      existe en el backend. Si alguien lo hubiera ejecutado, habria fallado.
+#
+# Que lo reemplaza: registrar_notas.py -> POST /internal/notas, disparado por
+# admin_bridge.py al envolver el Autograde de formgrader. Ese si funciona y se
+# ve en los logs de produccion.
+#
+# No se borra el archivo todavia: si algun dia hace falta un exportador de
+# nbgrader, este es el punto de partida y ya tiene resuelto el formato.
+# =============================================================================
+
 """
 INSTRUCTOR, ver jupyterhub_config.py):
     METRICS_API_URL    ej. http://api_go:8080/internal/metrics

@@ -578,7 +578,7 @@ def _tarjeta_diagnostico(respuestas, aciertos):
         lineas.append(
             '<div style="margin-bottom:8px">Anotado: no tienes instalación local '
             'garantizada. <b>Nada de la nota de este cuadernillo depende de eso</b> '
-            '— mira la sección 8.</div>'
+            '— mira la sección 7.</div>'
         )
     _pintar(
         f'<div style="font-family:{_FUENTE};font-size:14.5px;line-height:1.55;'
@@ -1132,7 +1132,7 @@ def lista_comprobacion():
     es una evidencia del microcurrículo, no porque decida nada.
     """
     if not HAY_WIDGETS:
-        print("Lista de comprobación del entorno local (columna B):")
+        print("Lista de comprobación del entorno local:")
         for texto in _CASILLAS_LOCAL:
             print("   [ ]", texto)
         print("\nCopia esta lista en el foro de Moodle indicando qué cumpliste.")
@@ -1214,11 +1214,10 @@ checklist_local = lista_comprobacion
 
 _LOGROS_INSIGNIA = [
     "Ejecuté y modifiqué mi primer programa",
-    "Vi la misma suma en los tres niveles de lenguaje",
-    "Programé la MiniMáquina en lenguaje de máquina",
+    "Distinguí editor, terminal, intérprete e IDE",
     "Rompí las tres celdas y leí los tres errores",
     "Creé un archivo desde código",
-    "Armé mi mapa conceptual",
+    "Escribí mi primera función completa",
 ]
 
 _PUENTE = ("<b>Próxima parada &rarr; Semana 2: De problemas a algoritmos.</b> La semana "
@@ -1226,7 +1225,7 @@ _PUENTE = ("<b>Próxima parada &rarr; Semana 2: De problemas a algoritmos.</b> L
 
 
 def reclamar_insignia():
-    """Seis casillas de cierre; con las seis marcadas se pide la insignia al motor."""
+    """Cinco casillas de cierre; con las cinco marcadas se pide la insignia al motor."""
     motor = _motor()
     if not HAY_WIDGETS or motor is None:
         if motor is not None:
@@ -1262,3 +1261,10 @@ def reclamar_insignia():
 
     boton.on_click(_al_pulsar)
     display(W.VBox(casillas + [boton, salida]))
+
+
+# Los cuadernillos 1 y 2 estrenaron dos nombres para la misma tarjeta.
+# El alias hace que los dos funcionen en todas las semanas: que un alumno
+# escriba el de otro cuadernillo y le salte un NameError en la PRIMERA celda
+# es la peor bienvenida posible, y ya paso una vez.
+portada = iniciar
