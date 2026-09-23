@@ -323,7 +323,10 @@ def main():
     ahora = datetime.now(timezone.utc)
     registro = _leer_json(REGISTRO, {})
 
-    if consulto:
+    # Una lista vacia nunca significa "el profesor retiro todo": nbexchange
+    # devuelve [] tambien cuando contesta HTML (un 403 sin token, un 5xx), y
+    # sin esta guarda eso vaciaba la carpeta del alumno en cada carga del panel.
+    if consulto and liberadas:
         _limpiar_retirados(liberadas, registro, previos)
 
     _migrar_modelo_viejo(activo_de(publicados, ahora))

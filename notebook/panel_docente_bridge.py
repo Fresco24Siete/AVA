@@ -1553,7 +1553,7 @@ def _html_panel(base_url, datos=None, aviso=None):
     </div>
     """
 
-    scripts = f"""
+    scripts = rf"""
 <script>
 (function() {{
   var raiz = "{raiz}";
