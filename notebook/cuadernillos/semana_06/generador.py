@@ -319,7 +319,7 @@ assert isinstance(posicion_de([1, 2], 2), int)''',
     )
 
     c.ejercicio(
-        numero=3, competencias=['I3'], titulo="Buscar por la mitad", estrellas=3, puntos=10,
+        numero=3, competencias=['I3', 'I1'], titulo="Buscar por la mitad", estrellas=3, puntos=10,
         enunciado="""Escribe `busqueda_binaria(datos, buscado)` sobre una lista **ya ordenada**.
 
 Devuelve el índice donde está, o `-1` si no está.

@@ -69,10 +69,11 @@ ejercicio distinto en una semana que ya tenga telemetría: el id es la identidad
 | `I1` | mCP17 | aplicar conocimientos matemáticos programando | 8 ejercicios, **le falta cobertura** |
 | `I3` | mCC87 | identificar variables y aspectos del problema para armar el algoritmo | 30 ejercicios, cubierta |
 | `I4` | mCC103 | reconocer qué problemas de una organización admiten tratamiento algorítmico | **0 ejercicios: no la mide nada** |
-| `I7` | mCP88 | investigar y seleccionar fuentes confiables | **0, y no es autocalificable** |
+| `I7` | mCP88 | investigar y seleccionar fuentes confiables | **fuera de la medición desde la v7 (2026-09-23)**: no se mide con trazas |
 
-Fuera de alcance: `I2` (mCC85), `I5` (mCA14), `I6` (mCA65). No etiquetes con
-ellos: el panel los descarta.
+Fuera de alcance: `I2` (mCC85), `I5` (mCA14), `I6` (mCA65) y, desde la v7, `I7`
+(mCP88). No etiquetes con ellos: el panel los descarta. En alcance quedan **tres**:
+`I1`, `I3`, `I4`.
 
 **Lo que hay que resolver con el profesor, no a ciegas:**
 
@@ -88,10 +89,10 @@ ellos: el panel los descarta.
   clavados en 2 de 3**. Un solo ejercicio `I1` más en las semanas 1 a 3 los mueve
   a todos de golpe. Pero hay que validar con el profesor que ese ejercicio de
   verdad mide «aplicar conocimientos matemáticos», no ponerlo por llegar al número.
-- **`I7` (mCP88) es la de las revisiones bibliográficas** y no sale de un
-  ejercicio autocalificado. Hay que decidir cómo se evidencia: una entrega
-  aparte, una rúbrica del profesor, o se deja fuera de la medición automática y
-  se dice así en el informe.
+- **`I7` (mCP88), la de las revisiones bibliográficas, quedó fuera de la
+  medición** (decisión de Bryan, 2026-09-22; migración v7). Un quiz «¿entraste
+  al enlace?» no sirve: los quices no emiten telemetría. En el informe se dice
+  que no se mide con trazas de actividad.
 
 ---
 

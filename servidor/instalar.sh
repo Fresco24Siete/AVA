@@ -432,7 +432,8 @@ else
     # Va DESPUÉS de la v2 a propósito: la v2 reescribe las descripciones con
     # ON CONFLICT DO UPDATE, así que aplicarla antes no serviría de nada.
     for m in database/migracion_v3.sql database/migracion_v4.sql \
-             database/migracion_v5.sql database/migracion_v6.sql; do
+             database/migracion_v5.sql database/migracion_v6.sql \
+             database/migracion_v7.sql; do
         [ -f "$m" ] || continue
         docker exec -i postgres-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -q -v ON_ERROR_STOP=1' \
             < "$m" >/dev/null 2>&1 || { mal "falló $m"; fallo_migracion=1; }

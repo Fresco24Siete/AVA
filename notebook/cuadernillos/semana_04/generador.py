@@ -178,7 +178,7 @@ for i in range(1, 6):
 infinito: ⏹ y revisa el paso.""")
 
     c.ejercicio(
-        numero=1, competencias=['I3'], titulo="¿Cuántas vueltas da?", estrellas=1, puntos=5,
+        numero=1, competencias=['I3', 'I1'], titulo="¿Cuántas vueltas da?", estrellas=1, puntos=5,
         enunciado="""Sin ejecutar nada, di cuántas veces se ejecuta el cuerpo de cada ciclo.
 
 | | Ciclo |

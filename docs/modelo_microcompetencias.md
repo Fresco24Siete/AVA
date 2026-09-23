@@ -461,6 +461,14 @@ una transacción: un corte a medias sería peor que no tenerlo.
 
 ## 6. Lo que este modelo NO hace
 
+> **Actualización 2026-09-23 (migración v7):** mCP88 (I7) sale del alcance.
+> Bryan, tras la reunión con el profesor: «vamos a decir que tampoco la podemos
+> medir». Un quiz «¿entraste al enlace?» daría XP pero no telemetría, y una sola
+> pregunta nunca llega al mínimo de 3 evidencias. En alcance quedan I1, I3 e I4;
+> I4 sigue sin ejercicio (hueco de contenido, del profesor). mCC85 (I2) ya
+> estaba fuera y Bryan lo ratificó.
+
+
 - **No mide mCP88 (I7).** El encargo dice que no es calificable: se resuelve con
   celdas markdown y una fuente externa. Sin intentos no hay fallos, y sin fallos
   esta fórmula no aplica. Queda `en_alcance = true` en el catálogo, pero su

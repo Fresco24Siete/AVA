@@ -265,7 +265,7 @@ assert TIPOS["f"] == "float", "float() convierte a decimal, aunque el numero sea
     )
 
     c.ejercicio(
-        numero=2, competencias=['I3'], titulo="Un programa completo", estrellas=4, puntos=15,
+        numero=2, competencias=['I3', 'I1'], titulo="Un programa completo", estrellas=4, puntos=15,
         enunciado="""Junta todo: conversión, repetición, decisión y salida.
 
 `boletin(textos)` recibe una lista de notas **como texto** —tal cual llegarían

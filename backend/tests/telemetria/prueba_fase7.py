@@ -233,10 +233,12 @@ def main():
         # El panel enseña SOLO las que el AVA puede medir. Las otras tres del
         # microcurriculo se evaluan por autorreporte y coevaluacion: ensenarlas
         # con un hueco al lado no informa de nada, solo invita a preguntarse por
-        # que estan siempre vacias. El profesor pidio ver cuatro, no siete.
+        # que estan siempre vacias. El profesor pidio ver cuatro, no siete; y
+        # desde la v7 (2026-09-23) son TRES: mCP88 salio porque no se mide con
+        # trazas, y el panel lo dice asi en vez de "0 de 3".
         fuera = [c for c in comp.values() if c.get("en_alcance") is False]
         ok("8. el panel solo enseña las competencias que el AVA puede medir",
-           len(comp) == 4 and not fuera and all(c.get("en_alcance") for c in comp.values()),
+           len(comp) == 3 and not fuera and all(c.get("en_alcance") for c in comp.values()),
            f"devueltas: {sorted(comp)}")
 
         # ------------------------------------------------------------------

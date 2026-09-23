@@ -2,8 +2,8 @@
 -- Migración v6 — alinear la descripción de mCP17 con lo que el AVA mide
 -- =============================================================================
 --
--- NO ESTÁ APLICADA NI CONECTADA AL INSTALADOR. Hace falta el visto bueno del
--- curso, porque cambia un texto que el docente Y el estudiante ven en pantalla.
+-- Aplicada a producción el 2026-09-21 y en el bucle de servidor/instalar.sh
+-- desde ese día. (La cabecera decía lo contrario hasta el 2026-09-23.)
 --
 -- EL PROBLEMA
 --

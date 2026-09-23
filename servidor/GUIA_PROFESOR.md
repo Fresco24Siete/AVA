@@ -77,16 +77,35 @@ avisa **cuando se cae**, no cada minuto: si lo ves una vez, es que pasó algo.
 
 ## Día a día
 
-**No tienes que hacer nada.** Cada vez que enciendas el computador, el AVA
-arranca solo por detrás, antes de que abras nada.
+El AVA corre solo en el servidor; no tienes que encenderlo ni vigilarlo. Lo que
+**sí es tuyo cada semana** son cuatro botones del formgrader, en este orden.
+Sin ellos los estudiantes entregan, pero nadie recoge y nadie les devuelve nada
+(pasó: 19 entregas de la semana 2 esperaron tres semanas).
 
-Dos cosas que sí conviene saber:
+Abre el AVA con tu cuenta de docente → pestaña **Formgrader** → **Manage
+Assignments**. Para la semana que acaba de cerrar:
 
-- **Mientras haya clase, el computador tiene que estar encendido y con
-  internet.** Si lo apagas o lo suspendes, tus estudiantes ven un error.
-  Vale la pena desactivar la suspensión automática en Configuración › Energía.
-- **Si cambias de red** (de la casa a la universidad, por ejemplo), no pasa
-  nada: la dirección sigue siendo la misma.
+1. **Collect** — recoge las entregas del buzón. Verás cuántas llegaron.
+2. **Autograde** — corrige solo, contra las pruebas del cuadernillo. Si alguna
+   celda pide revisión manual, aparece marcada; puedes darle nota ahí mismo.
+3. **Generate Feedback** — arma la corrección de cada estudiante.
+4. **Release Feedback** — se la envía. Hasta aquí no ha visto nada.
+
+Cinco minutos por semana. Hazlo el mismo día que cierras la semana, para que la
+corrección les llegue mientras todavía se acuerdan del cuadernillo.
+
+Y para abrir la semana siguiente: **Generate** (crea la versión sin soluciones)
+y **Release** (la publica). Si republicas una semana que ya estaba publicada,
+al estudiante le llega como versión nueva al lado de la suya: no se le borra
+nada.
+
+Dos cosas que conviene saber:
+
+- **No borres una tarea publicada** («borrar-cuadernillo», o Unrelease + borrar)
+  mientras haya estudiantes con ella abierta: su copia local se archiva o se
+  elimina en el siguiente arranque. Si hace falta probar algo así, se prueba en
+  un curso aparte.
+- **Si cambias de red** no pasa nada: la dirección del AVA sigue siendo la misma.
 
 ## Si algo va mal
 

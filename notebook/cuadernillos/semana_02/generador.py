@@ -868,7 +868,7 @@ print("E6 correcto: cada dato quedó en su tipo y la ficha se armó bien.")''',
 
     # --- Ejercicio 7 ------------------------------------------------------
     c.ejercicio(
-        numero=7, competencias=['I3'], titulo="Traduce el algoritmo a Python", estrellas=3, puntos=15,
+        numero=7, competencias=['I3', 'I1'], titulo="Traduce el algoritmo a Python", estrellas=3, puntos=15,
         enunciado="""Este es el algoritmo del gancho, el de «¿a qué hora salgo de la casa?»:
 
 ```
@@ -964,7 +964,7 @@ print("E7 correcto: tu traducción a Python coincide con el pseudocódigo en los
 
     # --- Ejercicio 8 ------------------------------------------------------
     c.ejercicio(
-        numero=8, competencias=['I3'], titulo="El mismo algoritmo, en los dos idiomas",
+        numero=8, competencias=['I3', 'I1'], titulo="El mismo algoritmo, en los dos idiomas",
         estrellas=4, puntos=15,
         enunciado="""**Problema:** *Calcular cuánto vas a gastar en pasajes durante todo el
 semestre.* Entran tres datos: cuántos **viajes haces por semana**, cuántas
