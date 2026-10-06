@@ -21,10 +21,16 @@ vueltas, el Fibonacci generalizado en pseudocódigo y la bandera en Python.
 Dos límites que se respetan a propósito y que hay que tener presentes al
 editarlo:
 
-- **El motor de pseudocódigo entiende `Mientras`, no `Para`.** El ciclo se
-  explica con `Mientras`, que es el que enseña el mecanismo (arranque,
-  condición, paso), y el `Para` aparece solo en Python, presentado como lo que
-  es — un atajo para cuando ya sabes cuántas vueltas vas a dar.
+- **El ciclo se explica con `Mientras`**, que es el que enseña el mecanismo
+  (arranque, condición, paso). Hasta el 2026-10-05 el motor de pseudocódigo
+  SOLO entendía `Mientras`, y tras el recorte del 22-sep ningún texto visible
+  se lo decía al alumno: en el Ejercicio 2 escribieron el `Para ... FinPara`
+  que traen de PSeInt y el motor contestó «'Para i' no sirve como nombre de
+  variable. Arréglalo: Para_i» (unas 25 veces, 5 alumnos; uno llegó a
+  obedecerlo). Desde ese día el motor aprende `Para` (el cambio va en
+  `motor/pseudo_uis.py`) y el cuadernillo dice, en el laboratorio y en el
+  enunciado del Ejercicio 2, que valen los dos. Si este cuadernillo se publica
+  con un motor que todavía no entiende `Para`, esas dos frases son mentira.
 - **El `for` va siempre con `range()`.** Recorrer listas y cadenas es de la
   semana 6.
 """
@@ -126,6 +132,9 @@ Tres variables que se confunden:
 | `    i <- i + 1` | `    i = i + 1` |
 | `FinMientras` | |
 
+En pseudocódigo también existe el `Para` —`Para i <- 1 Hasta 5 Hacer ... FinPara`
+da estas mismas cinco vueltas—, y el intérprete del curso entiende los dos.
+
 Ejecútalo y mira el diagrama:
 """)
 
@@ -151,7 +160,10 @@ print(r.salida)
 # dibujo del de la semana pasada.
 ava.figura(ps.diagrama(CONTAR), "Mientras: la flecha que regresa es el ciclo")''')
 
-    c.md("""### El `for`, que solo existe en Python
+    # 2026-10-05: el título decía «El `for`, que solo existe en Python». Como
+    # palabra es cierto, pero se leía «en pseudocódigo no hay Para», que es
+    # falso y es lo que tumbó el Ejercicio 2. Ahora dice lo que es.
+    c.md("""### El `for`: el `Para` de Python
 
 Cuando sabes de antemano **cuántas vueltas** vas a dar, `for` junta las tres
 piezas en una línea: `for i in range(5):`.
@@ -244,12 +256,17 @@ assert VUELTAS["e"] == 4, "i va 0,1,2,3 y en la cuarta comprobacion i vale 4 y s
 8, 13...`. Aquí **los dos primeros los lee el usuario.** La regla no cambia;
 lo que cambia es por dónde arranca.
 
-Escribe el pseudocódigo en `ALGORITMO_E2`. El algoritmo:
+Escribe el pseudocódigo en `ALGORITMO_E2`. Todo pseudocódigo **empieza con la
+línea `Algoritmo <nombre>` y termina con `FinAlgoritmo`**: la plantilla ya trae
+las dos, escribe en medio. El ciclo lo puedes hacer con `Mientras ... FinMientras`
+o con `Para ... FinPara`: el intérprete entiende los dos. El algoritmo:
 
 1. Lee tres enteros, **en este orden**: `a`, `b` y `n`.
 2. Construye la sucesión donde el término 1 es `a`, el término 2 es `b`, y de
    ahí en adelante cada uno es la suma de los dos anteriores.
-3. Escribe el término `n`.
+3. Escribe el término `n`. Si quieres acompañarlo de mensajes, puedes
+   (`Escribir "El término es ", actual`): la prueba mira el **último número**
+   que escribe tu algoritmo.
 
 | lee | sucesión | término `n` |
 |---|---|---|
@@ -261,7 +278,16 @@ Si copias un Fibonacci hecho, la segunda fila te delata.
 
 > Bordes: con `n = 1` la respuesta es `a`, y con `n = 2` es `b`. Ahí el ciclo
 > **no da ni una vuelta**.""",
+        # 2026-10-05: la partida era una cadena vacía y 6 alumnos (15 intentos)
+        # se estrellaron con «tu programa no empieza con la línea 'Algoritmo
+        # <nombre>'»: entregaban el cuerpo suelto, sin cabecera ni cierre. El
+        # andamio trae las dos líneas y un comentario que dice dónde escribir.
+        # Solo, sin cuerpo, ejecuta bien pero no escribe ningún número, así que
+        # NO aprueba (verificar.py lo comprueba en cada construcción).
         partida='''ALGORITMO_E2 = """
+Algoritmo FibonacciGeneral
+    // Tu algoritmo va aqui, entre estas dos lineas (puedes borrar este comentario).
+FinAlgoritmo
 """''',
         solucion='''ALGORITMO_E2 = """
 Algoritmo FibonacciGeneral
@@ -286,21 +312,37 @@ Algoritmo FibonacciGeneral
     FinSi
 FinAlgoritmo
 """''',
-        pruebas='''assert isinstance(ALGORITMO_E2, str) and ALGORITMO_E2.strip(), \\
+        # 2026-10-05: la prueba comparaba TODA la salida con el número ("13").
+        # Un alumno que hiciera `Escribir "Dame a"` antes de leer, o `Escribir
+        # "El término es ", actual`, tenía el algoritmo bien y fallaba; y con
+        # las variables en Real el motor escribe "13.0" y también fallaba.
+        # Ahora se toma el ÚLTIMO NÚMERO de la salida —esté suelto, pegado a un
+        # texto ("es13") o seguido de un punto— y se compara por su valor.
+        # Sigue siendo el número completo: 110 no pasa por 11. Es más tolerante
+        # que antes y nunca más estricto: toda salida que antes aprobaba (el
+        # número a secas) aprueba igual. Las ocultas usan el mismo `_comprobar`.
+        pruebas='''import re
+
+assert isinstance(ALGORITMO_E2, str) and ALGORITMO_E2.strip(), \\
     "ALGORITMO_E2 debe traer el pseudocodigo completo, como texto"
 
-def _termino(a, b, n):
+def _salida(a, b, n):
     r = ps.ejecutar_pseudo(ALGORITMO_E2, entradas=[str(a), str(b), str(n)])
     assert r.ok, f"Con a={a}, b={b}, n={n} tu algoritmo no ejecuta: " + r.error_corto
     return r.salida.strip()
 
 def _comprobar(a, b, n, esperado):
-    # Se compara el numero COMPLETO, no si aparece dentro. Buscando "11" dentro
-    # de la salida, un algoritmo que escriba 110 pasaria la prueba.
-    obtenido = _termino(a, b, n)
-    assert obtenido == esperado, (
-        f"Con a={a}, b={b}, n={n} el termino es {esperado}, "
-        f"y tu algoritmo escribe {obtenido!r}")
+    # Puedes escribir mensajes ("Dame a", "El termino es ", actual): se mira el
+    # ULTIMO numero que escribe tu algoritmo. Y se compara el numero COMPLETO,
+    # no si aparece dentro: un algoritmo que escriba 110 no pasa por 11.
+    salida = _salida(a, b, n)
+    numeros = re.findall(r"-?\\d+(?:\\.\\d+)?", salida)
+    assert numeros, (
+        f"Con a={a}, b={b}, n={n} el termino es {esperado}, y tu algoritmo no "
+        f"escribe ningun numero. Todo lo que escribio: {salida!r}")
+    assert float(numeros[-1]) == float(esperado), (
+        f"Con a={a}, b={b}, n={n} el termino es {esperado}, y el ultimo numero "
+        f"que escribe tu algoritmo es {numeros[-1]}. Todo lo que escribio: {salida!r}")
 
 _comprobar(1, 1, 7, "13")
 _comprobar(2, 1, 6, "11")   # si copiaste un Fibonacci hecho, esta es la que te delata

@@ -11,7 +11,9 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const RUTA_CUSTOM = path.resolve(__dirname, '../../../notebook/custom.js');
+const RUTA_CUSTOM = process.env.CUSTOM_JS
+  ? path.resolve(process.env.CUSTOM_JS)
+  : path.resolve(__dirname, '../../../notebook/custom.js');
 const FUENTE = fs.readFileSync(RUTA_CUSTOM, 'utf8');
 const ESC = String.fromCharCode(27); // ESC de los codigos ANSI que manda ipykernel
 
@@ -121,6 +123,7 @@ function cargarEntorno(celdas, opts) {
     notebook_name: opts.notebook_name || 'semana_01.ipynb',
     events, get_cells() { return celdas; }, save_notebook() { return Promise.resolve(); },
   } };
+  if (opts.kernel) Jupyter.notebook.kernel = opts.kernel;
   const utils = {};
   const winListeners = {};
   const ventana = {
@@ -418,6 +421,202 @@ casoAsync('11c. El puente acepta (204) -> el buffer queda vacio y no hay avisos'
   const st = JSON.parse(env.localStorage.getItem('nbgrader-metrics:semana_01.ipynb'));
   igual(st.errores.ejercicio_1, []);
   afirmar(!env.consola.some(l => l[0] === 'warn'), 'sin avisos');
+});
+
+// ===========================================================================
+// Arranque del motor (2026-10-05). El motor se lanzaba o no segun el numero de
+// ejecucion GUARDADO en la celda, asi que quien volvia otro dia (kernel nuevo)
+// se quedaba sin el y recibia NameError: name 'ps' is not defined. Ahora se le
+// pregunta al kernel. Estas pruebas simulan el kernel con su espacio de nombres.
+// ===========================================================================
+function kernelFalso() {
+  // Dos modos: instantaneo (contesta al enviar) y FIFO (k.fifo = true: todo
+  // lo que se envia --preguntas y celdas-- entra en k.cola y se procesa en
+  // orden con k.procesar(), como hace el kernel de verdad).
+  const k = { espacio: {}, llamadas: [], conectado: true, retener: false, retenidas: [], romper: false, sinExpresiones: false,
+    fifo: false, cola: [],
+    is_connected() { return k.conectado; },
+    execute(code, callbacks, options) {
+      if (k.romper) throw new Error('kernel sin execute');
+      k.llamadas.push({ code, options });
+      const asigna = /^\s*(\w+)\s*=\s*True\s*$/.exec(code || '');
+      const pedidas = (options && options.user_expressions) || {};
+      const reply = callbacks && callbacks.shell && callbacks.shell.reply;
+      // La respuesta se calcula con el espacio de nombres del momento en que
+      // el kernel la procesa: por eso la retenida captura `espacio` al enviarse.
+      const espacio = k.espacio;
+      const contestar = () => {
+        if (asigna) espacio[asigna[1]] = true;
+        if (!reply) return;
+        if (k.sinExpresiones) { reply({ content: { status: 'ok' } }); return; }
+        const ue = {};
+        Object.keys(pedidas).forEach(n => {
+          const nombres = (pedidas[n].match(/'(\w+)'/g) || []).map(x => x.slice(1, -1));
+          ue[n] = { status: 'ok', data: { 'text/plain': nombres.some(x => espacio[x]) ? 'True' : 'False' } };
+        });
+        reply({ content: { status: 'ok', user_expressions: ue } });
+      };
+      contestar.abortar = () => { if (reply) reply({ content: { status: 'aborted' } }); };
+      if (k.fifo) k.cola.push(contestar); else if (k.retener) k.retenidas.push(contestar); else contestar();
+    },
+    procesar() { while (k.cola.length) k.cola.shift()(); },
+    abortarCola() { while (k.cola.length) { const f = k.cola.shift(); if (f.abortar) f.abortar(); } },
+    reiniciar() { k.espacio = {}; k.cola = []; },
+  };
+  return k;
+}
+function cuadernilloConMotor(doc, kernel, promptGuardado) {
+  const motor = celda(doc, {});
+  motor.metadata.tags = ['ava-motor'];
+  motor.input_prompt_number = promptGuardado === undefined ? null : promptGuardado;
+  motor.ejecuciones = 0;
+  motor.execute = function () {
+    motor.ejecuciones++; motor.input_prompt_number = motor.ejecuciones;
+    motor.last_msg_id = 'msg-motor-' + motor.ejecuciones;         // como CodeCell.execute
+    const trabajo = () => { kernel.espacio.ava = true; };
+    if (kernel.fifo) kernel.cola.push(trabajo); else trabajo();
+  };
+  const nb = notebookBasico(doc);
+  return { motor, celdas: [celda(doc, {}), motor].concat(nb.celdas) };
+}
+const kernelListo = env => env.events.trigger('kernel_ready.Kernel', {});
+const dispararTimeouts = env => env.timeouts.slice().forEach(t => t.fn());
+
+caso('M1. Cuadernillo recien bajado y kernel nuevo -> el motor se lanza solo, una vez', () => {
+  const doc = crearDocumento(); const k = kernelFalso(); const nb = cuadernilloConMotor(doc, k);
+  const env = cargarEntorno(nb.celdas, { kernel: k });
+  kernelListo(env);
+  igual(nb.motor.ejecuciones, 1, 'lanzado');
+  afirmar(k.espacio._ava_motor_lanzado === true, 'deja su marca en el kernel');
+  afirmar(k.llamadas.every(l => l.options && l.options.silent === true && l.options.store_history === false), 'las preguntas al kernel son silenciosas y no cuentan como celda');
+});
+
+caso('M2. EL FALLO: cuadernillo GUARDADO (la celda trae numero de ejecucion) y kernel nuevo -> se lanza', () => {
+  const doc = crearDocumento(); const k = kernelFalso(); const nb = cuadernilloConMotor(doc, k, 3);
+  const env = cargarEntorno(nb.celdas, { kernel: k });
+  kernelListo(env);
+  igual(nb.motor.ejecuciones, 1, 'quien vuelve otro dia tiene motor');
+  afirmar(k.espacio.ava === true, 'ava existe en el kernel');
+});
+
+caso('M3. Pagina recargada con el kernel VIVO (el motor ya esta) -> no se relanza, la barra de XP no se reinicia', () => {
+  const doc = crearDocumento(); const k = kernelFalso(); k.espacio.ava = true;
+  const nb = cuadernilloConMotor(doc, k, 3);
+  const env = cargarEntorno(nb.celdas, { kernel: k });
+  kernelListo(env); env.events.trigger('notebook_loaded.Notebook', {}); dispararTimeouts(env);
+  igual(nb.motor.ejecuciones, 0, 'no se relanza');
+});
+
+caso('M4. Kernel > Restart sin recargar la pagina -> se vuelve a lanzar', () => {
+  const doc = crearDocumento(); const k = kernelFalso(); const nb = cuadernilloConMotor(doc, k);
+  const env = cargarEntorno(nb.celdas, { kernel: k });
+  kernelListo(env);
+  igual(nb.motor.ejecuciones, 1, 'primer arranque');
+  k.reiniciar(); kernelListo(env);
+  igual(nb.motor.ejecuciones, 2, 'tras el reinicio hay motor otra vez');
+  k.reiniciar(); kernelListo(env);
+  igual(nb.motor.ejecuciones, 3, 'y tras otro');
+});
+
+caso('M5. Los cuatro disparadores juntos (kernel, notebook, 2 s, 5 s) -> una sola ejecucion', () => {
+  const doc = crearDocumento(); const k = kernelFalso(); const nb = cuadernilloConMotor(doc, k);
+  const env = cargarEntorno(nb.celdas, { kernel: k });
+  env.events.trigger('notebook_loaded.Notebook', {}); kernelListo(env); dispararTimeouts(env); kernelListo(env);
+  igual(nb.motor.ejecuciones, 1, 'una');
+});
+
+caso('M6. Cuadernillo antiguo cuyo motor NO deja `ava`: la marca propia evita relanzarlo en cada reconexion', () => {
+  const doc = crearDocumento(); const k = kernelFalso(); const nb = cuadernilloConMotor(doc, k);
+  nb.motor.execute = function () { nb.motor.ejecuciones++; };   // no define ava
+  const env = cargarEntorno(nb.celdas, { kernel: k });
+  kernelListo(env); kernelListo(env); dispararTimeouts(env);
+  igual(nb.motor.ejecuciones, 1, 'una, gracias a la marca');
+  k.reiniciar(); kernelListo(env);
+  igual(nb.motor.ejecuciones, 2, 'y tras reiniciar, otra');
+});
+
+caso('M7. El kernel contesta sin user_expressions -> se lanza una vez por pagina y no mas', () => {
+  const doc = crearDocumento(); const k = kernelFalso(); k.sinExpresiones = true;
+  const nb = cuadernilloConMotor(doc, k, 3);
+  const env = cargarEntorno(nb.celdas, { kernel: k });
+  kernelListo(env); kernelListo(env); dispararTimeouts(env);
+  igual(nb.motor.ejecuciones, 1, 'una');
+});
+
+caso('M8. kernel.execute lanza una excepcion -> no revienta y se lanza una vez', () => {
+  const doc = crearDocumento(); const k = kernelFalso(); k.romper = true;
+  const nb = cuadernilloConMotor(doc, k);
+  const env = cargarEntorno(nb.celdas, { kernel: k });
+  kernelListo(env); dispararTimeouts(env);
+  igual(nb.motor.ejecuciones, 1, 'una');
+});
+
+caso('M9. Kernel aun sin conectar -> nada; cuando conecta, el siguiente disparador lo lanza', () => {
+  const doc = crearDocumento(); const k = kernelFalso(); k.conectado = false;
+  const nb = cuadernilloConMotor(doc, k);
+  const env = cargarEntorno(nb.celdas, { kernel: k });
+  kernelListo(env);
+  igual(nb.motor.ejecuciones, 0, 'sin kernel no se ejecuta nada');
+  igual(k.llamadas.length, 0, 'ni se le pregunta');
+  k.conectado = true; dispararTimeouts(env);
+  igual(nb.motor.ejecuciones, 1, 'al conectar');
+});
+
+caso('M10. Pregunta sin contestar + reinicio: la respuesta vieja llega tarde y se ignora', () => {
+  const doc = crearDocumento(); const k = kernelFalso(); const nb = cuadernilloConMotor(doc, k, 3);
+  const env = cargarEntorno(nb.celdas, { kernel: k });
+  k.retener = true; kernelListo(env);            // kernel ocupado: la pregunta queda en el aire
+  igual(nb.motor.ejecuciones, 0, 'aun no hay respuesta');
+  dispararTimeouts(env);
+  igual(k.retenidas.length, 1, 'mientras hay una pregunta pendiente no se manda otra');
+  k.retener = false; k.reiniciar(); kernelListo(env);   // reinicio: pregunta nueva, contestada
+  igual(nb.motor.ejecuciones, 1, 'el kernel nuevo recibe su motor');
+  k.retenidas.forEach(f => f());                 // ahora llega la respuesta del kernel muerto
+  igual(nb.motor.ejecuciones, 1, 'la respuesta vieja no lanza nada');
+});
+
+caso('M11. Un cuadernillo sin celda de motor (o sin kernel) no rompe nada', () => {
+  const doc = crearDocumento(); const k = kernelFalso(); const nb = notebookBasico(doc);
+  const env = cargarEntorno(nb.celdas, { kernel: k });
+  kernelListo(env); dispararTimeouts(env);
+  igual(k.llamadas.length, 0, 'sin motor no se pregunta');
+  afirmar(!env.consola.some(l => l[0] === 'error'), 'sin errores');
+});
+
+caso('M12. Restart & Run All: la celda del motor ya esta en la cola detras de la pregunta -> NO se lanza otra vez', () => {
+  const doc = crearDocumento(); const k = kernelFalso(); k.fifo = true;
+  const nb = cuadernilloConMotor(doc, k, 3);
+  const env = cargarEntorno(nb.celdas, { kernel: k });
+  kernelListo(env);                       // kernel reiniciado: se encola la pregunta
+  nb.motor.execute();                     // ...y Run All encola el motor justo detras
+  igual(nb.motor.ejecuciones, 1, 'la de Run All');
+  k.procesar();                           // el kernel contesta la pregunta (aun sin ava) y luego corre el motor
+  igual(nb.motor.ejecuciones, 1, 'el motor NO se lanzo una segunda vez: la XP no se reinicia');
+  afirmar(k.espacio.ava === true, 'el motor de Run All si corrio');
+  dispararTimeouts(env); k.procesar();
+  igual(nb.motor.ejecuciones, 1, 'y las preguntas posteriores ven el motor cargado');
+});
+
+caso('M13. Pregunta ABORTADA (iba detras de una celda que fallo) con el motor ya cargado -> no se relanza; el siguiente disparador vuelve a preguntar', () => {
+  const doc = crearDocumento(); const k = kernelFalso(); k.fifo = true; k.espacio.ava = true;   // pagina recargada, kernel vivo
+  const nb = cuadernilloConMotor(doc, k, 3);
+  const env = cargarEntorno(nb.celdas, { kernel: k });
+  kernelListo(env); k.abortarCola();      // la pregunta se descarta sin mirarla
+  igual(nb.motor.ejecuciones, 0, 'no se lanza a ciegas');
+  dispararTimeouts(env);                  // vuelve a preguntar...
+  igual(k.cola.length >= 1, true, 'hay una pregunta nueva');
+  k.procesar();                           // ...y esta vez el kernel contesta: True
+  igual(nb.motor.ejecuciones, 0, 'el motor estaba, no se relanza');
+});
+
+caso('M14. Pregunta abortada en un kernel NUEVO -> el siguiente disparador si lo lanza', () => {
+  const doc = crearDocumento(); const k = kernelFalso(); k.fifo = true;
+  const nb = cuadernilloConMotor(doc, k);
+  const env = cargarEntorno(nb.celdas, { kernel: k });
+  kernelListo(env); k.abortarCola();
+  igual(nb.motor.ejecuciones, 0, 'tras la abortada, nada');
+  dispararTimeouts(env); k.procesar();
+  igual(nb.motor.ejecuciones, 1, 'la pregunta siguiente contesta False y se lanza');
 });
 
 (async () => {

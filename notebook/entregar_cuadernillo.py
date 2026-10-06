@@ -27,7 +27,9 @@ Si el servicio no responde, no falla: se queda con lo que ya tenía en disco y
 la nota local, y el panel se dibuja igual. Un fallo del intercambio no puede
 dejar al alumno sin sus cuadernillos.
 
-No sobrescribe el trabajo del alumno nunca.
+No sobrescribe el trabajo del alumno nunca, y tampoco lo borra: lo que el
+docente retira del servicio se MUEVE a archivados/ (que el índice nombra), y
+solo cuando lleva ausente un buen rato seguido (ver ESPERA_RETIRADA).
 """
 import hashlib
 import json
@@ -35,7 +37,7 @@ import os
 import re
 import shutil
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 CURSO = os.environ.get("CURSO_ID", "curso_default")
 DESTINO = os.environ.get("CUADERNILLO_DESTINO", "/home/jovyan/work/cuadernillo.ipynb")
@@ -51,8 +53,24 @@ REGISTRO = os.path.join(CARPETA, ".ava_versiones.json")
 
 # Qué hay publicado, según la última vez que se pudo preguntar al servicio. Lo
 # lee el panel (marca de «Esta semana», nombre del notebook para nbgrader,
-# constancia de entrega) sin tener que volver a llamar al servicio.
+# constancia de entrega) sin tener que volver a llamar al servicio. Lleva
+# tambien, en `ausentes`, desde cuando falta cada tarea que dejo de verse
+# liberada (ver ESPERA_RETIRADA): no hace falta otro fichero para eso.
 PUBLICADOS = os.path.join(CARPETA, ".ava_publicados.json")
+
+# A donde van los cuadernillos que el docente retiro del servicio. Se mueven,
+# nunca se borran, y el indice (inicio.ipynb) los nombra.
+ARCHIVADOS = os.path.join(CARPETA, "archivados")
+
+# Cuanto tiene que llevar AUSENTE una tarea, de forma continuada, para tratarla
+# como retirada. 2026-10-05: publicar una correccion hace 'retirar -> liberar'
+# en el servicio (asi lo exige nbexchange) y durante esos segundos la tarea no
+# esta aunque las demas sigan. Al alumno que cargaba su panel justo entonces se
+# le iba el cuadernillo, con su trabajo, a archivados/ (o se le borraba): con
+# 17 alumnos conectados en clase eso impedia publicar de dia. Quince minutos es
+# muchisimo mas que esa ventana y poquisimo para una retirada de verdad, que
+# no tiene prisa: nadie pierde nada porque el archivo se quede un rato mas.
+ESPERA_RETIRADA = timedelta(minutes=15)
 
 
 def _leer_json(ruta, por_defecto):
@@ -162,6 +180,13 @@ def _escribir_indice(entregados, activo):
             "cierra por fecha deja de aparecer aqui, pero lo que ya hiciste no "
             "se borra.",
         ]
+    # 2026-10-05: archivados/ no lo nombraba nadie, asi que un cuadernillo
+    # retirado era, para el alumno, un cuadernillo perdido. UNA linea, y solo
+    # cuando hay algo dentro; va tambien cuando no queda nada publicado, que es
+    # justo cuando mas falta hace.
+    archivados = _archivados()
+    if archivados:
+        lineas += ["", _nota_archivados(archivados)]
     try:
         with open(INICIO, "w", encoding="utf-8") as f:
             json.dump(_nb_markdown("\n".join(lineas)), f, ensure_ascii=False)
@@ -177,6 +202,22 @@ def _nota_anteriores(anteriores):
     if len(anteriores) == 1:
         return f"tienes guardada una versión anterior: {enlaces}"
     return f"tienes guardadas versiones anteriores: {enlaces}"
+
+
+def _archivados():
+    """Los cuadernillos que hay en archivados/, por nombre; [] si no hay."""
+    try:
+        return sorted(a for a in os.listdir(ARCHIVADOS) if a.endswith(".ipynb"))
+    except OSError:
+        return []
+
+
+def _nota_archivados(archivados):
+    """La linea del indice que dice donde quedo lo que el docente retiro."""
+    enlaces = ", ".join(f"[{a}](archivados/{a})" for a in archivados)
+    return ("Hay cuadernillos retirados por el docente guardados en la carpeta "
+            "`archivados/`; no se borraron, y lo que hubieras hecho en ellos "
+            f"sigue ahí: {enlaces}")
 
 
 def _sha(ruta):
@@ -240,90 +281,104 @@ def _archivo_vigente(codigo, version, registro):
     return f"{codigo}_v{_numero_version(en_disco[-1]) + 1}.ipynb"
 
 
-def _limpiar_retirados(liberadas, registro, previos):
-    """Limpia o archiva los cuadernillos que el docente retiró del servicio.
+def _destino_libre(archivo, ahora):
+    """Una ruta dentro de archivados/ que todavia no exista.
 
-    Si el alumno no modificó el cuadernillo (su SHA coincide con la versión
-    registrada de plantilla), se elimina del disco para no dejar archivos
-    fantasmas de tareas borradas. Si el alumno ya había trabajado en él, se
-    mueve a CARPETA/archivados/ para que no pierda sus notas ni código, pero
-    deje de aparecer como tarea activa en su espacio principal.
+    shutil.move sobre un nombre ocupado lo PISA sin avisar, y lo que hay ahi es
+    trabajo de un alumno archivado antes: al nuevo se le pone la fecha, y un
+    contador si hiciera falta.
     """
-    codigos_retirados = (set(previos.keys()) | {
+    destino = os.path.join(ARCHIVADOS, archivo)
+    if not os.path.exists(destino):
+        return destino
+    base, ext = os.path.splitext(archivo)
+    sello = ahora.strftime("%Y%m%d_%H%M%S")
+    destino = os.path.join(ARCHIVADOS, f"{base}_{sello}{ext}")
+    n = 1
+    while os.path.exists(destino):
+        n += 1
+        destino = os.path.join(ARCHIVADOS, f"{base}_{sello}_{n}{ext}")
+    return destino
+
+
+def _limpiar_retirados(liberadas, registro, previos, ausentes, ahora=None):
+    """Archiva los cuadernillos que el docente retiró del servicio.
+
+    Una tarea que el alumno tenía y ya no aparece liberada deja de ser tarea
+    activa: sus archivos (todas sus versiones) se MUEVEN a CARPETA/archivados/.
+
+    2026-10-05, tres cosas que antes no eran así y por qué:
+
+      - Antirrebote. Una ausencia sola no es una retirada: publicar una
+        corrección retira y vuelve a liberar, y a quien cargaba el panel en
+        esos segundos se le iba el cuadernillo de su carpeta. La primera vez
+        que una tarea falta solo se anota la hora en `ausentes` (que main()
+        guarda en la nota local, .ava_publicados.json); si vuelve, la anotación
+        se borra; solo se archiva si en una comprobación posterior sigue
+        faltando y pasaron ESPERA_RETIRADA. Con una anotación ilegible, o con
+        fecha futura (el reloj fue hacia atrás), la cuenta empieza de nuevo:
+        en la duda, no tocar.
+      - Nunca se borra un .ipynb. Lo que el alumno no había modificado se
+        eliminaba con os.remove; pero «no modificado» se decidía comparando con
+        un registro que puede estar perdido o ser de otro volumen, y mover es
+        igual de barato y se puede deshacer.
+      - No se borran la corrección del docente (.ava_correcciones/<tarea>.html)
+        ni la constancia de entrega (.ava_entregas.json): son lo que le queda
+        al alumno de una tarea ya entregada y calificada, y una retirada —menos
+        aún una de segundos— no es motivo para quitárselas.
+
+    `ausentes` es {tarea: desde cuándo falta, ISO en UTC} y se modifica en
+    sitio, igual que `registro`.
+    """
+    ahora = ahora or datetime.now(timezone.utc)
+    faltan = (set(previos.keys()) | {
         _tarea_de(a[:-6]) for a in registro if a.endswith(".ipynb")
-    }) - liberadas
+    } | set(ausentes.keys())) - liberadas
+
+    # Lo que volvio a estar liberado ya no lleva cuenta.
+    for tarea in list(ausentes.keys()):
+        if tarea not in faltan:
+            del ausentes[tarea]
+
+    codigos_retirados = set()
+    for tarea in faltan:
+        desde = ausentes.get(tarea)
+        desde = _parse(desde) if isinstance(desde, str) else None
+        if desde is None or desde > ahora:
+            ausentes[tarea] = ahora.isoformat()
+        elif ahora - desde >= ESPERA_RETIRADA:
+            codigos_retirados.add(tarea)
 
     if not codigos_retirados:
         return
-
-    archivados_dir = os.path.join(CARPETA, "archivados")
 
     try:
         archivos_en_disco = [f for f in os.listdir(CARPETA)
                              if f.endswith(".ipynb") and f != "inicio.ipynb"]
     except OSError:
-        archivos_en_disco = []
+        return        # no se pudo mirar: se reintenta en la proxima carga
 
+    sin_mover = set()
     for archivo in archivos_en_disco:
-        codigo = archivo[:-6]
-        tarea = _tarea_de(codigo)
+        tarea = _tarea_de(archivo[:-6])
         if tarea not in codigos_retirados:
             continue
-
-        ruta = os.path.join(CARPETA, archivo)
-        version_registrada = registro.get(archivo)
-
         try:
-            modificado = (version_registrada is None) or (_sha(ruta) != version_registrada)
-        except Exception:
-            modificado = True
+            os.makedirs(ARCHIVADOS, exist_ok=True)
+            shutil.move(os.path.join(CARPETA, archivo), _destino_libre(archivo, ahora))
+        except OSError:
+            sin_mover.add(tarea)
+            continue
+        registro.pop(archivo, None)
 
-        if modificado:
-            try:
-                os.makedirs(archivados_dir, exist_ok=True)
-                destino_arch = os.path.join(archivados_dir, archivo)
-                if os.path.exists(destino_arch):
-                    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    base_n, ext = os.path.splitext(archivo)
-                    destino_arch = os.path.join(archivados_dir, f"{base_n}_{ts}{ext}")
-                shutil.move(ruta, destino_arch)
-            except OSError:
-                pass
-        else:
-            try:
-                os.remove(ruta)
-            except OSError:
-                pass
-
-        if archivo in registro:
-            del registro[archivo]
-
-    # Limpiar cualquier residuo en registro de tareas retiradas
-    for archivo in list(registro.keys()):
-        if archivo.endswith(".ipynb") and _tarea_de(archivo[:-6]) in codigos_retirados:
-            del registro[archivo]
-
-    # Limpiar correcciones locales descargadas de tareas retiradas
-    correcciones_dir = os.path.join(CARPETA, ".ava_correcciones")
-    for tarea in codigos_retirados:
-        ruta_html = os.path.join(correcciones_dir, f"{tarea}.html")
-        if os.path.isfile(ruta_html):
-            try:
-                os.remove(ruta_html)
-            except OSError:
-                pass
-
-    # Limpiar anotaciones de entrega locales para tareas retiradas
-    entregas_file = os.path.join(CARPETA, ".ava_entregas.json")
-    entregas_local = _leer_json(entregas_file, {})
-    if entregas_local:
-        cambio = False
-        for k in list(entregas_local.keys()):
-            if _tarea_de(k) in codigos_retirados:
-                del entregas_local[k]
-                cambio = True
-        if cambio:
-            _guardar_json(entregas_file, entregas_local)
+    # Lo que se archivo entero deja de llevarse en la cuenta y en el registro.
+    # Si algun archivo no se pudo mover, la tarea conserva su anotacion y su
+    # registro, y se reintenta en la proxima carga.
+    for tarea in codigos_retirados - sin_mover:
+        ausentes.pop(tarea, None)
+        for archivo in list(registro.keys()):
+            if archivo.endswith(".ipynb") and _tarea_de(archivo[:-6]) == tarea:
+                del registro[archivo]
 
 
 def _consultar(publicados):
@@ -380,6 +435,11 @@ def main():
     previos = dict(nota.get("cuadernillos") or {})
     publicados = dict(previos)
     entregas = dict(nota.get("entregas") or {})
+    # Desde cuando falta cada tarea que dejo de verse liberada (ver
+    # _limpiar_retirados). Si la nota trae otra cosa que un objeto, no hay
+    # cuenta: se empieza de cero, que es el lado en el que no se toca nada.
+    ausentes = nota.get("ausentes")
+    ausentes = dict(ausentes) if isinstance(ausentes, dict) else {}
 
     consulto, entregas_nuevas, descargas, liberadas = _consultar(publicados)
     if consulto:
@@ -391,8 +451,10 @@ def main():
     # Una lista vacia nunca significa "el profesor retiro todo": nbexchange
     # devuelve [] tambien cuando contesta HTML (un 403 sin token, un 5xx), y
     # sin esta guarda eso vaciaba la carpeta del alumno en cada carga del panel.
+    # Sin consulta valida tampoco se mueve la cuenta de `ausentes`: se guarda
+    # tal cual estaba.
     if consulto and liberadas:
-        _limpiar_retirados(liberadas, registro, previos)
+        _limpiar_retirados(liberadas, registro, previos, ausentes, ahora)
 
     _migrar_modelo_viejo(activo_de(publicados, ahora))
     entregados = []
@@ -437,6 +499,7 @@ def main():
 
     _guardar_json(REGISTRO, registro)
     _guardar_json(PUBLICADOS, {"cuadernillos": publicados, "entregas": entregas,
+                               "ausentes": ausentes,
                                "consultado": consulto,
                                "en": datetime.now(timezone.utc).isoformat()})
     activo = activo_de(publicados, ahora)

@@ -481,33 +481,118 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
     // 2026-09-02. La celda estaba ahí y era correcta; simplemente nadie la
     // había ejecutado, y estando oculta no había forma de que lo supiera.
     //
-    // Se ejecuta una sola vez por sesión y solo si no tiene ya un número de
-    // ejecución: volver a correrla no rompe nada --el motor es idempotente--
-    // pero reiniciaría la barra de XP delante del estudiante.
-    var motor_lanzado = false;
-    function arrancar_motor() {
-        if (motor_lanzado) return;
-        if (!Jupyter || !Jupyter.notebook || !Jupyter.notebook.kernel) return;
-        if (!Jupyter.notebook.kernel.is_connected()) return;
+    // CUÁNDO se ejecuta lo decide el KERNEL, no la celda (2026-10-05).
+    //
+    // Hasta ese día se miraba `celda.input_prompt_number`: si la celda ya
+    // tenía número de ejecución, se daba el motor por arrancado. Pero ese
+    // número se GUARDA con el cuadernillo. El alumno que volvía otro día
+    // --kernel nuevo, vacío-- traía el número de la víspera, el motor no se
+    // lanzaba, y la salida guardada seguía diciendo «Motor del cuadernillo
+    // activo». Lo primero que ejecutaba le contestaba
+    //
+    //     NameError: name 'ps' is not defined
+    //
+    // (8 veces en la semana 4, más `pista`, `ava`...; un alumno lo describió
+    // así: «a veces arroja error el ejercicio incluso cuando uno no tiene nada
+    // malo y toca refrescar la página»). Y tras Kernel > Restart pasaba lo
+    // mismo, porque la marca de «ya lo lancé» vivía en la página y la página
+    // no se había recargado.
+    //
+    // Ahora se le PREGUNTA al kernel si el motor está cargado, con una
+    // ejecución silenciosa que no deja rastro ni cuenta como celda. Solo si
+    // contesta que no, se lanza. Así se cumplen las dos cosas a la vez:
+    //   - kernel nuevo o reiniciado  -> el motor se carga solo, siempre;
+    //   - página recargada con el kernel vivo -> NO se relanza, que era lo
+    //     que protegía la regla vieja: relanzarlo reinicia la barra de XP
+    //     delante del estudiante.
+    //
+    // La pregunta mira dos cosas: `ava`, que es lo que deja el motor, y una
+    // marca propia que se pone al lanzarlo, por si algún cuadernillo antiguo
+    // no deja `ava` (sin la marca se relanzaría en cada reconexión).
+    var MARCA_MOTOR = '_ava_motor_lanzado';
+    var SONDA_MOTOR = "('ava' in globals()) or bool(globals().get('" + MARCA_MOTOR + "'))";
+    var generacion_sonda = 0;        // cada pregunta al kernel lleva su número
+    var sonda_en_curso = false;
+    var motor_lanzado_aqui = false;  // en ESTA carga de la página
+
+    function celda_del_motor() {
         var celdas = Jupyter.notebook.get_cells();
         for (var i = 0; i < celdas.length; i++) {
-            var celda = celdas[i];
-            var tags = (celda.metadata && celda.metadata.tags) || [];
-            if (tags.indexOf('ava-motor') === -1) continue;
-            if (celda.input_prompt_number) { motor_lanzado = true; return; }
-            motor_lanzado = true;
-            try {
-                celda.execute();
-                console.log('[ava] motor del cuadernillo arrancado solo');
-            } catch (err) {
-                // Si falla, mejor dejar la celda a la vista que dejar al
-                // estudiante con un NameError y ninguna pista.
-                motor_lanzado = false;
-                console.warn('[ava] no se pudo arrancar el motor', err);
-            }
+            var tags = (celdas[i].metadata && celdas[i].metadata.tags) || [];
+            if (tags.indexOf('ava-motor') !== -1) return celdas[i];
+        }
+        return null;
+    }
+
+    function lanzar_motor(celda, kernel) {
+        motor_lanzado_aqui = true;
+        try {
+            celda.execute();
+            console.log('[ava] motor del cuadernillo arrancado solo');
+        } catch (err) {
+            // Si falla, mejor dejar la celda a la vista que dejar al
+            // estudiante con un NameError y ninguna pista.
+            motor_lanzado_aqui = false;
+            console.warn('[ava] no se pudo arrancar el motor', err);
             return;
         }
+        try {
+            // Va en la cola detrás de la celda del motor: el kernel ejecuta
+            // en orden, así que la siguiente pregunta ya la encuentra.
+            kernel.execute(MARCA_MOTOR + ' = True', {},
+                           { silent: true, store_history: false });
+        } catch (err) { /* sin la marca se sigue decidiendo por `ava` */ }
     }
+
+    // forzar = true cuando el que avisa es el kernel (arranque o reinicio):
+    // una pregunta que quedó pendiente en el kernel anterior ya no vale.
+    function arrancar_motor(forzar) {
+        if (sonda_en_curso && forzar !== true) return;
+        if (!Jupyter || !Jupyter.notebook || !Jupyter.notebook.kernel) return;
+        var kernel = Jupyter.notebook.kernel;
+        if (!kernel.is_connected()) return;
+        var celda = celda_del_motor();
+        if (!celda) return;
+
+        var esta = ++generacion_sonda;
+        var antes = celda.last_msg_id;   // qué ejecución llevaba la celda al preguntar
+        sonda_en_curso = true;
+        function decidir(cargado, fiable) {
+            if (esta !== generacion_sonda) return;   // llegó tarde: hay otra
+            sonda_en_curso = false;
+            if (cargado) return;
+            // Si alguien ejecutó la celda del motor mientras la pregunta
+            // viajaba, ya está en la cola del kernel detrás de la pregunta
+            // (Restart & Run All hace exactamente eso): lanzarla otra vez
+            // la ejecutaría dos veces y reiniciaría la XP al final.
+            if (celda.last_msg_id !== antes) return;
+            // Si el kernel no supo contestar, se lanza una vez por página y
+            // no más: es lo que hacía la regla vieja, sin su trampa.
+            if (!fiable && motor_lanzado_aqui) return;
+            lanzar_motor(celda, kernel);
+        }
+        function abortada() {
+            // El kernel descartó la pregunta sin mirarla (iba detrás de una
+            // celda que falló, o de un input() interrumpido). No se sabe
+            // nada: no se lanza, y el siguiente disparador vuelve a preguntar.
+            if (esta !== generacion_sonda) return;
+            sonda_en_curso = false;
+        }
+        try {
+            kernel.execute('', { shell: { reply: function (msg) {
+                var c = msg && msg.content;
+                if (c && c.status === 'aborted') { abortada(); return; }
+                var r = c && c.user_expressions && c.user_expressions.ava_motor;
+                if (!r || r.status !== 'ok' || !r.data) { decidir(false, false); return; }
+                decidir(/True/.test(String(r.data['text/plain'] || '')), true);
+            } } }, { silent: true, store_history: false,
+                     user_expressions: { ava_motor: SONDA_MOTOR } });
+        } catch (err) {
+            decidir(false, false);
+        }
+    }
+    function motor_al_estar_el_kernel() { arrancar_motor(true); }
+    function motor_por_si_acaso() { arrancar_motor(false); }
 
     if (Jupyter && Jupyter.notebook && Jupyter.notebook.events) {
         // notebook_loaded no siempre ha llegado cuando corre custom.js, así que
@@ -517,10 +602,12 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
 
         // El motor necesita además que el kernel esté listo: ejecutar antes de
         // que conecte no hace nada y se pierde el arranque.
-        Jupyter.notebook.events.on('kernel_ready.Kernel', arrancar_motor);
-        Jupyter.notebook.events.on('notebook_loaded.Notebook', arrancar_motor);
-        setTimeout(arrancar_motor, 2000);
-        setTimeout(arrancar_motor, 5000);
+        // kernel_ready llega al arrancar el kernel y TAMBIÉN tras cada
+        // reinicio: es la señal de que el espacio de nombres puede estar vacío.
+        Jupyter.notebook.events.on('kernel_ready.Kernel', motor_al_estar_el_kernel);
+        Jupyter.notebook.events.on('notebook_loaded.Notebook', motor_por_si_acaso);
+        setTimeout(motor_por_si_acaso, 2000);
+        setTimeout(motor_por_si_acaso, 5000);
     }
 
 

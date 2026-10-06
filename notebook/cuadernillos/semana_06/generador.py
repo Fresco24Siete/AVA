@@ -203,15 +203,34 @@ sí puedes hacer es **medirlos**:
     # =========================================================================
     c.seccion(5, "Tres ejercicios", 22, """**25 puntos**. El 2 y el 3 van juntos: el `while` del 2 es el que necesitas en el 3.""")
 
+    # 2026-10-05. El profesor avisó de errores en este ejercicio y eran dos, los
+    # dos del material y no de los alumnos (52 fallos de 6 alumnos):
+    #
+    # 1. El enunciado decía «Los cuatro primeros son textos; el quinto es un
+    #    número». Es falso: son TRES textos (primero, tercero, ultimo) y DOS
+    #    números (cuantos, indice_ultimo). Cinco alumnos lo obedecieron, pusieron
+    #    `cuantos` entre comillas y la prueba les contestó 37 veces «cuantos es
+    #    un numero, sin comillas»: el cuadernillo contradiciéndose a sí mismo.
+    # 2. `dias` solo existía dentro de un bloque de Markdown. La tabla sugiere
+    #    `dias[0]`, el alumno lo escribe —que es justo lo que queremos que haga—
+    #    y recibe `NameError: name 'dias' is not defined` (5 alumnos). Ahora la
+    #    lista va en la partida, encima de INDICES, y valen las dos formas:
+    #    el valor a mano o sacado de la lista.
+    #
+    # Las pruebas NO usan `dias`: las 13 entregas ya recogidas no la tienen en
+    # su celda y no pueden empezar a fallar por eso.
     c.ejercicio(
         numero=1, competencias=['I3'], titulo="Índices", estrellas=1, puntos=5,
-        enunciado="""Con esta lista:
+        enunciado="""Con esta lista, que ya está escrita al principio de tu celda:
 
 ```python
 dias = ["lunes", "martes", "miercoles", "jueves", "viernes"]
 ```
 
-Completa el diccionario. Los cuatro primeros son textos; el quinto es un número.
+Completa el diccionario. Los **tres primeros** son textos (van entre comillas)
+y los **dos últimos** son números (van sin comillas). Cada valor lo puedes
+escribir a mano (`"lunes"`, un número) o sacarlo de la lista (`dias[0]`,
+`len(dias)`): las dos formas valen.
 
 | Llave | Qué vale |
 |---|---|
@@ -220,7 +239,9 @@ Completa el diccionario. Los cuatro primeros son textos; el quinto es un número
 | `ultimo` | el último, escrito con su índice |
 | `cuantos` | cuántos elementos tiene la lista |
 | `indice_ultimo` | el índice del último elemento, como número |""",
-        partida='''INDICES = {
+        partida='''dias = ["lunes", "martes", "miercoles", "jueves", "viernes"]
+
+INDICES = {
     "primero": ...,
     "tercero": ...,
     "ultimo": ...,
@@ -237,8 +258,18 @@ Completa el diccionario. Los cuatro primeros son textos; el quinto es un número
         pruebas='''assert isinstance(INDICES, dict), "INDICES debe seguir siendo un diccionario"
 assert set(INDICES) == {"primero", "tercero", "ultimo", "cuantos", "indice_ultimo"}, \\
     "No cambies las cinco llaves"
-assert isinstance(INDICES["cuantos"], int), "cuantos es un numero, sin comillas"
-assert isinstance(INDICES["indice_ultimo"], int), "indice_ultimo es un numero"
+# Los tres puntos de la plantilla son "todavia sin responder", no una respuesta
+# mala: se dice asi, en vez de «Tu pusiste Ellipsis».
+_sin_responder = [k for k, v in INDICES.items() if v is ...]
+assert not _sin_responder, (
+    "Te falta responder: " + ", ".join(_sin_responder) +
+    ". Cambia los tres puntos (...) por tu respuesta.")
+assert isinstance(INDICES["cuantos"], int), (
+    "cuantos es un numero: va SIN comillas (o usa len(dias)). "
+    f"Tu pusiste {INDICES['cuantos']!r}")
+assert isinstance(INDICES["indice_ultimo"], int), (
+    "indice_ultimo es un numero: va SIN comillas. "
+    f"Tu pusiste {INDICES['indice_ultimo']!r}")
 # Se corrige aqui mismo, contra huellas: el alumno sabe al instante cual
 # fallo y la respuesta no esta escrita en ninguna parte del cuadernillo.
 revisar("ejercicio_1", INDICES, {
@@ -298,9 +329,14 @@ sirve.""",
     return -1''',
         pruebas='''assert callable(posicion_de), "posicion_de debe ser una funcion"
 sin_usar(posicion_de, "for")
-assert posicion_de(["Ana", "Bruno", "Carlos"], "Bruno") == 1
-assert posicion_de(["Ana", "Bruno"], "Zoe") == -1, "Si no esta, devuelve -1"
-assert posicion_de(["Ana", "Bruno", "Ana"], "Ana") == 0, "La PRIMERA aparicion"
+assert posicion_de(["Ana", "Bruno", "Carlos"], "Bruno") == 1, (
+    'Buscando "Bruno" en ["Ana", "Bruno", "Carlos"] se esperaba 1, que es el '
+    "indice donde esta (se cuenta desde 0). ¿Tu funcion DEVUELVE el indice con return?")
+assert posicion_de(["Ana", "Bruno"], "Zoe") == -1, (
+    'Buscando "Zoe" en ["Ana", "Bruno"] se esperaba -1: si no esta, devuelve -1')
+assert posicion_de(["Ana", "Bruno", "Ana"], "Ana") == 0, (
+    'Buscando "Ana" en ["Ana", "Bruno", "Ana"] se esperaba 0: la PRIMERA '
+    "aparicion, no la ultima")
 print("Las tres busquedas dan la posicion correcta, y sin un solo for.")''',
         pruebas_ocultas='''sin_usar(posicion_de, "for")
 assert posicion_de([], "Ana") == -1, "En una lista vacia no esta nada"
@@ -344,9 +380,14 @@ la otra mitad y repite.
             derecha = medio - 1
     return -1''',
         pruebas='''assert callable(busqueda_binaria), "busqueda_binaria debe ser una funcion"
-assert busqueda_binaria([10, 20, 30, 40, 50], 40) == 3
-assert busqueda_binaria([10, 20, 30, 40, 50], 10) == 0, "El primero tambien"
-assert busqueda_binaria([10, 20, 30, 40, 50], 99) == -1, "Si no esta, -1"
+assert busqueda_binaria([10, 20, 30, 40, 50], 40) == 3, (
+    "Buscando 40 en [10, 20, 30, 40, 50] se esperaba 3, que es el indice donde "
+    "esta (se cuenta desde 0). ¿Tu funcion DEVUELVE el indice con return?")
+assert busqueda_binaria([10, 20, 30, 40, 50], 10) == 0, (
+    "Buscando 10 en [10, 20, 30, 40, 50] se esperaba 0: el primero tambien "
+    "tiene que encontrarlo")
+assert busqueda_binaria([10, 20, 30, 40, 50], 99) == -1, (
+    "Buscando 99 en [10, 20, 30, 40, 50] se esperaba -1: si no esta, devuelve -1")
 print("Las tres busquedas binarias dan bien.")''',
         pruebas_ocultas='''assert busqueda_binaria([10, 20, 30, 40, 50], 50) == 4, "El ultimo tambien"
 assert busqueda_binaria([], 1) == -1, "Lista vacia: no esta"
