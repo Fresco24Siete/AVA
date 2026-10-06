@@ -514,6 +514,7 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
     var generacion_sonda = 0;        // cada pregunta al kernel lleva su número
     var sonda_en_curso = false;
     var motor_lanzado_aqui = false;  // en ESTA carga de la página
+    var reintentos_abortada = 0;     // preguntas descartadas seguidas (tope 3)
 
     function celda_del_motor() {
         var celdas = Jupyter.notebook.get_cells();
@@ -560,6 +561,7 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
         function decidir(cargado, fiable) {
             if (esta !== generacion_sonda) return;   // llegó tarde: hay otra
             sonda_en_curso = false;
+            reintentos_abortada = 0;
             if (cargado) return;
             // Si alguien ejecutó la celda del motor mientras la pregunta
             // viajaba, ya está en la cola del kernel detrás de la pregunta
@@ -574,9 +576,17 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
         function abortada() {
             // El kernel descartó la pregunta sin mirarla (iba detrás de una
             // celda que falló, o de un input() interrumpido). No se sabe
-            // nada: no se lanza, y el siguiente disparador vuelve a preguntar.
+            // nada: no se lanza. Y como en una página abierta hace rato ya no
+            // queda ningún disparador salvo el del kernel, se vuelve a
+            // preguntar en seguida, hasta tres veces seguidas (revisión del
+            // 6-oct: Kernel > Restart y un Shift+Enter impaciente dejaban al
+            // alumno sin motor hasta recargar).
             if (esta !== generacion_sonda) return;
             sonda_en_curso = false;
+            if (reintentos_abortada < 3) {
+                reintentos_abortada++;
+                setTimeout(motor_por_si_acaso, 1500);
+            }
         }
         try {
             kernel.execute('', { shell: { reply: function (msg) {

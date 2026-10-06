@@ -619,6 +619,38 @@ caso('M14. Pregunta abortada en un kernel NUEVO -> el siguiente disparador si lo
   igual(nb.motor.ejecuciones, 1, 'la pregunta siguiente contesta False y se lanza');
 });
 
+caso('M15. Sonda abortada en una pagina abierta hace rato (sin disparadores) -> se reintenta sola y el motor se lanza', () => {
+  const doc = crearDocumento(); const k = kernelFalso(); k.fifo = true;
+  const nb = cuadernilloConMotor(doc, k, 3);
+  const env = cargarEntorno(nb.celdas, { kernel: k });
+  dispararTimeouts(env); env.timeouts.length = 0;    // los de la carga ya pasaron (pagina abierta hace >5 s)
+  k.procesar();                                      // ...y vieron el motor cargado o lo lanzaron: da igual, se parte de cero
+  nb.motor.ejecuciones = 0; k.reiniciar();
+  kernelListo(env); k.abortarCola();                 // Restart + Shift+Enter impaciente: la pregunta se aborta
+  igual(nb.motor.ejecuciones, 0, 'no se lanza a ciegas');
+  const nuevos = env.timeouts.filter(t => t.ms === 1500);
+  igual(nuevos.length, 1, 'se programa UN reintento');
+  nuevos.forEach(t => t.fn()); k.procesar();         // el reintento pregunta y esta vez el kernel contesta
+  igual(nb.motor.ejecuciones, 1, 'el motor se lanza sin recargar la pagina');
+});
+
+caso('M16. Abortadas en cadena: como mucho tres reintentos, nunca un bucle', () => {
+  const doc = crearDocumento(); const k = kernelFalso(); k.fifo = true;
+  const nb = cuadernilloConMotor(doc, k);
+  const env = cargarEntorno(nb.celdas, { kernel: k });
+  env.timeouts.length = 0;
+  kernelListo(env); k.abortarCola();
+  let vueltas = 0;
+  while (env.timeouts.some(t => t.ms === 1500) && vueltas < 10) {
+    const pend = env.timeouts.filter(t => t.ms === 1500); env.timeouts.length = 0;
+    pend.forEach(t => t.fn()); k.abortarCola(); vueltas++;
+  }
+  igual(vueltas, 3, 'tres reintentos y para');
+  igual(nb.motor.ejecuciones, 0, 'sin respuesta fiable no se lanza');
+  kernelListo(env); k.procesar();
+  igual(nb.motor.ejecuciones, 1, 'el siguiente kernel_ready lo lanza (y reinicia el contador)');
+});
+
 (async () => {
   for (const c of casosAsync) {
     total++;
