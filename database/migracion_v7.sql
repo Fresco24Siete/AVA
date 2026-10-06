@@ -1,0 +1,31 @@
+-- =============================================================================
+-- Migración v7 — mCP88 (I7) deja de estar en alcance: no se mide con trazas
+-- =============================================================================
+--
+-- Decisión de Bryan, 2026-09-22 por la noche, tras la reunión con el profesor:
+-- «vamos a decir que tampoco la podemos medir». mCP88 es «investiga y
+-- selecciona fuentes confiables»: la evidencia sería que el alumno consulte y
+-- valore una fuente, y eso no sale de una celda calificada. Lo que se barajó
+-- —un hipervínculo y un quiz «¿entraste al enlace?»— no sirve: los quices del
+-- motor dan XP pero NO emiten telemetría (custom.js solo emite desde las celdas
+-- test_*), así que I7 seguiría en cero; y una sola pregunta nunca llega al
+-- mínimo de 3 evidencias de service.NivelCompetencia.
+--
+-- Mientras estuvo en alcance con 0 ejercicios, el panel le decía al docente
+-- «sin evidencia suficiente: 0 de 3», que suena a falta de actividad del alumno
+-- cuando lo que faltaba era el instrumento. Con en_alcance = FALSE, ponerNivel
+-- dice la verdad: «no se mide con trazas de actividad».
+--
+-- Quedan en alcance TRES: I1 (mCP17), I3 (mCC87) e I4 (mCC103). I4 sigue en
+-- cero, pero ese sí es un hueco de contenido —necesita un ejercicio nuevo del
+-- profesor— y no de instrumento.
+--
+-- mCC85 (I2) ya estaba fuera desde la v5 y Bryan lo ratificó («removerla»):
+-- no hay forma de medirla en un cuadernillo. No se borra la fila: la conserva
+-- el catálogo por historia y no tiene ejercicios que la referencien.
+--
+-- Aditiva e idempotente. Aplicada a producción (Hetzner, curso 36074) el
+-- 2026-09-23 desde el bucle de servidor/instalar.sh. schema_v2.sql se alinea
+-- en el mismo commit para que una instalación nueva no herede lo contrario.
+
+UPDATE competencias SET en_alcance = FALSE WHERE id = 'I7';

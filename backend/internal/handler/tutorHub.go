@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"proxy-go/internal/models"
 	"proxy-go/pkg/tutor"
@@ -46,6 +47,17 @@ func ChatHandler(c *gin.Context) {
 	respuesta, err := tutor.ConnecGeminiApi(ctx, client, &data)
 
 	if err != nil {
+		// Saturación de Google y avería propia son cosas distintas para quien
+		// está esperando: una se arregla sola en un minuto y la otra no. Antes
+		// las dos acababan en el mismo mensaje y el alumno no sabía si valía la
+		// pena reintentar.
+		if errors.Is(err, tutor.ErrCongestionado) {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error": "El tutor está saturado ahora mismo. Vuelve a preguntar " +
+					"en un minuto; no se te descuenta esta pregunta.",
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Error procesando la solicitud en el modelo",
 		})
