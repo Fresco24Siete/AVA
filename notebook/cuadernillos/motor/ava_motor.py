@@ -513,11 +513,11 @@ def sin_usar(funcion, *prohibido):
     porque son el mismo ciclo escrito de otra forma.
     """
     nombre = getattr(funcion, "__name__", "")
-    definiciones = _definiciones_de(funcion, nombre)
+    objetivo, por_nombre = _definiciones_de(funcion, nombre)
 
     # Si el alumno reparte el trabajo en funciones auxiliares, la restricción
     # las alcanza: si no, bastaba con esconder el `for` una llamada más abajo.
-    arbol = _con_auxiliares(definiciones, nombre)
+    arbol = _con_auxiliares(objetivo, por_nombre)
 
     for palabra in prohibido:
         if palabra == "recursion":
@@ -550,13 +550,42 @@ def sin_usar(funcion, *prohibido):
                 f"solución lo usa.")
 
 
-def _definiciones_de(funcion, nombre):
-    """Las funciones definidas junto a `funcion`, por nombre.
+def _linea_de_la_definicion(nodo):
+    """La línea donde empieza la definición, contando los decoradores.
 
-    Leer solo el trozo de la función no vale. Cuando el código se ejecutó desde una
-    cadena —no desde un archivo ni desde una celda— `linecache` puede resolver
-    el nombre falso del archivo contra los globals del módulo que llamó y
-    devolver **código de otro archivo**, que parsea sin error y no tiene nada
+    `co_firstlineno` apunta al primer decorador cuando hay alguno, mientras que
+    `nodo.lineno` apunta siempre al `def`. Aquí no se enseñan decoradores, pero
+    comparar la línea equivocada haría fallar la comprobación entera."""
+    lineas = [nodo.lineno] + [d.lineno for d in getattr(nodo, "decorator_list", [])]
+    return min(lineas)
+
+
+def _definiciones_de(funcion, nombre):
+    """La definición que DE VERDAD corre, y las demás de su celda por nombre.
+
+    Devuelve (nodo_objetivo, {nombre: último nodo con ese nombre}).
+
+    Por qué por LÍNEA y no por nombre (2026-10-28). Antes se buscaba el nombre y
+    se tomaba la PRIMERA definición que apareciera. Si el alumno deja dos
+    versiones de su función en la celda —cosa que hace constantemente: prueba
+    con `for`, ve que falla, y escribe la de `while` debajo sin borrar la de
+    arriba— Python ejecuta la ÚLTIMA y esto miraba la primera. Las dos
+    direcciones estaban rotas, y medidas en el kernel real:
+
+      `while` arriba, `for` abajo  -> corre el for  y sin_usar decia PASA
+      `for` arriba, `while` abajo  -> corre el while y sin_usar SUSPENDIA
+
+    La primera se salta la restriccion; la segunda suspende a quien lo hizo
+    bien, y encima le habla de un `for` que ya no usa. `co_firstlineno` dice
+    exactamente de qué definición salió el objeto que se está comprobando.
+
+    Y las auxiliares se resuelven con la ÚLTIMA definición de cada nombre, que
+    es a la que apunta el nombre cuando el objetivo se ejecuta.
+
+    Leer solo el trozo de la función no vale. Cuando el código se ejecutó desde
+    una cadena —no desde un archivo ni desde una celda— `linecache` puede
+    resolver el nombre falso del archivo contra los globals del módulo que llamó
+    y devolver **código de otro archivo**, que parsea sin error y no tiene nada
     que ver. Una restricción que mira el código equivocado da por buena
     cualquier cosa, así que la fuente solo se acepta si de verdad contiene la
     definición que se pidió comprobar.
@@ -586,35 +615,43 @@ def _definiciones_de(funcion, nombre):
         # mira el código equivocado da por buena cualquier cosa.
         fuente = ""
 
-    definiciones = {}
+    todas = {}        # nombre -> [nodos, en orden de aparición]
     if fuente:
         try:
             for nodo in ast.walk(ast.parse(fuente)):
                 if isinstance(nodo, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    definiciones.setdefault(nodo.name, nodo)
+                    todas.setdefault(nodo.name, []).append(nodo)
         except SyntaxError:
-            definiciones = {}
+            todas = {}
 
-    if nombre not in definiciones:
+    candidatos = todas.get(nombre) or []
+    objetivo = next((n for n in candidatos
+                     if _linea_de_la_definicion(n) == codigo.co_firstlineno), None)
+    if objetivo is None:
         # Callar aquí sería lo peor: daría la restricción por cumplida sin
-        # haber mirado una sola línea.
+        # haber mirado una sola línea. Y si el nombre está pero ninguna de sus
+        # definiciones cae en la línea del objeto, lo que se leyó no es el
+        # código que corre: tampoco vale.
         raise AssertionError(
             f"No se pudo leer el código de `{nombre}` para comprobar la "
             "restricción del enunciado. Define la función en una celda del "
             "cuadernillo y vuelve a ejecutar esta celda.")
-    return definiciones
+    por_nombre = {n: nodos[-1] for n, nodos in todas.items()}
+    por_nombre[nombre] = objetivo
+    return objetivo, por_nombre
 
 
-def _con_auxiliares(definiciones, nombre, vistas=None):
+def _con_auxiliares(objetivo, por_nombre, vistas=None):
     """Junta la función pedida con las auxiliares que llama, en un solo árbol."""
     vistas = vistas if vistas is not None else set()
-    if nombre in vistas or nombre not in definiciones:
+    if objetivo.name in vistas:
         return ast.Module(body=[], type_ignores=[])
-    vistas.add(nombre)
+    vistas.add(objetivo.name)
 
-    cuerpo = [definiciones[nombre]]
-    for nodo in ast.walk(definiciones[nombre]):
+    cuerpo = [objetivo]
+    for nodo in ast.walk(objetivo):
         if (isinstance(nodo, ast.Call) and isinstance(nodo.func, ast.Name)
-                and nodo.func.id in definiciones and nodo.func.id not in vistas):
-            cuerpo.extend(_con_auxiliares(definiciones, nodo.func.id, vistas).body)
+                and nodo.func.id in por_nombre and nodo.func.id not in vistas):
+            cuerpo.extend(
+                _con_auxiliares(por_nombre[nodo.func.id], por_nombre, vistas).body)
     return ast.Module(body=cuerpo, type_ignores=[])

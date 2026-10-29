@@ -78,6 +78,64 @@ def delega_en_limpia(xs, y):
     return con_while(xs, y)
 
 
+# --- Dos versiones de la misma funcion en la misma celda ---------------------
+# Lo que el alumno hace constantemente: prueba con `for`, ve que falla, y
+# escribe la de `while` DEBAJO sin borrar la de arriba. Python ejecuta la
+# ultima; `sin_usar` miraba la primera, y estaba roto en las dos direcciones
+# (medido en el kernel real el 2026-10-28).
+
+def acaba_en_while(xs, y):          # <- esta NO es la que corre
+    for i in range(len(xs)):
+        if xs[i] == y:
+            return i
+    return -1
+
+
+def acaba_en_while(xs, y):          # noqa: F811  <- esta SI
+    i = 0
+    while i < len(xs):
+        if xs[i] == y:
+            return i
+        i = i + 1
+    return -1
+
+
+def acaba_en_for(xs, y):            # <- esta NO es la que corre
+    i = 0
+    while i < len(xs):
+        if xs[i] == y:
+            return i
+        i = i + 1
+    return -1
+
+
+def acaba_en_for(xs, y):            # noqa: F811  <- esta SI
+    for i in range(len(xs)):
+        if xs[i] == y:
+            return i
+    return -1
+
+
+def _ayuda(xs, y):                  # <- auxiliar vieja, con for
+    for i in range(len(xs)):
+        if xs[i] == y:
+            return i
+    return -1
+
+
+def _ayuda(xs, y):                  # noqa: F811  <- la que de verdad se llama
+    i = 0
+    while i < len(xs):
+        if xs[i] == y:
+            return i
+        i = i + 1
+    return -1
+
+
+def delega_en_ayuda_limpia(xs, y):
+    return _ayuda(xs, y)
+
+
 def con_sum(xs):
     return sum(xs)
 
@@ -130,6 +188,26 @@ def main():
     # El truco de esconder el ciclo en una auxiliar no vale
     caso("13. 'for' escondido en una auxiliar", delega_en_auxiliar, ("for",), True)
     caso("14. delegar en una auxiliar limpia",  delega_en_limpia,   ("for",), False)
+
+    # La definicion que se comprueba es la que CORRE, no la primera con ese
+    # nombre. Antes, el caso 15 pasaba (restriccion saltada) y el 16 fallaba
+    # (suspendia a quien lo hizo bien).
+    caso("15. dos versiones, la que corre es la del while", acaba_en_while, ("for",), False)
+    caso("16. dos versiones, la que corre es la del for",   acaba_en_for,   ("for",), True)
+    caso("17. auxiliar redefinida: se mira la ultima",      delega_en_ayuda_limpia, ("for",), False)
+
+    # Y la eleccion es por linea, no por orden de aparicion: compruebalo.
+    import ast as _ast, inspect as _inspect
+    _fuente = _inspect.getsource(_inspect.getmodule(acaba_en_while))
+    _defs = [n for n in _ast.walk(_ast.parse(_fuente))
+             if isinstance(n, _ast.FunctionDef) and n.name == "acaba_en_while"]
+    if len(_defs) == 2 and acaba_en_while.__code__.co_firstlineno == _defs[1].lineno:
+        print("OK    18. el objeto apunta a la SEGUNDA definicion, que es la que se comprueba")
+        pasan += 1
+    else:
+        print(f"FALLO 18. se esperaban 2 definiciones y que el objeto fuera la 2.a; "
+              f"hay {len(_defs)} y la linea es {acaba_en_while.__code__.co_firstlineno}")
+        fallan += 1
 
     # Sin fuente no puede callar: debe avisar, no dar por bueno.
     try:
