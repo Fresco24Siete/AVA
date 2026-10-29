@@ -26,8 +26,10 @@ func (repository *ExerciseAttempsRepository) CreateAttemptWithErrors(
 	defer tx.Rollback()
 
 	if _, err := tx.NamedExec(`INSERT INTO exercise_attempts
-		(id, course_id, cuadernillo_id, exercise_id, student_id, attempt_at, validation_result, received_at)
-		VALUES (:id, :course_id, :cuadernillo_id, :exercise_id, :student_id, :attempt_at, :validation_result, :received_at)`,
+		(id, course_id, cuadernillo_id, exercise_id, student_id, attempt_at, validation_result, received_at,
+		 puntos_maximos, codigo_celda, orden)
+		VALUES (:id, :course_id, :cuadernillo_id, :exercise_id, :student_id, :attempt_at, :validation_result, :received_at,
+		 :puntos_maximos, :codigo_celda, :orden)`,
 		exercise); err != nil {
 		return fmt.Errorf("insert exercise_attempts: %w", err)
 	}

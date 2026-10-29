@@ -81,12 +81,32 @@ FUNCIONES = {
 }
 
 # Las que el catálogo (PS06) nombra como «instrucciones que entiendo».
-_INSTRUCCIONES = ("Definir", "Constante", "Leer", "Escribir", "Si", "Mientras")
+# 2026-10-05: entra `Para`. El motor solo tenía `Mientras`, y desde el recorte
+# del 22-sep ningún texto visible del cuadernillo 4 lo decía: los alumnos
+# escribieron el `Para` que traen de PSeInt y el motor les contestó
+# «'Para i' no sirve como nombre de variable. Arréglalo: Para_i» (25 veces).
+_INSTRUCCIONES = ("Definir", "Constante", "Leer", "Escribir", "Si", "Mientras",
+                  "Para")
 # Universo para el «¿querías decir…?» de difflib: instrucciones + cierres.
 _PALABRAS_CLAVE = _INSTRUCCIONES + (
     "Mostrar", "Algoritmo", "FinAlgoritmo", "Entonces", "Sino", "FinSi",
-    "Hacer", "FinMientras", "Como",
+    "Hacer", "FinMientras", "Como", "FinPara", "Proceso", "FinProceso",
 )
+# Las palabras de ESTRUCTURA: si una de ellas es la «mitad» de lo que parece un
+# nombre con espacio (`Leer Para i`, `total Entonces`), la línea no es un nombre
+# partido y unirlas con guion bajo no la arregla (ver `_ps14`).
+#
+# 2026-10-05, tras la revisión: aquí NO están los tipos, ni `fin`, ni `hasta`,
+# ni `algoritmo`, `proceso` o `constante`. Son del lenguaje, pero también son
+# sustantivos y adjetivos corrientes, y por tanto mitades verosímiles de un
+# nombre: `numero entero`, `valor real`, `hora fin`, `edad hasta`. La primera
+# versión de esta tabla las incluía y le contestaba al alumno que 'entero' «no
+# puede ser un nombre de variable ni un pedazo de uno», que es falso
+# (`numero_entero` y `hora_fin` son nombres válidos, y `fin <- 3` corre). Para
+# esas el consejo de siempre —únelas con guion bajo— es el correcto. Tampoco
+# están `y`, `o`, `no`, `con` ni `paso`, por la misma razón (`costo y`).
+_DE_ESTRUCTURA = {p.lower() for p in _PALABRAS_CLAVE} - {
+    "algoritmo", "proceso", "constante"}
 
 MAX_PASOS = 10_000          # tope de ciclo infinito (PS09)
 _TOPE_SALIDA = 200_000      # caracteres; evita que un ciclo llene la memoria
@@ -104,6 +124,111 @@ _RE_ACENTO = re.compile(r"[ÁÉÍÓÚÜÑáéíóúüñ]")
 def _norm(palabra):
     """Palabras clave sin distinguir mayúsculas; los nombres de variable sí."""
     return palabra.lower()
+
+
+# ── Lo que el alumno trae de PSeInt y este motor NO tiene ────────────────────
+# 2026-10-05. Antes, cualquier línea que empezara por dos palabras se tomaba por
+# «un nombre de variable con un espacio en medio» (PS14) y el consejo era unir
+# las dos con guion bajo. Con `Repetir`, `Segun x Hacer` o `Fin Si` eso produce
+# un disparate («Arréglalo: Fin_Si»), y hubo un alumno que lo obedeció al pie de
+# la letra y entregó `para_i <- 3 hasta n hacer`. Un consejo falso es peor que
+# ninguno: el estudiante le cree al motor.
+#
+# Aquí están las estructuras de PSeInt que el motor no implementa, cada una con
+# lo que hay que escribir en su lugar. La clave va en minúsculas y sin tildes.
+_CICLO_QUE_SI = "escribe el ciclo con Mientras o con Para."
+_SI_ANIDADO = ("pregunta caso por caso con Si ... Sino ... FinSi (y un Si "
+               "dentro del Sino cuando haya más de dos casos).")
+_TODO_ADENTRO = ("escribe todas las instrucciones seguidas, dentro de "
+                 "Algoritmo ... FinAlgoritmo.")
+_NO_TENGO = {
+    "repetir": ("Repetir ... Hasta Que", _CICLO_QUE_SI),
+    "hasta": ("Hasta Que (el cierre de Repetir)", _CICLO_QUE_SI),
+    # `Desde i <- 1 Hasta 5 Hacer` es como se dicta el Para en más de un salón.
+    # Sin esta entrada caía en PS14 («Arréglalo: Desde_i»): mismo disparate del
+    # incidente, con otra palabra (2026-10-05, revisión).
+    "desde": ("el ciclo Desde",
+              "es el mismo ciclo Para: cambia la palabra Desde por Para."),
+    "findesde": ("el ciclo Desde",
+                 "el ciclo se escribe con Para y se cierra con FinPara."),
+    "segun": ("Segun", _SI_ANIDADO),
+    "caso": ("Segun ni sus casos", _SI_ANIDADO),
+    "finsegun": ("Segun", _SI_ANIDADO),
+    "funcion": ("funciones propias (Funcion)", _TODO_ADENTRO),
+    "finfuncion": ("funciones propias (Funcion)", _TODO_ADENTRO),
+    "subproceso": ("subprocesos (SubProceso)", _TODO_ADENTRO),
+    "finsubproceso": ("subprocesos (SubProceso)", _TODO_ADENTRO),
+    "subalgoritmo": ("subalgoritmos (SubAlgoritmo)", _TODO_ADENTRO),
+    "finsubalgoritmo": ("subalgoritmos (SubAlgoritmo)", _TODO_ADENTRO),
+    "retornar": ("funciones propias, así que tampoco Retornar", _TODO_ADENTRO),
+    "dimension": ("arreglos (Dimension)",
+                  "usa una variable suelta para cada dato."),
+    "imprimir": ("la instrucción Imprimir",
+                 "para mostrar algo en pantalla se usa Escribir."),
+    "limpiar": ("pantalla que limpiar", "borra esa línea: no hace falta."),
+    "borrar": ("pantalla que borrar", "borra esa línea: no hace falta."),
+    "esperar": ("teclas ni tiempos que esperar",
+                "borra esa línea: no hace falta."),
+}
+
+# Palabras que el motor SÍ conoce pero que no pueden abrir una línea. Tampoco
+# son «un nombre de variable con espacio».
+_FUERA_DE_SITIO = {
+    "entonces": ("Entonces va al final de la línea del Si, no en una línea "
+                 "aparte.", "Si saldo > 0 Entonces"),
+    "hacer": ("Hacer va al final de la línea del Mientras o del Para, no en "
+              "una línea aparte.", "Mientras saldo > 0 Hacer"),
+    "como": ("Como solo se usa dentro de un Definir, para decir el tipo.",
+             "Definir copias Como Entero"),
+    # Solo cuando van las dos juntas (ver `_sentencia`): sueltas, `con` y
+    # `paso` pueden ser la mitad de un nombre mal escrito, y eso es PS14.
+    "con paso": ("'Con Paso' solo se usa en la línea de un Para, antes de "
+                 "Hacer.", "Para i <- 1 Hasta 10 Con Paso 2 Hacer"),
+    "algoritmo": ("ya hay un algoritmo abierto, y no se puede abrir otro "
+                  "dentro.", "deja un solo Algoritmo ... FinAlgoritmo."),
+    "proceso": ("ya hay un algoritmo abierto, y no se puede abrir otro "
+                "dentro.", "deja un solo Proceso ... FinProceso."),
+}
+
+# `Fin Si`, `Fin Mientras`... con espacio: es como lo dicta más de un profesor
+# y como lo escribieron varios alumnos el 5-oct. Se leen igual que pegados.
+_SE_CIERRA_CON_FIN = {"si", "mientras", "para", "algoritmo", "proceso"}
+
+# 2026-10-05 (revisión). Palabras que abren una línea de estructura pero que
+# también son la primera mitad verosímil de un nombre: `fin semana <- 6`,
+# `hasta ahora <- 0`, `caso base <- 1`, `proceso actual <- 2`. Cuando detrás de
+# las dos palabras viene una flecha (o un =) y la línea no tiene nada más de
+# estructura, es una asignación a un nombre con espacio, y se le contesta con el
+# PS14 de siempre y no con «'Fin semana' no cierra ningún bloque». A propósito
+# NO están los verbos (`Repetir x <- 3` no es una variable «Repetir x») ni
+# `Funcion`, cuya cabecera en PSeInt tiene justo esa forma.
+_PRIMERA_MITAD_DE_NOMBRE = {"fin", "hasta", "caso", "algoritmo", "proceso"}
+
+# Con qué otras palabras se abre un ciclo que cuenta, en otros dialectos. El
+# motor desplegado hasta el 5-oct aconsejaba pegarlas con guion bajo al nombre
+# (`Para_i`, `Desde_i`, `For_i`) y hubo quien obedeció: al proponer la línea
+# corregida se desanda ese prefijo (ver `_sin_prefijo`).
+_ABREN_UN_CICLO = ("para", "desde", "for", "ciclo", "repetir")
+# Lo mismo para el «sino, si...» que este motor no tiene pegado.
+_ABREN_UN_SINO_SI = ("sinosi", "elif", "elsif", "elseif")
+
+
+def _sin_tildes(palabra):
+    """`Según` y `Segun` son la misma palabra para buscarla en las tablas."""
+    return "".join(_SIN_TILDE.get(c, c) for c in palabra)
+
+
+def _sin_prefijo(nombre, prefijos):
+    """`Para_i` -> `i`, si lo de antes del guion bajo es una de `prefijos`.
+
+    2026-10-05. Solo sirve para redactar el «Arréglalo»: quien entrega
+    `para_i <- 3 hasta n hacer` obedeció un consejo del motor viejo, y
+    proponerle `Para para_i <- 3 ...` sería encadenar el disparate.
+    """
+    cabeza, guion, resto = nombre.partition("_")
+    if guion and resto and _sin_tildes(_norm(cabeza)) in prefijos:
+        return resto
+    return nombre
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -256,9 +381,10 @@ def _ps03(palabra, linea_apertura, cierre, linea, texto):
         f"abriste un bloque con '{palabra}' en la línea {linea_apertura} y "
         f"nunca lo cerraste.",
         "todo bloque que se abre se cierra: Algoritmo/FinAlgoritmo, Si/FinSi, "
-        "Mientras/FinMientras.",
+        "Mientras/FinMientras, Para/FinPara.",
         f"escribe {cierre} después de la última instrucción que quieras "
-        + ("repetir." if cierre == "FinMientras" else "meter dentro del bloque."))
+        + ("repetir." if cierre in ("FinMientras", "FinPara")
+           else "meter dentro del bloque."))
 
 
 def _ps04(linea, texto, nombre, tipo, valor, col=0, largo=0):
@@ -312,6 +438,362 @@ def _ps06(que_paso, por_que, arreglalo, linea, texto, col=0, largo=0):
     return Error("PS06", linea, texto, que_paso, por_que, arreglalo, col, largo)
 
 
+def _ps06_no_tengo(clave, linea, texto, col, largo):
+    """Una estructura de PSeInt que este motor no implementa (2026-10-05).
+
+    Decisión: sale como PS06 («no sé qué me estás diciendo») y no como PS14,
+    porque el problema no es el nombre de ninguna variable. Lo que importa es
+    que diga las dos cosas que el alumno necesita: que eso aquí no existe, y qué
+    se escribe en su lugar.
+    """
+    que_es, en_su_lugar = _NO_TENGO[clave]
+    return _ps06(
+        f"este motor no tiene {que_es}.",
+        "es un pseudocódigo pequeño a propósito. Las instrucciones que entiendo "
+        "son: " + ", ".join(_INSTRUCCIONES) + ".",
+        en_su_lugar, linea, texto, col, largo)
+
+
+def _ps06_fuera_de_sitio(clave, linea, texto, col, largo):
+    que_paso, ejemplo = _FUERA_DE_SITIO[clave]
+    return _ps06(
+        que_paso,
+        "cada palabra clave tiene su sitio fijo en la línea; suelta al "
+        "principio no dice nada.",
+        ejemplo, linea, texto, col, largo)
+
+
+def _ps06_fin_suelto(segunda, linea, texto, col, largo):
+    """`Fin` seguido de algo que no cierra ningún bloque, o `Fin` a secas."""
+    escrito = f"Fin {segunda}" if segunda else "Fin"
+    return _ps06(
+        f"'{escrito}' no cierra ningún bloque de este motor.",
+        "cada bloque tiene su propio cierre, y hay que decir cuál se cierra.",
+        "usa FinSi, FinMientras, FinPara o FinAlgoritmo, según lo que hayas "
+        "abierto.", linea, texto, col, largo)
+
+
+def _ps06_sino_si(condicion, linea, texto, col, largo, palabra=""):
+    """`Si no Si n = 2 Entonces` (o `Sino Si ...`) en una sola línea.
+
+    `palabra` es para cuando venía en una sola palabra (`SinoSi`, `Elif`): ahí
+    no hay «un Sino y otro Si» a la vista, y se nombra lo que el alumno puso.
+    """
+    return _ps06(
+        f"este motor no tiene '{palabra}', que es un Sino y otro Si en la "
+        f"misma línea." if palabra else
+        "escribiste un Sino y otro Si en la misma línea, y este motor no "
+        "tiene el 'Sino Si' pegado.",
+        "Sino va solo en su línea. La pregunta nueva es otro Si: se escribe en "
+        "la línea de abajo y lleva su propio FinSi.",
+        f"Sino   y en la línea de abajo:   Si {condicion or 'n = 2'} Entonces "
+        f"... FinSi", linea, texto, col, largo)
+
+
+def _ps06_para(que_paso, ejemplo, linea, texto, col=0, largo=0):
+    """Una cabecera de Para a medio escribir. El «por qué» es siempre el mismo:
+    las cuatro cosas que un Para tiene que decir."""
+    return _ps06(
+        que_paso,
+        "la línea del Para dice cuatro cosas, en este orden: qué variable "
+        "cuenta, desde qué valor (con la flecha <-), Hasta cuál, y Hacer al "
+        "final. 'Con Paso' es opcional: sin él cuenta de uno en uno.",
+        ejemplo, linea, texto, col, largo)
+
+
+def _cierra_un_valor(tok):
+    """¿Puede ser este token lo último de una cuenta? (`3`, `n`, `)`, "a")"""
+    if tok.tipo == "ident":
+        return _norm(tok.valor) not in ("y", "o", "no", "mod")
+    return tok.tipo in ("num", "cad") or tok.es_op(")")
+
+
+def _abre_un_valor(tok):
+    """¿Puede ser este token lo primero de una cuenta? (`3`, `n`, `(`, `-`)"""
+    return tok.tipo in ("num", "cad", "ident") or tok.es_op("(", "-")
+
+
+def _forma_de_bloque(toks):
+    """(cuenta_hasta, termina_en): si la línea tiene forma de abrir un bloque.
+
+    2026-10-05, tras la revisión. Es lo que separa un nombre partido
+    (`edad hasta <- 18`) de una estructura mal abierta (`Desde i <- 1 Hasta 5
+    Hacer`), sin depender de qué palabra haya al principio.
+
+    `hasta`, `hacer` y `entonces` también valen como nombres de variable, así
+    que no basta con encontrar la palabra: en `total = hasta + 1` es un dato.
+    Lo que la delata como palabra de estructura es que tenga un VALOR pegado
+    delante —`1 Hasta 5`, `x > 3 Hacer`—, cosa que en una cuenta bien escrita
+    no pasa nunca, porque entre dos valores siempre hay un operador. (O, para
+    Hasta, que venga justo tras la flecha y con un valor detrás: `i <- Hasta
+    5` es un Para sin su valor inicial. El signo menos no cuenta ahí como
+    valor, porque `x <- hasta - 1` es una resta.)
+    """
+    def cuenta(k):
+        antes = toks[k - 1]
+        despues = toks[k + 1] if k + 1 < len(toks) else None
+        if _cierra_un_valor(antes):
+            return despues is None or _abre_un_valor(despues)
+        return antes.es_op("<-", "=") and despues is not None \
+            and _abre_un_valor(despues) and not despues.es_op("-")
+
+    cuenta_hasta = any(toks[k].es("Hasta") and cuenta(k)
+                       for k in range(2, len(toks)))
+    termina_en = ""
+    if len(toks) >= 2 and _cierra_un_valor(toks[-2]):
+        termina_en = "entonces" if toks[-1].es("Entonces") else \
+            "hacer" if toks[-1].es("Hacer") else ""
+    return cuenta_hasta, termina_en
+
+
+_EJEMPLO_PARA = "Para i <- 1 Hasta 10 Hacer"
+
+
+def _la_cuenta(toks):
+    """El árbol de `toks` si, ENTEROS, se analizan como una sola cuenta; si no,
+    None.
+
+    2026-10-05, segunda revisión. Es lo que decide si algo que escribió el
+    alumno se puede copiar dentro de un «Arréglalo». Antes se copiaba sin
+    mirar, y el motor volvía a aconsejar líneas que tampoco corren: `Para i <=
+    n Hacer` recibía «Arréglalo: Para i <- <= n Hacer», y `Para i <- 1 a 3
+    Hacer`, «Para i <- 1 a 3 Hasta 10 Hacer». Es la misma clase de fallo que el
+    «Arréglalo: Para_i» que un alumno obedeció al pie de la letra.
+
+    Se usa el analizador de verdad, no una aproximación: sus métodos de
+    expresión no guardan estado, así que uno vacío basta. Ante cualquier duda
+    (lista vacía, error, tokens que sobran) la respuesta es que no.
+    """
+    if not toks:
+        return None
+    # Una palabra del lenguaje (Entonces, Hacer, FinSi...) nunca forma parte
+    # de una cuenta que se vaya a PROPONER: el analizador las admitiría como
+    # nombres de variable, y saldría «Mientras i < Entonces Hacer».
+    if any(t.tipo == "ident" and _norm(t.valor) in _DE_ESTRUCTURA for t in toks):
+        return None
+    try:
+        arbol, sobra = _Analizador("")._expresion(list(toks), toks[0].linea, "")
+    except Exception:
+        return None
+    return None if sobra else arbol
+
+
+def _la_pregunta(toks):
+    """El texto de `toks` si son UNA pregunta de verdad —una comparación, un
+    Y/O o un NO— y se pueden proponer dentro de un `Si … Entonces` o un
+    `Mientras … Hacer`; si no, "". Una cuenta a secas (`n - 1`) se analiza
+    pero no es una pregunta, y proponer «Mientras n - 1 Hacer» tampoco sirve
+    (tercera revisión, 2026-10-05)."""
+    arbol = _la_cuenta(toks)
+    es = isinstance(arbol, _Bin) and arbol.op in ("=", "<>", "<", "<=", ">",
+                                                   ">=", "Y", "O")
+    es = es or (isinstance(arbol, _Un) and arbol.op == "NO")
+    return _tokens_a_texto(toks) if es else ""
+
+
+def _para_que_corre(variable, ini=None, fin=None, paso=None, paso_defecto=None):
+    """Una cabecera de Para que SIEMPRE se analiza.
+
+    Cada una de las tres cuentas se copia del alumno solo si es una cuenta de
+    verdad (`_la_cuenta`); la que no, se sustituye por la del ejemplo de siempre
+    (1, 10 y, si se pidió paso, `paso_defecto`). Un paso 0 escrito a la vista
+    tampoco se copia: el motor lo rechaza antes de ejecutar.
+    """
+    def o(toks, defecto):
+        return _tokens_a_texto(toks) if _la_cuenta(toks) is not None else defecto
+
+    linea = f"Para {variable} <- {o(ini, '1')} Hasta {o(fin, '10')}"
+    if paso is not None or paso_defecto is not None:
+        arbol = _la_cuenta(paso)
+        cero = isinstance(arbol, _Lit) and _numeros(arbol.valor) \
+            and arbol.valor == 0
+        valor = paso_defecto if (arbol is None or cero) \
+            else _tokens_a_texto(paso)
+        if valor:
+            linea += f" Con Paso {valor}"
+    return linea + " Hacer"
+
+
+def _partes_de_para(resto):
+    """Lo que hay tras la flecha de un Para, partido en (ini, fin, paso) por
+    `Hasta` y por la pareja `Con Paso`. None si no hay ningún Hasta. La última
+    palabra, si es Hacer o Entonces, no cuenta."""
+    medio = list(resto)
+    if medio and (medio[-1].es("Hacer") or medio[-1].es("Entonces")):
+        medio = medio[:-1]
+    corte = next((k for k, t in enumerate(medio) if t.es("Hasta")), None)
+    if corte is None:
+        return None
+    ini, cola = medio[:corte], medio[corte + 1:]
+    con = next((k for k in range(len(cola) - 1)
+                if cola[k].es("Con") and cola[k + 1].es("Paso")), None)
+    if con is None:
+        return ini, cola, None
+    return ini, cola[:con], cola[con + 2:]
+
+
+def _cabecera_de_para(variable, resto, valor_suelto=False):
+    """La cabecera de Para que se puede armar con lo que el alumno escribió
+    después de la variable, o None si no hay nada aprovechable.
+
+    Aprovechable es: un `Hasta` con una cuenta válida a algún lado; dos cuentas
+    separadas por `a` o por una coma (`1 a n`, `1, n`: en este lenguaje se dice
+    Hasta); o, con `valor_suelto`, una sola cuenta, que hace de valor inicial.
+    Eso último solo vale cuando la flecha SÍ estaba: en `Para n veces Hacer`
+    lo que sigue a la variable no es un valor inicial y no se toma por tal.
+    """
+    resto = list(resto)
+    if resto and (resto[0].es("Desde") or resto[0].es("De")):
+        # `Para i de 1 a n`, `Ciclo i desde 1 hasta n`: el «de» sobra.
+        resto = resto[1:]
+    partes = _partes_de_para(resto)
+    if partes is not None:
+        ini, fin, paso = partes
+        if _la_cuenta(ini) is None and _la_cuenta(fin) is None:
+            return None
+        return _para_que_corre(variable, ini, fin, paso)
+    medio = resto
+    if medio and (medio[-1].es("Hacer") or medio[-1].es("Entonces")):
+        medio = medio[:-1]
+    for k, t in enumerate(medio):
+        if (t.es("a") or t.es_op(",")) and _la_cuenta(medio[:k]) is not None \
+                and _la_cuenta(medio[k + 1:]) is not None:
+            return _para_que_corre(variable, medio[:k], medio[k + 1:])
+    if valor_suelto and _la_cuenta(medio) is not None:
+        return _para_que_corre(variable, medio)
+    return None
+
+
+def _para_corregido(variable, resto):
+    """La cabecera `Para <variable> <- <resto>`, con lo que el alumno escribió
+    después de la flecha (y con su Hacer al final, si no lo traía). Solo si
+    `resto` tiene de verdad una cuenta, Hasta y otra cuenta; si no, el ejemplo
+    de siempre: nunca se propone una línea que no tenga la forma de un Para.
+
+    (2026-10-05, segunda revisión: «de verdad» se comprueba ahora analizando
+    las dos cuentas; antes bastaba con que hubiera un Hasta en medio, y
+    `- > 1 Hasta n` pasaba.)"""
+    partes = _partes_de_para(resto)
+    if partes is None or _la_cuenta(partes[0]) is None \
+            or _la_cuenta(partes[1]) is None:
+        return _EJEMPLO_PARA
+    return _para_que_corre(variable, *partes)
+
+
+def _ps06_forma_de_bloque(toks, cuenta_hasta, linea, texto):
+    """Una línea que abre un bloque con una palabra que el motor no conoce.
+
+    2026-10-05, tras la revisión. `Desde i <- 1 Hasta 5 Hacer`, `Ciclo x > 3
+    Hacer` o `Elif n = 2 Entonces` empiezan por dos palabras seguidas, y eso
+    bastaba para tomarlas por un nombre con espacio: «Arréglalo: Elif_n». La
+    tabla `_NO_TENGO` ataja las palabras que se conocen de antemano, pero una
+    lista nunca está completa. Aquí se decide por la FORMA de la línea: la que
+    termina en Entonces o en Hacer, o cuenta Hasta un valor, no es un nombre de
+    variable, empiece por la palabra que empiece.
+    """
+    cabeza = toks[0]
+    intrusa = (f"empieza por '{cabeza.valor}', que no es una instrucción de "
+               f"este motor")
+    con_flecha = any(t.es_op("<-") for t in toks)
+    if cuenta_hasta or (con_flecha and toks[-1].es("Hacer")):
+        # Con una flecha y un Hacer, aunque no se vea el Hasta, lo que se quiso
+        # abrir es un ciclo que cuenta: se enseña el Para, no un Mientras con
+        # una flecha dentro de la pregunta.
+        if not cuenta_hasta:
+            return _ps06_para(
+                f"esta línea termina en Hacer y guarda un valor con la "
+                f"flecha, como un ciclo Para, pero {intrusa}.",
+                "Para i <- 1 Hasta 10 Hacer", linea, texto, cabeza.col,
+                len(cabeza.valor))
+        ejemplo = "Para i <- 1 Hasta 10 Hacer"
+        if len(toks) >= 3 and toks[1].tipo == "ident" \
+                and toks[2].es_op("<-", "="):
+            ejemplo = _para_corregido(toks[1].valor, toks[3:])
+        return _ps06_para(
+            f"esta línea cuenta 'Hasta' un valor, como un ciclo Para, pero "
+            f"{intrusa}.", ejemplo, linea, texto, cabeza.col,
+            len(cabeza.valor))
+    # Lo que hay en medio se repite como pregunta solo si puede serlo: con una
+    # flecha dentro no lo es, y se pone el ejemplo de siempre.
+    # Lo que hay en medio se repite como pregunta solo si de verdad es una
+    # cuenta (tercera revisión: `For i = 1 to n Hacer` proponía «Mientras i =
+    # 1 to n Hacer», que tampoco corre). Y si lo de en medio tiene la forma de
+    # una cuenta con `de … a …`, lo que quiso abrir es un Para.
+    pregunta = "" if con_flecha else _la_pregunta(toks[1:-1])
+    if not pregunta and toks[-1].es("Hacer") and len(toks) >= 3 \
+            and toks[1].tipo == "ident":
+        como_para = _cabecera_de_para(toks[1].valor, toks[2:])
+        if como_para:
+            return _ps06_para(
+                f"esta línea termina en Hacer y cuenta de un valor a otro, "
+                f"como un ciclo Para, pero {intrusa}.",
+                como_para, linea, texto, cabeza.col, len(cabeza.valor))
+    pregunta = pregunta or "saldo > 0"
+    if toks[-1].es("Entonces"):
+        return _ps06(
+            f"esta línea termina en Entonces, como la de un Si, pero "
+            f"{intrusa}.",
+            "las preguntas se abren con Si y se cierran con FinSi; para el "
+            "otro caso está Sino, solo en su línea. No hay más formas que "
+            "esas.",
+            f"Si {pregunta} Entonces ... FinSi   (si es el otro caso de un Si "
+            f"de arriba: Sino solo en su línea, y este Si en la de abajo)",
+            linea, texto, cabeza.col, len(cabeza.valor))
+    return _ps06(
+        f"esta línea termina en Hacer, como la de un ciclo, pero {intrusa}.",
+        "este motor tiene dos ciclos: Mientras <pregunta> Hacer ... "
+        "FinMientras, y Para <variable> <- <inicio> Hasta <fin> Hacer ... "
+        "FinPara.",
+        f"Mientras {pregunta} Hacer", linea, texto, cabeza.col,
+        len(cabeza.valor))
+
+
+def _ps06_falta_la_apertura(toks, cuenta_hasta, linea, texto):
+    """`n = 2 Entonces`, `x = 3 Hacer`, `i = 3 Hasta n Hacer`: un Si, un
+    Mientras o un Para al que le falta su primera palabra.
+
+    2026-10-05, tras la revisión. Empiezan por `<nombre> =`, y eso bastaba para
+    contestar PS02 con un arreglo que tampoco corre: «n <- 2 Entonces». Es
+    además donde aterrizaba quien había obedecido el consejo viejo de PS14
+    (`SinoSi_n = 2 Entonces`), y de ahí los prefijos que se desandan.
+    """
+    cabeza = toks[0]
+    # Con una flecha más adelante la línea no se puede repetir como pregunta:
+    # se deja el valor de ejemplo.
+    derecha = [] if any(t.es_op("<-") for t in toks) else toks[2:-1]
+    # (Tercera revisión: `i = to n Hacer` proponía «Mientras i = to n Hacer».
+    # Lo de la derecha del = solo se repite si es una cuenta.)
+    if _la_cuenta(derecha) is None:
+        derecha = []
+    if cuenta_hasta:
+        return _ps06_para(
+            "esta línea cuenta 'Hasta' un valor, como un ciclo Para, pero no "
+            "empieza por la palabra Para.",
+            _para_corregido(_sin_prefijo(cabeza.valor, _ABREN_UN_CICLO),
+                            toks[2:]),
+            linea, texto, cabeza.col, len(cabeza.valor))
+    if toks[-1].es("Entonces"):
+        variable = _sin_prefijo(cabeza.valor, _ABREN_UN_SINO_SI)
+        pregunta = f"{variable} = {_tokens_a_texto(derecha) or '2'}"
+        if variable != cabeza.valor:
+            return _ps06_sino_si(pregunta, linea, texto, cabeza.col,
+                                 len(cabeza.valor),
+                                 palabra=cabeza.valor.partition("_")[0])
+        return _ps06(
+            "a esta línea le falta la palabra Si al principio.",
+            "una línea que termina en Entonces es una pregunta, y las "
+            "preguntas se abren con Si. (Aquí el = está bien: pregunta si las "
+            "dos cosas son iguales.)",
+            f"Si {pregunta} Entonces", linea, texto, cabeza.col,
+            len(cabeza.valor))
+    return _ps06(
+        "a esta línea le falta la palabra Mientras al principio.",
+        "una línea que termina en Hacer abre un ciclo, y el ciclo que repite "
+        "mientras una pregunta sea cierta se abre con Mientras.",
+        f"Mientras {cabeza.valor} = {_tokens_a_texto(derecha) or '0'} Hacer",
+        linea, texto, cabeza.col, len(cabeza.valor))
+
+
 def _ps06_instruccion(palabra, linea, texto, col):
     parecida = _sugerencia(palabra, _PALABRAS_CLAVE)
     return _ps06(
@@ -348,7 +830,19 @@ def _ps08(linea, texto, nombre, col=0, largo=0):
         arreglo, col, largo)
 
 
-def _ps09(linea, texto):
+def _ps09(linea, texto, ciclo="Mientras"):
+    if ciclo == "Para":
+        # 2026-10-05: hablarle de «la condición del Mientras» a quien escribió
+        # un Para sería mandarlo a buscar una línea que no existe.
+        return Error(
+            "PS09", linea, texto,
+            "tu algoritmo lleva 10 000 pasos y no termina: probablemente es un "
+            "ciclo infinito.",
+            "un Para termina cuando su variable pasa del valor final. Este da "
+            "demasiadas vueltas, o algo dentro del ciclo le devuelve el valor a "
+            "la variable que cuenta.",
+            "revisa hasta dónde cuenta el Para, y no le cambies el valor a su "
+            "variable dentro del ciclo.")
     return Error(
         "PS09", linea, texto,
         "tu algoritmo lleva 10 000 pasos y no termina: probablemente es un "
@@ -358,11 +852,29 @@ def _ps09(linea, texto):
         "asegúrate de que alguna variable de la condición cambie dentro del ciclo.")
 
 
+def _ps09_paso_cero(variable, linea, texto, col=0, largo=0):
+    """Decisión (2026-10-05): `Con Paso 0` es PS09 y no un código nuevo. Es un
+    ciclo infinito visto antes de dar la primera vuelta, y así el alumno no
+    tiene que esperar a los 10 000 pasos para enterarse."""
+    return Error(
+        "PS09", linea, texto,
+        f"el paso de este Para vale 0: la variable '{variable}' no avanzaría "
+        f"nunca y el ciclo no terminaría.",
+        "el paso es lo que se le suma a la variable en cada vuelta. Sumarle 0 "
+        "la deja donde estaba, así que jamás llega al valor final.",
+        "Con Paso 1 para contar hacia arriba, o Con Paso -1 para contar hacia "
+        "abajo.", col, largo)
+
+
 def _ps10(palabra, falta, linea, texto):
     if falta == "Entonces":
         por_que = ("la palabra Entonces marca dónde termina la pregunta y dónde "
                    "empieza lo que se hace si la respuesta es sí.")
         arreglo = "Si saldo > 0 Entonces"
+    elif _norm(palabra) == "para":
+        por_que = ("la palabra Hacer marca dónde termina la cuenta del Para y "
+                   "dónde empieza lo que se repite en cada vuelta.")
+        arreglo = "Para i <- 1 Hasta 10 Hacer"
     else:
         por_que = ("la palabra Hacer marca dónde termina la pregunta y dónde "
                    "empieza lo que se repite mientras la respuesta sea sí.")
@@ -400,7 +912,33 @@ def _ps13(linea, texto):
         "escribe arriba de todo:  Algoritmo MiPrimerAlgoritmo")
 
 
-def _ps14(nombre, linea, texto, col):
+def _ps14(nombre, linea, texto, col, o_bien=""):
+    """`o_bien` añade la otra lectura posible del mismo descuido (2026-10-05):
+    `Leer a b` casi nunca es una variable llamada «a b», son dos variables a
+    las que les falta la coma, y aconsejar solo `a_b` sería mandar al alumno a
+    un error distinto."""
+    # Red de seguridad (2026-10-05): si alguna de las «mitades» del nombre es
+    # una palabra de estructura, unirlas con guion bajo no es el arreglo. Los
+    # casos conocidos se atajan antes de llegar aquí, con su mensaje propio;
+    # esto garantiza que, llegue por donde llegue, PS14 no vuelva a aconsejar un
+    # `Para_i` ni un `total_Entonces`.
+    #
+    # Revisión del mismo día: la red miraba TODAS las palabras del lenguaje, y
+    # con eso `numero entero <- 5` y `Leer hora fin` perdían su arreglo
+    # (`numero_entero`, `hora_fin`) a cambio de una afirmación falsa. Ahora solo
+    # mira las de estructura (ver `_DE_ESTRUCTURA`), y el texto ya no promete
+    # nada que el motor no cumpla.
+    reservada = next((p for p in nombre.split()
+                      if _norm(p) in _DE_ESTRUCTURA), None)
+    if reservada and " " in nombre:
+        return Error(
+            "PS14", linea, texto,
+            f"'{nombre}' no sirve como nombre de variable.",
+            f"'{reservada}' es una palabra con la que este lenguaje arma sus "
+            f"instrucciones, y aquí quedó donde iba el nombre de una variable.",
+            "revisa esa línea: va una sola instrucción por línea, y cada "
+            "palabra del lenguaje en su sitio.",
+            col, len(nombre))
     sano = _RE_ACENTO.sub(lambda m: _SIN_TILDE.get(m.group(), m.group()),
                           nombre).replace(" ", "_")
     return Error(
@@ -408,7 +946,7 @@ def _ps14(nombre, linea, texto, col):
         f"'{nombre}' no sirve como nombre de variable.",
         "los nombres van sin espacios y sin tildes. La costumbre es unir las "
         "palabras con guion bajo.",
-        sano, col, len(nombre))
+        sano + (f"   ({o_bien})" if o_bien else ""), col, len(nombre))
 
 
 _SIN_TILDE = {"á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u", "ü": "u",
@@ -632,6 +1170,75 @@ class _Mientras(_Nodo):
         self.id_nodo = 0
 
 
+class _Para(_Nodo):
+    """`Para <var> <- <ini> Hasta <fin> [Con Paso <p>] Hacer ... FinPara`.
+
+    Decisión (2026-10-05): nodo propio, y no «azúcar» que el analizador
+    deshaga en asignación + Mientras + incremento. Deshacerlo era menos código,
+    pero el traductor a Python va línea a línea (la línea n del pseudocódigo es
+    la línea n del Python) y tres sentencias nacidas de una sola línea no tienen
+    dónde ponerse; además el alumno vería en la traza y en los errores un
+    `Mientras` que él nunca escribió. Con nodo propio, cada consumidor del árbol
+    decide cómo lo muestra: el intérprete y el diagrama lo abren en sus tres
+    piezas (inicialización, pregunta, incremento) y el traductor lo deja en una
+    sola línea, `for ... in range(...)`.
+
+    Por eso lleva TRES ids de diagrama: `id_nodo` es la caja de inicialización,
+    `id_cond` el rombo e `id_inc` la caja del incremento.
+    """
+
+    __slots__ = ("var", "col", "ini", "toks_ini", "fin", "toks_fin", "paso",
+                 "toks_paso", "cuerpo", "linea", "linea_fin", "texto",
+                 "texto_fin", "id_nodo", "id_cond", "id_inc")
+
+    def __init__(self, var, col, ini, toks_ini, fin, toks_fin, paso, toks_paso,
+                 cuerpo, linea, linea_fin, texto, texto_fin):
+        self.var, self.col = var, col
+        self.ini, self.toks_ini = ini, toks_ini
+        self.fin, self.toks_fin = fin, toks_fin
+        self.paso, self.toks_paso = paso, toks_paso     # None: de uno en uno
+        self.cuerpo = cuerpo
+        self.linea, self.linea_fin = linea, linea_fin
+        self.texto, self.texto_fin = texto, texto_fin
+        self.id_nodo = self.id_cond = self.id_inc = 0
+
+
+def _paso_fijo(st):
+    """El paso de un Para cuando se sabe sin ejecutar; None si no se sabe.
+
+    Lo necesitan los tres que muestran el Para sin correrlo (diagrama, traductor
+    y puente a Flowgorithm) para saber si el ciclo sube (`<=`) o baja (`>=`).
+    Se sabe cuando no hay `Con Paso` (vale 1) o cuando es un número escrito a la
+    vista; si es una cuenta (`Con Paso salto`), solo se sabe al ejecutar.
+    """
+    expr, signo = st.paso, 1
+    if expr is None:
+        return 1
+    if isinstance(expr, _Un) and expr.op == "-":
+        expr, signo = expr.expr, -1
+    if isinstance(expr, _Lit) and _numeros(expr.valor) and expr.valor != 0:
+        return signo * expr.valor
+    return None
+
+
+def _textos_del_para(st, a_texto):
+    """(inicialización, pregunta, incremento) tal como se leen en el diagrama.
+
+    Es el Para «abierto» en las tres piezas que el alumno dibujaría a mano. La
+    pregunta se escribe con el operador de verdad cuando se sabe hacia dónde
+    cuenta; si el paso es una cuenta, se dice en palabras para no mentir.
+    """
+    ini, fin = a_texto(st.toks_ini), a_texto(st.toks_fin)
+    paso = _paso_fijo(st)
+    if paso is None:
+        cuanto = a_texto(st.toks_paso)
+        if len(st.toks_paso) > 1:
+            cuanto = f"({cuanto})"
+        return ini, f"{st.var} no pasó de {fin}", f"{st.var} + {cuanto}"
+    return (ini, f"{st.var} {'<=' if paso > 0 else '>='} {fin}",
+            f"{st.var} {'+' if paso > 0 else '-'} {_formatear(abs(paso))}")
+
+
 # -- Expresiones --------------------------------------------------------------
 class _Lit(_Nodo):
     __slots__ = ("valor", "tok")
@@ -672,7 +1279,36 @@ class _Llamada(_Nodo):
 # Analizador
 # ═════════════════════════════════════════════════════════════════════════════
 
-_CIERRES = {"finsi", "sino", "finmientras", "finalgoritmo"}
+_CIERRES = {"finsi", "sino", "finmientras", "finpara", "finalgoritmo",
+            "finproceso"}
+# 2026-10-05: `Proceso <nombre> ... FinProceso` es la otra forma que PSeInt da
+# para lo mismo, y hay alumnos que la traen aprendida así. Entra como sinónimo.
+# Se aceptan también cruzados —`Algoritmo` cerrado con `FinProceso`—: no enseña
+# nada castigar eso.
+_FIN_DE_PROGRAMA = ("finalgoritmo", "finproceso")
+
+
+def _juntar_dos_palabras(toks):
+    """`Fin Si` -> `FinSi`, y la línea que es solo `Si no` -> `Sino`.
+
+    2026-10-05. Se hace sobre los tokens de la línea, recién tokenizada, y no
+    en cada sitio que mira un cierre: así el resto del analizador sigue viendo
+    una sola palabra y no hay un segundo camino que mantener.
+
+    Ojo con el `Si no`: solo cuando la línea es EXACTAMENTE esas dos palabras.
+    `Si no encontrado Entonces` es un Si legítimo cuya pregunta empieza por NO,
+    y convertirlo en un Sino cambiaría lo que hace el programa sin avisar.
+    """
+    if len(toks) < 2 or toks[0].tipo != "ident" or toks[1].tipo != "ident":
+        return toks
+    una, otra = _norm(toks[0].valor), _norm(toks[1].valor)
+    if una == "fin" and otra in _SE_CIERRA_CON_FIN:
+        junto = _Token("ident", toks[0].valor + toks[1].valor,
+                       toks[0].linea, toks[0].col)
+        return [junto] + toks[2:]
+    if una == "si" and otra == "no" and len(toks) == 2:
+        return [_Token("ident", "Sino", toks[0].linea, toks[0].col)]
+    return toks
 
 
 class _Analizador:
@@ -695,14 +1331,29 @@ class _Analizador:
         self.fuente = codigo.replace("\r\n", "\n").replace("\r", "\n").split("\n")
         self.lineas = []     # [(n, texto, tokens)]
         self.i = 0
+        self.cabecera = "Algoritmo"     # o "Proceso", según lo que escribió
 
     # -- utilidades ---------------------------------------------------------
     def _preparar(self):
+        # 2026-10-05: una línea que no se puede tokenizar ya no tumba el
+        # análisis aquí; su error se guarda y se da cuando el analizador LLEGA a
+        # esa línea (ver `_actual`). Así los errores salen en el orden en que el
+        # alumno lee su programa. Antes, un `1:` de un Segun en la línea 9
+        # tapaba con «no conozco el símbolo ':'» el mensaje de la línea 8, que
+        # es el que sirve: «este motor no tiene Segun».
         for n, texto in enumerate(self.fuente, start=1):
-            self.lineas.append((n, texto, _tokenizar_linea(texto, n)))
+            try:
+                toks = _juntar_dos_palabras(_tokenizar_linea(texto, n))
+            except _Alto as alto:
+                toks = alto
+            self.lineas.append((n, texto, toks))
 
     def _actual(self):
-        return self.lineas[self.i] if self.i < len(self.lineas) else None
+        if self.i >= len(self.lineas):
+            return None
+        if isinstance(self.lineas[self.i][2], _Alto):
+            raise self.lineas[self.i][2]
+        return self.lineas[self.i]
 
     def _saltar_vacias(self):
         while self.i < len(self.lineas) and not self.lineas[self.i][2]:
@@ -721,8 +1372,10 @@ class _Analizador:
                 break
         if primera is None:
             raise _Alto(_ps13(1, self.fuente[0] if self.fuente else ""))
-        if _norm(primera[2].split()[0]) != "algoritmo":
+        if _norm(primera[2].split()[0]) not in ("algoritmo", "proceso"):
             raise _Alto(_ps13(primera[0], primera[1]))
+        if _norm(primera[2].split()[0]) == "proceso":
+            self.cabecera = "Proceso"
 
         self._preparar()
         self._saltar_vacias()
@@ -730,17 +1383,20 @@ class _Analizador:
         if len(toks) < 2 or toks[1].tipo != "ident":
             raise _Alto(Error(
                 "PS13", n, texto,
-                "escribiste 'Algoritmo' pero no le pusiste nombre.",
+                f"escribiste '{self.cabecera}' pero no le pusiste nombre.",
                 "esa línea le pone nombre a lo que estás resolviendo. En el "
                 "diagrama de flujo es el óvalo de INICIO.",
-                "Algoritmo CostoDeFotocopias", 0, len(toks[0].valor)))
+                f"{self.cabecera} CostoDeFotocopias", 0, len(toks[0].valor)))
         nombre = toks[1].valor
         self._validar_nombre(nombre, toks[1], texto)
         if len(toks) > 2:
             raise _Alto(self._sobra(toks[2], texto))
         self.i += 1
 
-        cuerpo = self._bloque("Algoritmo", n, "FinAlgoritmo", ("finalgoritmo",))
+        # Los mensajes de PS03 nombran el cierre con la misma palabra con que el
+        # alumno abrió: a quien escribió Proceso se le pide FinProceso.
+        cuerpo = self._bloque(self.cabecera, n, "Fin" + self.cabecera,
+                              _FIN_DE_PROGRAMA)
         n_fin = self._actual()[0]
         self.i += 1
         # Decisión: lo que venga después de FinAlgoritmo se ignora. La gramática
@@ -761,12 +1417,12 @@ class _Analizador:
             if toks[0].tipo == "ident" and _norm(toks[0].valor) in terminadores:
                 return cuerpo
             if toks[0].tipo == "ident" and _norm(toks[0].valor) in _CIERRES:
-                if palabra_apertura != "Algoritmo":
-                    # Estamos dentro de un Si o de un Mientras y aparece el
-                    # cierre de un bloque de más afuera: lo que falta no es esta
-                    # línea, es el FinSi/FinMientras que nunca se escribió. Se
-                    # acusa la apertura, que es donde el estudiante tiene que
-                    # mirar.
+                if palabra_apertura not in ("Algoritmo", "Proceso"):
+                    # Estamos dentro de un Si, de un Mientras o de un Para y
+                    # aparece el cierre de un bloque de más afuera: lo que falta
+                    # no es esta línea, es el FinSi/FinMientras/FinPara que
+                    # nunca se escribió. Se acusa la apertura, que es donde el
+                    # estudiante tiene que mirar.
                     raise _Alto(_ps03(palabra_apertura, linea_apertura, cierre,
                                       n, texto))
                 # Cierra un bloque que nadie abrió: se dice al derecho.
@@ -775,8 +1431,8 @@ class _Analizador:
                     f"escribiste '{toks[0].valor}' pero aquí no hay ningún "
                     f"bloque abierto que cerrar.",
                     "todo bloque que se abre se cierra: Algoritmo/FinAlgoritmo, "
-                    "Si/FinSi, Mientras/FinMientras. Y al revés: no se cierra lo "
-                    "que no se abrió.",
+                    "Si/FinSi, Mientras/FinMientras, Para/FinPara. Y al revés: "
+                    "no se cierra lo que no se abrió.",
                     "borra esa línea, o escribe antes la que abre el bloque.",
                     toks[0].col, len(toks[0].valor)))
             cuerpo.append(self._sentencia())
@@ -792,20 +1448,114 @@ class _Analizador:
                 "definir": self._definir, "constante": self._constante,
                 "leer": self._leer, "escribir": self._escribir,
                 "mostrar": self._escribir, "si": self._si,
-                "mientras": self._mientras,
+                "mientras": self._mientras, "para": self._para,
             }.get(clave)
             if despacho:
                 return despacho()
             if len(toks) >= 2 and toks[1].es_op("<-"):
                 return self._asignar()
+            # 2026-10-05 (revisión): la FORMA del resto de la línea, que es lo
+            # que distingue un nombre partido de una estructura mal abierta.
+            cuenta_hasta, termina_en = _forma_de_bloque(toks)
+            abre_bloque = cuenta_hasta or bool(termina_en)
             if len(toks) >= 2 and toks[1].es_op("="):
+                if abre_bloque:
+                    raise _Alto(_ps06_falta_la_apertura(toks, cuenta_hasta, n,
+                                                        texto))
                 izq = cabeza.valor
                 der = _tokens_a_texto(toks[2:]) or "…"
                 raise _Alto(_ps02(n, texto, toks[1].col, izq, der))
-            if len(toks) >= 2 and toks[1].tipo == "ident":
+            # 2026-10-05: antes de sospechar de un nombre mal escrito, se mira
+            # si la línea empieza por una palabra de estructura. Va DESPUÉS de
+            # las dos comprobaciones de arriba a propósito: `caso <- 3` o
+            # `hasta <- 10` son asignaciones a variables con nombres legítimos.
+            segunda = toks[1] if len(toks) >= 2 and toks[1].tipo == "ident" \
+                else None
+            ancho = len(texto.rstrip()) - cabeza.col
+            llana = _sin_tildes(clave)
+            # 2026-10-05 (revisión). Dos palabras, una flecha (o un =) y nada
+            # de estructura en el resto: eso es una asignación a un nombre con
+            # espacio (`edad hasta <- 18`, `fin semana <- 6`), y le toca el PS14
+            # de siempre aunque una de las dos palabras sea también del
+            # lenguaje. Solo cede el paso para las palabras de
+            # `_PRIMERA_MITAD_DE_NOMBRE`; ver ahí por qué no para todas.
+            nombre_partido = (segunda is not None and len(toks) >= 3
+                              and toks[2].es_op("<-", "=") and not abre_bloque)
+            cede = nombre_partido and llana in _PRIMERA_MITAD_DE_NOMBRE
+            if llana in _ABREN_UN_SINO_SI:
+                # `SinoSi n = 2 Entonces`, la forma pegada del `Si no Si` que
+                # entregó un alumno. Caía en PS14: «Arréglalo: SinoSi_n».
+                resto = toks[1:-1] if toks[-1].es("Entonces") else toks[1:]
+                if any(t.es_op("<-") for t in resto):
+                    resto = []      # con una flecha no es una pregunta
+                raise _Alto(_ps06_sino_si(_tokens_a_texto(resto), n, texto,
+                                          cabeza.col, len(cabeza.valor),
+                                          palabra=cabeza.valor))
+            if clave == "fin" and not cede:
+                junta = llana + _sin_tildes(_norm(segunda.valor)) if segunda \
+                    else ""
+                if junta in _NO_TENGO:           # Fin Segun, Fin Funcion...
+                    raise _Alto(_ps06_no_tengo(junta, n, texto, cabeza.col,
+                                               ancho))
+                raise _Alto(_ps06_fin_suelto(segunda.valor if segunda else "",
+                                             n, texto, cabeza.col, ancho))
+            if llana in _NO_TENGO and not cede:
+                raise _Alto(_ps06_no_tengo(llana, n, texto, cabeza.col,
+                                           len(cabeza.valor)))
+            otra = _norm(segunda.valor) if segunda is not None else ""
+            for suelta in (clave, f"{clave} {otra}"):
+                if suelta in _FUERA_DE_SITIO and not cede:
+                    raise _Alto(_ps06_fuera_de_sitio(
+                        suelta, n, texto, cabeza.col, len(cabeza.valor)))
+            # Si la SEGUNDA palabra es de estructura, tampoco es un nombre
+            # partido: es una instrucción a la que le falta el principio, y
+            # unir las dos con guion bajo (`i_Hasta`) no arreglaría nada.
+            # (Revisión: salvo que detrás venga la flecha. `edad hasta <- 18`
+            # recibía aquí «Arréglalo: Para edad <- 1 Hasta <- 18».)
+            if otra == "como" and not nombre_partido:
+                raise _Alto(_ps06(
+                    "a esta línea le falta la palabra Definir al principio.",
+                    "Definir crea una o varias cajas y dice de qué tipo son.",
+                    f"Definir {_tokens_a_texto(toks)}", n, texto, cabeza.col,
+                    len(cabeza.valor)))
+            if otra == "hasta" and not (len(toks) >= 3
+                                        and toks[2].es_op("<-", "=")):
+                # (Tercera revisión, 2026-10-05: aquí se pegaba lo que
+                # hubiera tras Hasta —`i Hasta 10 Entonces` daba «Para i <- 1
+                # Hasta 10 Entonces Hacer»—; ahora pasa por la misma
+                # validación que todas las demás pistas de Para.)
+                raise _Alto(_ps06_para(
+                    "esta línea cuenta 'Hasta' un valor, como un ciclo Para, "
+                    "pero no empieza por la palabra Para ni dice desde dónde "
+                    "cuenta.",
+                    _cabecera_de_para(cabeza.valor, toks[1:]) or _EJEMPLO_PARA,
+                    n, texto, cabeza.col, len(cabeza.valor)))
+            if segunda is not None and abre_bloque:
+                raise _Alto(_ps06_forma_de_bloque(toks, cuenta_hasta, n,
+                                                  texto))
+            if len(toks) == 2 and segunda is not None:
+                # `total Entero` o `Entero total`, y nada más: una declaración
+                # a la que le faltan Definir y Como (la segunda forma es la de
+                # C y la de Java). Sin esto, al sacar los tipos de la red de
+                # PS14 habría vuelto el «Arréglalo: total_Entero» del motor
+                # viejo.
+                tipos = [_norm(t) for t in TIPOS] + ["lógico"]
+                tipo, caja = (segunda, cabeza) if otra in tipos else \
+                    (cabeza, segunda) if clave in tipos else (None, None)
+                if tipo is not None and _norm(caja.valor) not in tipos \
+                        and _norm(caja.valor) not in _DE_ESTRUCTURA:
+                    raise _Alto(_ps06(
+                        "esta línea nombra una variable y un tipo, pero le "
+                        "faltan las palabras Definir y Como.",
+                        "Definir dice dos cosas: cómo se llama la caja y qué "
+                        "tipo de dato guarda. La palabra Como separa las dos.",
+                        f"Definir {caja.valor} Como "
+                        f"{self._tipo(tipo, n, texto)}",
+                        n, texto, cabeza.col, ancho))
+            if segunda is not None:
                 # Dos identificadores seguidos al principio de la línea = un
                 # nombre con espacio en medio. Es el caso de PS14.
-                raise _Alto(_ps14(f"{cabeza.valor} {toks[1].valor}", n, texto,
+                raise _Alto(_ps14(f"{cabeza.valor} {segunda.valor}", n, texto,
                                   cabeza.col))
             raise _Alto(_ps06_instruccion(cabeza.valor, n, texto, cabeza.col))
         raise _Alto(_ps06_instruccion(str(cabeza.valor), n, texto, cabeza.col))
@@ -828,6 +1578,18 @@ class _Analizador:
                     "Definir crea una o varias cajas y dice de qué tipo son.",
                     "Definir copias Como Entero"))
             self._validar_nombre(toks[j].valor, toks[j], texto)
+            if j + 2 == len(toks) and toks[j + 1].tipo == "ident" \
+                    and _norm(toks[j + 1].valor) in [_norm(t) for t in TIPOS]:
+                # `Definir x Entero`: no es un nombre con espacio, es el Como
+                # que se quedó sin escribir. Se deja caer al mensaje de abajo
+                # (2026-10-05: antes aconsejaba llamar a la variable `x_Entero`).
+                # Solo cuando el tipo es lo ÚLTIMO de la línea (revisión del
+                # mismo día): en `Definir valor real, x Como Real` el Como sí
+                # está, y decir «le falta la palabra Como» era falso; ahí lo
+                # que hay es un nombre con espacio, `valor_real`.
+                nombres.append(toks[j].valor)
+                j += 1
+                break
             if j + 1 < len(toks) and toks[j + 1].tipo == "ident" \
                     and _norm(toks[j + 1].valor) != "como":
                 raise _Alto(_ps14(f"{toks[j].valor} {toks[j + 1].valor}", n,
@@ -917,6 +1679,21 @@ class _Analizador:
                 "cuenta que se va a guardar en la caja.",
                 f"{nombre} <- 0", toks[1].col, 2))
         expr, resto = self._expresion(toks[2:], n, texto)
+        if resto and resto[0].es("Hasta"):
+            # 2026-10-05: `i <- 3 Hasta n Hacer` es un Para al que le falta la
+            # palabra Para, y `para_i <- 3 hasta n hacer` es el mismo Para
+            # después de obedecer el consejo viejo de PS14. Decir «sobró algo
+            # al final de la línea: 'hasta'» (7 veces en la telemetría) no le
+            # explica a nadie qué hacer.
+            # (Revisión: también `Desde_i`, `For_i`... que es lo que el motor
+            # viejo aconsejaba para esas palabras; y la línea que se propone
+            # termina siempre en Hacer.)
+            raise _Alto(_ps06_para(
+                "esta línea cuenta 'Hasta' un valor, como un ciclo Para, pero "
+                "no empieza por la palabra Para.",
+                _para_corregido(_sin_prefijo(nombre, _ABREN_UN_CICLO),
+                                toks[2:]),
+                n, texto, toks[0].col, len(nombre)))
         if resto:
             raise _Alto(self._sobra(resto[0], texto))
         return _Asignar(nombre, expr, toks[2:], n, texto, toks[0].col)
@@ -936,8 +1713,11 @@ class _Analizador:
                     "Leer copias"))
             self._validar_nombre(toks[j].valor, toks[j], texto)
             if j + 1 < len(toks) and toks[j + 1].tipo == "ident":
-                raise _Alto(_ps14(f"{toks[j].valor} {toks[j + 1].valor}", n,
-                                  texto, toks[j].col))
+                raise _Alto(_ps14(
+                    f"{toks[j].valor} {toks[j + 1].valor}", n, texto,
+                    toks[j].col,
+                    o_bien=f"si son dos variables, sepáralas con coma: Leer "
+                           f"{toks[j].valor}, {toks[j + 1].valor}"))
             nombres.append(toks[j].valor)
             cols.append(toks[j].col)
             j += 1
@@ -984,6 +1764,16 @@ class _Analizador:
     def _si(self):
         n, texto, toks = self._actual()
         self.i += 1
+        if len(toks) >= 3 and toks[1].es("NO") and toks[2].es("Si"):
+            # 2026-10-05: `Si no Si n = 2 Entonces`, tal cual lo entregó un
+            # alumno. Es un `Sino` seguido de otro `Si` en la misma línea. No se
+            # convierte en nada (ver `_juntar_dos_palabras`): se le dice cómo se
+            # escribe. Sin esto el motor lo leía como un Si cuya pregunta es
+            # «NO Si» y contestaba «sobró algo al final de la línea: 'n'».
+            condicion = toks[3:-1] if toks[-1].es("Entonces") else toks[3:]
+            raise _Alto(_ps06_sino_si(_tokens_a_texto(condicion), n, texto,
+                                      toks[0].col,
+                                      toks[2].col + 2 - toks[0].col))
         if not (len(toks) >= 2 and toks[-1].es("Entonces")):
             raise _Alto(_ps10(toks[0].valor, "Entonces", n, texto))
         cond_toks = toks[1:-1]
@@ -1001,6 +1791,19 @@ class _Analizador:
         sino, linea_sino = None, 0
         n_cierre, texto_cierre, toks_cierre = self._actual()
         if _norm(toks_cierre[0].valor) == "sino":
+            if len(toks_cierre) > 1:
+                # 2026-10-05: lo que venía detrás de Sino en la misma línea se
+                # descartaba EN SILENCIO. Con `Sino Si n = 2 Entonces` eso es
+                # grave: la segunda pregunta desaparecía y el programa corría
+                # haciendo otra cosa que la escrita, sin un solo aviso.
+                if toks_cierre[1].es("Si"):
+                    resto = toks_cierre[2:-1] if toks_cierre[-1].es("Entonces") \
+                        else toks_cierre[2:]
+                    raise _Alto(_ps06_sino_si(
+                        _tokens_a_texto(resto), n_cierre, texto_cierre,
+                        toks_cierre[0].col,
+                        toks_cierre[1].col + 2 - toks_cierre[0].col))
+                raise _Alto(self._sobra(toks_cierre[1], texto_cierre))
             linea_sino = n_cierre
             self.i += 1
             sino = self._bloque("Si", n, "FinSi", ("finsi",))
@@ -1028,6 +1831,194 @@ class _Analizador:
         n_fin = self._actual()[0]
         self.i += 1
         return _Mientras(cond, cond_toks, cuerpo, n, n_fin, texto)
+
+    def _para(self):
+        """`Para <var> <- <ini> Hasta <fin> [Con Paso <p>] Hacer` (2026-10-05).
+
+        Es la sintaxis de PSeInt, que es la que los alumnos traen aprendida. Las
+        tres cuentas (<ini>, <fin>, <p>) son expresiones cualesquiera. Cada
+        tropiezo posible de la cabecera tiene su mensaje, porque es una línea
+        larga y en las entregas del 5-oct apareció escrita de varias maneras.
+        """
+        n, texto, toks = self._actual()
+        self.i += 1
+        palabra = toks[0].valor
+        if len(toks) < 2 or toks[1].tipo != "ident" \
+                or _norm(toks[1].valor) in ("hasta", "hacer", "con"):
+            raise _Alto(_ps06_para(
+                f"escribiste '{palabra}' pero no dijiste qué variable va a "
+                f"llevar la cuenta.",
+                "Para i <- 1 Hasta 10 Hacer", n, texto, toks[0].col,
+                len(palabra)))
+        if toks[1].es("Cada") and not (len(toks) >= 3
+                                       and toks[2].es_op("<-", "=")):
+            raise _Alto(_ps06(
+                "este motor no tiene 'Para Cada'.",
+                "el Para de este motor cuenta con una variable, de un valor "
+                "hasta otro.",
+                "Para i <- 1 Hasta 10 Hacer", n, texto, toks[0].col,
+                toks[1].col + len(toks[1].valor) - toks[0].col))
+        var = toks[1]
+        self._validar_nombre(var.valor, var, texto)
+        if len(toks) < 3 or not toks[2].es_op("<-"):
+            if len(toks) >= 3 and toks[2].es_op("="):
+                # `Para i = 3 Hasta n Hacer`: el mismo descuido de siempre, y se
+                # le contesta igual que en el resto del motor (PS02), con la
+                # línea ya corregida.
+                # (Segunda revisión: lo de la derecha se pasa por
+                # `_cabecera_de_para`, para que `Para i = 1 a n Hacer` no reciba
+                # una línea que vuelve a fallar al obedecerla.)
+                corregida = _cabecera_de_para(var.valor, toks[3:],
+                                              valor_suelto=True) \
+                    or _para_que_corre(var.valor)
+                raise _Alto(_ps02(n, texto, toks[2].col,
+                                  f"{palabra} {var.valor}",
+                                  corregida.split(" <- ", 1)[1]))
+            if len(toks) >= 4 and toks[2].tipo == "ident" \
+                    and toks[3].es_op("<-", "="):
+                raise _Alto(_ps14(f"{var.valor} {toks[2].valor}", n, texto,
+                                  var.col))
+            raise _Alto(self._para_sin_flecha(palabra, var, toks[2:], n, texto))
+        if not toks[-1].es("Hacer"):
+            raise _Alto(_ps10(palabra, "Hacer", n, texto))
+
+        interior = toks[3:-1]
+        corte = next((k for k, t in enumerate(interior) if t.es("Hasta")), None)
+        if corte is None:
+            # Segunda revisión: aquí se pegaba « Hasta 10 Hacer» detrás de lo
+            # que hubiera («Para i <- 1 a 3 Hasta 10 Hacer»). Ahora lo del
+            # alumno se aprovecha solo si es una cuenta, o dos separadas por
+            # `a` o por una coma, que es como se dice en español.
+            dicho_con_a = any(t.es("a") or t.es_op(",") for t in interior)
+            corregida = _cabecera_de_para(var.valor, interior,
+                                          valor_suelto=True)
+            raise _Alto(_ps06_para(
+                "a este Para le falta la palabra Hasta: no dice hasta qué "
+                "valor cuenta." + (" (En este lenguaje el final de la cuenta "
+                                   "se anuncia con Hasta, no con 'a' ni con una "
+                                   "coma.)" if dicho_con_a and corregida
+                                   else ""),
+                corregida or _para_que_corre(var.valor), n, texto))
+        toks_ini, cola = interior[:corte], interior[corte + 1:]
+        # `Con Paso` se busca como PAREJA de palabras: así una variable que se
+        # llame `paso` puede usarse en cualquiera de las tres cuentas.
+        con = next((k for k in range(len(cola) - 1)
+                    if cola[k].es("Con") and cola[k + 1].es("Paso")), None)
+        toks_fin = cola if con is None else cola[:con]
+        toks_paso = None if con is None else cola[con + 2:]
+        if not toks_ini:
+            raise _Alto(_ps06_para(
+                "a este Para le falta el valor donde empieza la cuenta, entre "
+                "la flecha y Hasta.",
+                _para_que_corre(var.valor, None, toks_fin, toks_paso),
+                n, texto, toks[2].col, 2))
+        if not toks_fin:
+            raise _Alto(_ps06_para(
+                "a este Para le falta el valor final, después de Hasta.",
+                _para_que_corre(var.valor, toks_ini),
+                n, texto, interior[corte].col, len(interior[corte].valor)))
+        if toks_paso is not None and not toks_paso:
+            raise _Alto(_ps06_para(
+                "escribiste 'Con Paso' pero no dijiste de cuánto en cuánto "
+                "cuenta.",
+                _para_que_corre(var.valor, toks_ini, toks_fin,
+                                paso_defecto="2"),
+                n, texto, cola[con].col, len(cola[con].valor)))
+
+        ini, sobra = self._expresion(toks_ini, n, texto)
+        if sobra:
+            raise _Alto(self._sobra(sobra[0], texto))
+        fin, sobra = self._expresion(toks_fin, n, texto)
+        if sobra and (sobra[0].es("Paso") or sobra[0].es("Con")):
+            # `Hasta 10 Paso 2`: le falta una de las dos palabras.
+            raise _Alto(_ps06_para(
+                "el paso de un Para se anuncia con las dos palabras juntas: "
+                "Con Paso.",
+                _para_que_corre(var.valor, toks_ini,
+                                self._recortar(toks_fin, sobra), sobra[1:],
+                                paso_defecto="2"),
+                n, texto, sobra[0].col, len(sobra[0].valor)))
+        if sobra:
+            raise _Alto(self._sobra(sobra[0], texto))
+        paso = None
+        if toks_paso is not None:
+            paso, sobra = self._expresion(toks_paso, n, texto)
+            if sobra:
+                raise _Alto(self._sobra(sobra[0], texto))
+            if isinstance(paso, _Lit) and _numeros(paso.valor) \
+                    and paso.valor == 0:
+                # Un 0 escrito a la vista se ataja ya, sin esperar a ejecutar:
+                # así el diagrama y el traductor tampoco muestran un ciclo que
+                # no puede existir.
+                raise _Alto(_ps09_paso_cero(var.valor, n, texto,
+                                            toks_paso[0].col, 1))
+
+        cuerpo = self._bloque("Para", n, "FinPara", ("finpara",))
+        n_fin, texto_fin, _ = self._actual()
+        self.i += 1
+        return _Para(var.valor, var.col, ini, toks_ini, fin, toks_fin, paso,
+                     toks_paso, cuerpo, n, n_fin, texto, texto_fin)
+
+    def _para_sin_flecha(self, palabra, var, resto, n, texto):
+        """`Para i ...` y lo que sigue no es la flecha.
+
+        2026-10-05, segunda revisión. Aquí se armaba el arreglo pegando `<-`
+        delante de lo que viniera, y salían líneas que tampoco corren: `Para i
+        <= n Hacer` -> «Para i <- <= n Hacer». Hay tres cosas distintas que
+        pueden haber pasado, y cada una pide su consejo:
+
+          - la flecha está, pero partida o al revés (`< -`, `->`);
+          - lo que viene es una PREGUNTA (`i <= n`): quiso un Mientras;
+          - falta la flecha sin más (`Para i 1 Hasta n`, `Para i de 1 a n`).
+
+        En las tres, la línea que se propone se arma con `_cabecera_de_para`,
+        que solo copia del alumno lo que de verdad es una cuenta.
+        """
+        nombre = var.valor
+        medio = list(resto)
+        if medio and medio[-1].es("Hacer"):
+            medio = medio[:-1]
+        if medio and (medio[0].es("Desde") or medio[0].es("De")):
+            medio = medio[1:]
+        if len(medio) >= 2 and (
+                (medio[0].es_op("<") and medio[1].es_op("-"))
+                or (medio[0].es_op("-") and medio[1].es_op(">"))):
+            return _ps06_para(
+                f"después de '{palabra} {nombre}' la flecha está mal escrita. "
+                f"Es <- : el signo menor y el guion, pegados y en ese orden.",
+                _cabecera_de_para(nombre, medio[2:], valor_suelto=True)
+                or _para_que_corre(nombre),
+                n, texto, medio[0].col,
+                medio[1].col + medio[1].largo - medio[0].col)
+        if medio and medio[0].es_op("<", "<=", ">", ">=", "<>"):
+            signo = medio[0]
+            if any(t.es("Hasta") for t in medio):
+                # `Para i <= 1 Hasta n Hacer`: iba la flecha y salió otro signo.
+                return _ps06_para(
+                    f"después de '{palabra} {nombre}' va la flecha <- y "
+                    f"escribiste '{signo.valor}'.",
+                    _cabecera_de_para(nombre, medio[1:]) or _para_que_corre(nombre),
+                    n, texto, signo.col, signo.largo)
+            pregunta = [var] + medio
+            if _la_cuenta(pregunta) is not None:
+                dicho = _tokens_a_texto(pregunta)
+                return _ps06(
+                    f"después de '{palabra} {nombre}' viene una pregunta "
+                    f"({dicho}), y un Para no pregunta: cuenta de un valor "
+                    f"Hasta otro.",
+                    "para repetir MIENTRAS algo se cumple está el ciclo "
+                    "Mientras; el Para es para contar, y su línea dice desde "
+                    "qué valor (con la flecha <-) y Hasta cuál.",
+                    f"Mientras {dicho} Hacer   (y ciérralo con FinMientras; "
+                    f"si lo que querías era contar:  {_EJEMPLO_PARA} ... "
+                    f"FinPara)",
+                    n, texto, var.col,
+                    medio[-1].col + medio[-1].largo - var.col)
+        return _ps06_para(
+            f"después de '{palabra} {nombre}' falta la flecha <- con el valor "
+            f"donde empieza la cuenta.",
+            _cabecera_de_para(nombre, medio) or _EJEMPLO_PARA,
+            n, texto, var.col, var.largo)
 
     # -- comprobaciones sueltas ---------------------------------------------
     def _validar_nombre(self, nombre, tok, texto):
@@ -1380,6 +2371,10 @@ class _Interprete:
         self.buffer = []
         self.largo = 0
         self.contador = 0
+        # Qué ciclos están abiertos ahora mismo, de afuera hacia adentro. Solo
+        # sirve para que PS09 hable del ciclo en el que de verdad está atascado
+        # el programa (2026-10-05: antes solo había Mientras y no hacía falta).
+        self.ciclos = []
         self.lecturas_declaradas = _contar_lecturas(alg)
 
     # -- salida --------------------------------------------------------------
@@ -1396,14 +2391,22 @@ class _Interprete:
             raise _Alto(_ps09(self.alg.linea, self.alg.texto))
 
     # -- traza ---------------------------------------------------------------
-    def _paso(self, st, explicacion):
-        self.pasos.append(Paso(len(self.pasos) + 1, st.linea, st.texto.rstrip(),
-                               dict(self.memoria), st.id_nodo, explicacion,
-                               self.largo))
+    def _paso(self, st, explicacion, nodo=None, linea=None, texto=None):
+        # Los tres opcionales existen por el Para: una sola sentencia que deja
+        # varios pasos en la traza (inicialización, pregunta, incremento), cada
+        # uno con su propio bloque del diagrama, y el incremento además con su
+        # propia línea (la de FinPara).
+        self.pasos.append(Paso(
+            len(self.pasos) + 1,
+            st.linea if linea is None else linea,
+            (st.texto if texto is None else texto).rstrip(),
+            dict(self.memoria), st.id_nodo if nodo is None else nodo,
+            explicacion, self.largo))
 
     def _tic(self, st):
         if self.contador >= MAX_PASOS:
-            raise _Alto(_ps09(st.linea, st.texto))
+            raise _Alto(_ps09(st.linea, st.texto,
+                              self.ciclos[-1] if self.ciclos else "Mientras"))
         self.contador += 1
 
     # -- ejecución -----------------------------------------------------------
@@ -1430,6 +2433,8 @@ class _Interprete:
             return self._hacer_si(st)
         if isinstance(st, _Mientras):
             return self._hacer_mientras(st)
+        if isinstance(st, _Para):
+            return self._hacer_para(st)
         raise RuntimeError("sentencia desconocida")   # no alcanzable
 
     def _hacer_definir(self, st):
@@ -1516,6 +2521,7 @@ class _Interprete:
             self._lista(st.sino)
 
     def _hacer_mientras(self, st):
+        self.ciclos.append("Mientras")
         while True:
             self._tic(st)
             antes = dict(self.memoria)
@@ -1526,8 +2532,123 @@ class _Interprete:
             self._paso(st, f"Se preguntó si {pregunta}{detalle}: la respuesta "
                            f"fue {'SÍ, así que se repite el ciclo' if cierto else 'NO, así que el ciclo terminó'}.")
             if not cierto:
+                self.ciclos.pop()
                 return
             self._lista(st.cuerpo)
+
+    def _hacer_para(self, st):
+        """El Para, ejecutado en las tres piezas que muestra el diagrama.
+
+        Decisiones (2026-10-05):
+
+        * **El valor final y el paso se calculan UNA vez, al entrar.** Es lo
+          que hace `range()` en Python, que es a donde va el alumno: el
+          traductor saca `for i in range(...)` y las dos versiones tienen que
+          dar las mismas vueltas. Si el cuerpo cambia la `n` de `Hasta n`, el
+          ciclo sigue contando hasta la `n` de cuando empezó.
+        * **La variable que cuenta SÍ se relee en cada vuelta.** Si el cuerpo la
+          cambia, el ciclo lo nota. Es la manera de que un Para se quede dando
+          vueltas, y para eso está el tope de pasos (`_tic` se llama en la
+          pregunta y en el incremento, igual que si fuera el Mientras
+          equivalente: gasta lo mismo del presupuesto de 10 000).
+        * **La variable tiene que existir** (`Definir i Como Entero`), como
+          cualquier otra de este motor. Crear cajas a escondidas contradiría lo
+          que el cuadernillo lleva tres semanas enseñando, y PS01 ya dice
+          exactamente qué línea agregar.
+        * Al terminar, la variable queda con el primer valor que NO cumplió la
+          pregunta (en `Para i <- 1 Hasta 3` queda en 4), que es lo que deja el
+          Mientras equivalente y lo que se lee en el diagrama. En Python
+          quedaría en 3: es la única diferencia entre el Para y el `for` que
+          sale del traductor, y solo se nota si se usa `i` después del ciclo.
+
+        Ninguna de las cuatro se pudo contrastar contra un PSeInt instalado; se
+        eligieron por coherencia con el diagrama y con el traductor.
+        """
+        var = st.var
+        if var in self.constantes:
+            raise _Alto(_ps11(var, st.linea, st.texto, st.col))
+        if var not in self.tipos:
+            raise _Alto(_ps01(var, st.linea, st.texto, st.col,
+                              conocidas=list(self.tipos)))
+        self._contador_del_para(st, al_entrar=True)
+        tipo = self.tipos[var]
+        inicial = self._encajar(self._evaluar(st.ini, st), tipo, var, st,
+                                st.toks_ini[0].col)
+        self.memoria[var] = inicial
+        fin = self._numero_del_para(st, st.fin, st.toks_fin, "el valor final")
+        paso = 1
+        if st.paso is not None:
+            paso = self._numero_del_para(st, st.paso, st.toks_paso, "el paso")
+            if paso == 0:
+                raise _Alto(_ps09_paso_cero(var, st.linea, st.texto,
+                                            st.toks_paso[0].col))
+        sube = paso > 0
+        op = "<=" if sube else ">="
+        de_a = _formatear(abs(paso))
+        self._paso(st, f"Empezó el Para: se guardó {_formatear(inicial)} en la "
+                       f"caja '{var}'. Va a contar hacia "
+                       f"{'arriba' if sube else 'abajo'}, de {de_a} en {de_a}, "
+                       f"hasta llegar a {_formatear(fin)}.")
+        pregunta = f"{var} {op} {_tokens_a_texto(st.toks_fin)}"
+        self.ciclos.append("Para")
+        while True:
+            self._tic(st)
+            actual = self._contador_del_para(st)
+            cierto = actual <= fin if sube else actual >= fin
+            valores = f"{_formatear(actual)} {op} {_formatear(fin)}"
+            detalle = f" ({valores})" if valores != pregunta else ""
+            self._paso(st, f"Se preguntó si {pregunta}{detalle}: la respuesta "
+                           f"fue {'SÍ, así que se da una vuelta' if cierto else 'NO, así que el ciclo terminó'}.",
+                       nodo=st.id_cond)
+            if not cierto:
+                self.ciclos.pop()
+                return
+            self._lista(st.cuerpo)
+            self._tic(st)
+            if var in self.constantes:
+                raise _Alto(_ps11(var, st.linea, st.texto, st.col))
+            actual = self._contador_del_para(st)
+            nuevo = self._encajar(actual + paso, self.tipos[var], var, st)
+            self.memoria[var] = nuevo
+            self._paso(st, f"Terminó la vuelta: '{var}' pasó de "
+                           f"{_formatear(actual)} a {_formatear(nuevo)} "
+                           f"({_formatear(actual)} {'+' if sube else '-'} "
+                           f"{de_a}), y se vuelve a la pregunta del Para.",
+                       nodo=st.id_inc, linea=st.linea_fin, texto=st.texto_fin)
+
+    def _contador_del_para(self, st, al_entrar=False):
+        """El valor de la variable que cuenta, o el error que explica por qué
+        no se puede contar con ella.
+
+        Se llama en cada vuelta y no solo al entrar, porque el cuerpo del ciclo
+        puede haberla vuelto a `Definir` (y entonces está vacía, o ya no es un
+        número). Sin esta comprobación eso acababa en un `TypeError` de Python,
+        es decir, en un PS00: justo lo que el contrato de robustez prohíbe.
+        """
+        tipo = self.tipos[st.var]
+        if tipo not in ("Entero", "Real"):
+            raise _Alto(Error(
+                "PS04", st.linea, st.texto,
+                f"la variable del Para, '{st.var}', está definida Como {tipo}.",
+                "un Para cuenta, y solo se puede contar con números.",
+                f"Definir {st.var} Como Entero", st.col, len(st.var)))
+        valor = self.memoria.get(st.var)
+        if valor is None and not al_entrar:
+            raise _Alto(_ps01(st.var, st.linea, st.texto, st.col, vacia=True))
+        return valor
+
+    def _numero_del_para(self, st, expr, toks, que):
+        valor = self._evaluar(expr, st)
+        if not _numeros(valor):
+            raise _Alto(Error(
+                "PS04", st.linea, st.texto,
+                f"{que} de este Para no es un número: es "
+                f"{_describir_valor(valor)}.",
+                "un Para cuenta desde un número hasta otro, sumando un número "
+                "en cada vuelta.",
+                "Para i <- 1 Hasta 10 Hacer", toks[0].col,
+                toks[-1].col + toks[-1].largo - toks[0].col))
+        return valor
 
     def _condicion(self, expr, st, palabra):
         valor = self._evaluar(expr, st)
@@ -1759,7 +2880,7 @@ def _contar_lecturas(alg):
             elif isinstance(st, _Si):
                 recorrer(st.entonces)
                 recorrer(st.sino or [])
-            elif isinstance(st, _Mientras):
+            elif isinstance(st, (_Mientras, _Para)):
                 recorrer(st.cuerpo)
 
     recorrer(alg.cuerpo)
@@ -1789,6 +2910,9 @@ def _instrucciones(alg):
                 recorrer(st.sino or [])
             elif isinstance(st, _Mientras):
                 usadas.add("Mientras")
+                recorrer(st.cuerpo)
+            elif isinstance(st, _Para):
+                usadas.add("Para")
                 recorrer(st.cuerpo)
 
     recorrer(alg.cuerpo)
@@ -1881,7 +3005,50 @@ _NOTAS = {
     "finsi": "Python cierra el bloque con la sangría, no con una palabra.",
     "mientras": "",
     "finmientras": "Python cierra el bloque con la sangría, no con una palabra.",
+    "para": "<code>range</code> se detiene uno ANTES del segundo número: por "
+            "eso el final lleva un <code>+ 1</code> que en el pseudocódigo no "
+            "estaba.",
+    "finpara": "Python cierra el bloque con la sangría, no con una palabra.",
 }
+
+
+def _para_a_python(st, tipos):
+    """La línea `for ... in range(...):` de un Para, y su aviso si lo lleva.
+
+    Decisión (2026-10-05): se traduce a `for` + `range` y no a su `while`
+    equivalente. El `while` sería fiel en todos los casos, pero necesita tres
+    líneas (inicializar, preguntar, incrementar) y el traductor es línea a
+    línea; y sobre todo, `for i in range(...)` es lo que el curso quiere que el
+    alumno termine escribiendo. El costo son dos sitios donde `range` no llega:
+
+    * `Hasta` es INCLUSIVO y `range` no: de ahí el `+ 1` (o `- 1` al bajar).
+    * `range` solo cuenta con enteros. Si la variable es Real se deja un
+      comentario en la misma línea, en vez de fingir que ese Python corre.
+    """
+    def con_parentesis(toks, texto):
+        return texto if len(toks) == 1 else f"({texto})"
+
+    ini = _tokens_a_python(st.toks_ini)
+    fin = _tokens_a_python(st.toks_fin)
+    paso = _paso_fijo(st)
+    un_numero = len(st.toks_fin) == 1 and st.toks_fin[0].tipo == "num" \
+        and isinstance(st.toks_fin[0].valor, int)
+    if paso is None:
+        # No se sabe si sube o baja hasta ejecutar: lo decide el propio Python.
+        p = con_parentesis(st.toks_paso, _tokens_a_python(st.toks_paso))
+        tope = f"{con_parentesis(st.toks_fin, fin)} + (1 if {p} > 0 else -1)"
+        rango = f"{ini}, {tope}, {p}"
+    else:
+        if un_numero:
+            tope = str(st.toks_fin[0].valor + (1 if paso > 0 else -1))
+        else:
+            tope = (f"{con_parentesis(st.toks_fin, fin)} "
+                    f"{'+' if paso > 0 else '-'} 1")
+        rango = f"{ini}, {tope}" + ("" if paso == 1 else f", {_formatear(paso)}")
+    aviso = ""
+    if tipos.get(st.var) == "Real" or isinstance(paso, float):
+        aviso = "  # range() solo cuenta con enteros: aquí iría un while"
+    return f"for {st.var} in range({rango}):", aviso
 
 
 def _tipos_declarados(alg):
@@ -1895,7 +3062,7 @@ def _tipos_declarados(alg):
             elif isinstance(st, _Si):
                 recorrer(st.entonces)
                 recorrer(st.sino or [])
-            elif isinstance(st, _Mientras):
+            elif isinstance(st, (_Mientras, _Para)):
                 recorrer(st.cuerpo)
 
     recorrer(alg.cuerpo)
@@ -1983,6 +3150,12 @@ def _traduccion(codigo):
                 poner(st.linea, f"{sangria}while {cond}:{vacio}{cola}", "mientras")
                 recorrer(st.cuerpo, nivel + 1)
                 poner(st.linea_fin, "", "finmientras")
+            elif isinstance(st, _Para):
+                cabeza, aviso = _para_a_python(st, tipos)
+                vacio = " pass" if not st.cuerpo else ""
+                poner(st.linea, f"{sangria}{cabeza}{vacio}{aviso}{cola}", "para")
+                recorrer(st.cuerpo, nivel + 1)
+                poner(st.linea_fin, "", "finpara")
 
     poner(alg.linea, f"# --- {alg.nombre} ---", "algoritmo")
     poner(alg.linea_fin, "", "finalgoritmo")
@@ -2205,6 +3378,25 @@ def _items(lista, nuevo, id_inicio):
             st.id_nodo = rombo["id"]
             cuerpo = _items(st.cuerpo, nuevo, id_inicio)
             salida.append({"clase": "mientras", "nodo": rombo, "cuerpo": cuerpo})
+        elif isinstance(st, _Para):
+            # 2026-10-05: el Para se dibuja ABIERTO, como se dibuja a mano:
+            # caja de inicialización -> rombo -> cuerpo -> caja de incremento
+            # -> flecha de vuelta al rombo. No hace falta una clase nueva de
+            # item ni tocar `_disponer`: la inicialización es un bloque simple
+            # que va antes, y lo demás es exactamente un ciclo «mientras» cuyo
+            # cuerpo termina en la caja del incremento, de la que sale la
+            # flecha de retorno.
+            ini, pregunta, incremento = _textos_del_para(st, _tokens_a_texto)
+            caja_ini = nuevo("proceso", f"{st.var} ← {ini}", st.linea)
+            rombo = nuevo("decision", f"¿{pregunta}?", st.linea)
+            cuerpo = _items(st.cuerpo, nuevo, id_inicio)
+            caja_inc = nuevo("proceso", f"{st.var} ← {incremento}", st.linea_fin)
+            st.id_nodo, st.id_cond = caja_ini["id"], rombo["id"]
+            st.id_inc = caja_inc["id"]
+            salida.append({"clase": "simple", "nodo": caja_ini})
+            salida.append({"clase": "mientras", "nodo": rombo,
+                           "cuerpo": cuerpo + [{"clase": "simple",
+                                                "nodo": caja_inc}]})
     return salida
 
 
@@ -2676,6 +3868,23 @@ def _bloques_flowgorithm(alg):
                 bloques.append(("While", _tokens_a_flow(st.toks), ""))
                 recorrer(st.cuerpo)
                 bloques.append(("EndWhile", "", ""))
+            elif isinstance(st, _Para):
+                # Flowgorithm tiene su propio bloque For, con las mismas cuatro
+                # casillas: variable, valor inicial, valor final y paso (más la
+                # dirección, que allá se elige aparte y el paso va sin signo).
+                ini, fin = _tokens_a_flow(st.toks_ini), _tokens_a_flow(st.toks_fin)
+                paso = _paso_fijo(st)
+                if paso is None:
+                    cuanto, baja = _tokens_a_flow(st.toks_paso), False
+                else:
+                    cuanto, baja = _formatear(abs(paso)), paso < 0
+                bloques.append(("For", f"{st.var} = {ini} to {fin}"
+                                       + (" decreasing" if baja else "")
+                                       + ("" if cuanto == "1" else f" step {cuanto}"),
+                                (st.var, ini, fin, "dec" if baja else "inc",
+                                 cuanto)))
+                recorrer(st.cuerpo)
+                bloques.append(("EndFor", "", ""))
 
     recorrer(alg.cuerpo)
     return bloques
@@ -2741,6 +3950,12 @@ def exportar_flowgorithm(codigo, ruta):
         elif clase == "While":
             cuerpo.append(f'            <while expression="{_escapar(uno, True)}">'
                           f'</while>')
+        elif clase == "For":
+            variable, ini, fin, direccion, cuanto = dos
+            cuerpo.append(
+                f'            <for variable="{_escapar(variable, True)}" '
+                f'start="{_escapar(ini, True)}" end="{_escapar(fin, True)}" '
+                f'direction="{direccion}" step="{_escapar(cuanto, True)}"></for>')
     xml = ('<?xml version="1.0"?>\n'
            '<flowgorithm fileversion="4.2">\n'
            '    <attributes>\n'
