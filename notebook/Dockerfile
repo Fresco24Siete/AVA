@@ -47,8 +47,17 @@ RUN apt-get update && apt-get install -y curl git \
 #
 # humanize lo usa el cliente de nbexchange (notebook/nbexchange_cliente) para
 # decir "50 MB" en un mensaje de error. Va en el mismo pip por la razón de arriba.
+# jupyterhub va FIJADO, y por el mismo motivo que la imagen del Hub (ver
+# hub_config/Dockerfile.hub): es la mitad del apreton de manos OAuth, y aqui
+# nadie lo acotaba. La cota `notebook<7` no lo frena, porque jupyterhub no
+# depende de notebook. Anadir pandas a este mismo RUN invalida la cache de la
+# capa, asi que la siguiente construccion re-resuelve TODO: sin esta cota se
+# habria traido la 6.1.1 de PyPI sin que nada del AVA lo pidiera, y con
+# remove=True en el spawner el contenedor viejo del alumno no vuelve.
+# 6.0.1 es lo que corre en produccion desde el 2026-10-13, con 18 alumnos y
+# 133 entregas: es la version PROBADA contra este Hub, no la ultima.
 RUN pip install --no-cache-dir \
-        "notebook<7" nbclassic nbgrader jupyterhub requests \
+        "notebook<7" nbclassic nbgrader "jupyterhub==6.0.1" requests \
         "ipywidgets==8.1.8" \
         "matplotlib==3.9.2" \
         "pandas==2.2.3" \
