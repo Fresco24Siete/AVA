@@ -373,8 +373,10 @@ async def auth_state_a_env(spawner, auth_state):
     # memoria él y los demás siguen trabajando.
     #
     # 768 MB deja holgura sobre los ~250 MB que consume una sesión normal y sobre
-    # los ~400 MB de las semanas 9 y 10, cuando entran NumPy y pandas. Al docente
-    # se le da más porque al calificar ejecuta todas las entregas.
+    # las semanas 9 y 10, cuando entran NumPy, pandas y Matplotlib: eso se estimó
+    # en ~400 MB y MEDIDO el 2026-10-28 son 98 MB de pico (DataFrame de 5000 x 8
+    # con describe, filtro e histograma). Al docente se le da más porque al
+    # calificar ejecuta todas las entregas.
     spawner.mem_limit = os.environ.get(
         'MEM_LIMIT_INSTRUCTOR' if es_instructor else 'MEM_LIMIT_ALUMNO',
         '1536M' if es_instructor else '768M')

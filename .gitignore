@@ -8,6 +8,9 @@ __pycache__/
 # Son salida del alumno, no fuente del cuadernillo.
 bitacora_semana1.txt
 mi_algoritmo.fprg
+medidas_s9.txt
+s9_entrada.txt
+fotos_semana10.csv
 .DS_Store
 
 # Copias de trabajo que crean los agentes de Claude Code; nunca van al repo.

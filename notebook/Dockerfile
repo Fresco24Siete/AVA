@@ -23,11 +23,27 @@ RUN apt-get update && apt-get install -y curl git \
 #   - En un pip aparte, un paquete que pida notebook>=6.0 sin cota superior
 #     puede ascender a notebook 7 y llevarse por delante nbclassic y nbgrader.
 #
-# matplotlib se instala para las semanas 9 y 10 del temario oficial (NumPy,
-# pandas, Matplotlib). Pesa: con NumPy son ~250 MB de imagen y ~80 MB de RAM por
-# kernel que la importe, y la VM tiene 2 GB. Por eso los cuadernillos de las
-# primeras semanas NO lo importan: sus gráficas y diagramas van pre-renderizados
-# como SVG dentro del propio notebook (ver notebook/cuadernillos/diagramas/).
+# NumPy, pandas y Matplotlib son el temario de las semanas 9 y 10 («Persistencia,
+# manejo de errores e introducción a NumPy» y «Análisis y visualización de datos
+# con pandas y Matplotlib»), así que el alumno los importa él.
+#
+# pandas va EXPLÍCITO desde el 2026-10-28, y no estaba: NumPy entra solo, como
+# dependencia de Matplotlib, pero pandas no es dependencia de nadie. El
+# cuadernillo de la semana 10 no se puede escribir sin él.
+#
+# Lo que cuestan, MEDIDO (no estimado) en la imagen del alumno con su tope de
+# 768 MB: NumPy y Matplotlib pintando una gráfica sobre una matriz de 1000 x 200
+# son 68 MB de pico; con pandas encima y un DataFrame de 5000 x 8 al que se le
+# hace describe(), un filtro y un histograma, 98 MB. El comentario anterior decía
+# «~80 MB por kernel» y «la VM tiene 2 GB»; lo segundo dejó de ser cierto el
+# 2026-08-28 (el Hetzner tiene 16 GB) y lo primero sobreestimaba poco, pero el
+# spawner reservaba «~400 MB para las semanas 9 y 10», que son cuatro veces lo
+# que hace falta. En disco, pandas añade ~170 MB a la imagen (1.46 -> 1.63 GB).
+#
+# Aun así, los cuadernillos de las semanas 1 a 8 NO los importan: sus gráficas y
+# diagramas van pre-renderizados como SVG dentro del propio notebook (ver
+# notebook/cuadernillos/diagramas/). Importar 68 MB para dibujar una flecha que
+# ya está dibujada no tiene sentido.
 #
 # humanize lo usa el cliente de nbexchange (notebook/nbexchange_cliente) para
 # decir "50 MB" en un mensaje de error. Va en el mismo pip por la razón de arriba.
@@ -35,6 +51,7 @@ RUN pip install --no-cache-dir \
         "notebook<7" nbclassic nbgrader jupyterhub requests \
         "ipywidgets==8.1.8" \
         "matplotlib==3.9.2" \
+        "pandas==2.2.3" \
         humanize
 
 # widgetsnbextension 4.x sí trae la extensión clásica; su fichero .d/ ya la

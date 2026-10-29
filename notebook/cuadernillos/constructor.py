@@ -186,6 +186,19 @@ def nombre_de_la_respuesta(partida, pruebas):
         for nombre in definidos:
             if nombre in usados:
                 return nombre
+    # Respaldo: hay partidas que no definen nada —la de semana_09 E3 es solo
+    # `import numpy as np`, y el alumno escribe el `def` entero—. Ahí el nombre
+    # lo declaran las propias pruebas, que por convención abren con
+    # `assert callable(nombre_de_la_funcion)`. Sin esto esos ejercicios se
+    # quedaban sin la guarda y el alumno recibía un NameError pelado.
+    try:
+        for nodo in ast.walk(ast.parse(pruebas)):
+            if (isinstance(nodo, ast.Call) and isinstance(nodo.func, ast.Name)
+                    and nodo.func.id == "callable" and len(nodo.args) == 1
+                    and isinstance(nodo.args[0], ast.Name)):
+                return nodo.args[0].id
+    except SyntaxError:
+        return None
     return None
 
 
