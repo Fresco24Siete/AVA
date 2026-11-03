@@ -177,7 +177,10 @@ def nombre_de_la_respuesta(partida, pruebas):
     except SyntaxError:
         return None
     for nodo in cuerpo:
-        if isinstance(nodo, ast.FunctionDef):
+        if isinstance(nodo, (ast.FunctionDef, ast.ClassDef)):
+            # ClassDef porque la semana 11 es POO: ahi la respuesta del alumno
+            # es `class Curso:`, no un `def`. Sin esto esos ejercicios se
+            # quedaban sin la guarda de "ejecuta primero TU celda".
             definidos = [nodo.name]
         elif isinstance(nodo, ast.Assign):
             definidos = [t.id for t in nodo.targets if isinstance(t, ast.Name)]
