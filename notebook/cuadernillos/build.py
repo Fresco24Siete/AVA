@@ -263,6 +263,20 @@ def main(argv):
         if retirados:
             print(f"     Mapeo: se conservan {len(retirados)} id(s) retirado(s) con su "
                   f"etiqueta, por el histórico: {', '.join(sorted(retirados))}")
+        # Tope de 2 competencias por ejercicio. NO es un capricho de aquí: lo
+        # fuerza la base con un CONSTRAINT TRIGGER (database/migracion_v5.sql),
+        # con el argumento de que «un ejercicio que dice medir cuatro cosas no
+        # mide ninguna». Se comprueba al construir porque, si no, el error no
+        # aparece hasta `cargar-competencias` contra el servidor, y allí llega
+        # como un 500 mudo («no se pudo guardar el mapeo») que no dice ni qué
+        # ejercicio lo provocó. Paso de verdad el 2026-11-04 con semana_12 E3.
+        pasados = {ej: cs for ej, cs in cuadernillo.competencias.items() if len(cs) > 2}
+        if pasados:
+            for ej, cs in sorted(pasados.items()):
+                print(f"     [ERROR] {ej} declara {len(cs)} competencias ({', '.join(cs)}). "
+                      f"El tope son 2: la base lo rechaza con un trigger.")
+            problemas += len(pasados)
+
         sin_etiquetar = [f"ejercicio_{n}" for n, _ in cuadernillo._ejercicios
                          if f"ejercicio_{n}" not in cuadernillo.competencias]
         if sin_etiquetar:

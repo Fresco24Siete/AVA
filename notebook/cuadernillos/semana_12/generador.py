@@ -895,7 +895,7 @@ assert abs(_m[0].mejor() - 0.80) < 1e-9 and abs(_m[1].mejor() - 0.60) < 1e-9, (
     # distintos, que es justo donde se aplica (o no) el concepto. Precedente:
     # en la semana 10 una media y una proporcion se etiquetaron I1.
     c.ejercicio(
-        numero=3, competencias=['I4', 'I3', 'I1'],
+        numero=3, competencias=['I4', 'I3'],
         titulo="Una regla de negocio, en código", estrellas=3, puntos=10,
         enunciado="""**Zafiro Labs** tiene varios modelos atendiendo peticiones en producción. De
 cada petición atendida queda una línea:
