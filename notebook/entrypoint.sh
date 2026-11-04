@@ -24,8 +24,7 @@ if [ "$ALUMNO_ROL" = "instructor" ]; then
     # Estos mkdir NO deben ser fatales: si el volumen nbgrader_shared quedó con
     # dueño root de una build anterior, preferimos arrancar y dejar el error en
     # el log a que el contenedor muera sin explicación.
-    if ! mkdir -p "/srv/nbgrader/${CURSO_ID}/source/semana_1" \
-                  "/srv/nbgrader/exchange" \
+    if ! mkdir -p "/srv/nbgrader/${CURSO_ID}/source" \
                   "/srv/nbgrader/logs" 2>/dev/null; then
         echo "[entrypoint] AVISO: no se pudo escribir en /srv/nbgrader." >&2
         echo "[entrypoint] Suele ser que el volumen 'nbgrader_shared' pertenece a root." >&2
@@ -34,13 +33,15 @@ if [ "$ALUMNO_ROL" = "instructor" ]; then
 
     # nbgrader exige que la raíz del curso sea subdirectorio del root del server
     ln -sfn /srv/nbgrader /home/jovyan/work/nbgrader
-
-    # Carpeta de cuadernillos PUBLICADOS (versión liberada, sin soluciones) que
-    # verán los alumnos. El instructor publica ahí con 'publicar-cuadernillo'.
-    mkdir -p "/srv/publicados/${CURSO_ID}" 2>/dev/null || true
-    ln -sfn "/srv/publicados/${CURSO_ID}" /home/jovyan/work/publicados 2>/dev/null || true
+    # Restos de cuando lo publicado se copiaba a un volumen compartido. Ahora se
+    # libera en el servicio de intercambio (publicar-cuadernillo).
+    rm -f /home/jovyan/work/publicados 2>/dev/null || true
 
     jupyter nbextension enable    --sys-prefix create_assignment/main || true
+    # Las pestanas "Formgrader" y "Courses" del arbol de archivos: sin ellas,
+    # desde /tree no habia camino de vuelta a formgrader salvo escribir la URL.
+    jupyter nbextension enable    --sys-prefix formgrader/main --section=tree || true
+    jupyter nbextension enable    --sys-prefix course_list/main --section=tree || true
     jupyter serverextension enable --sys-prefix nbgrader.server_extensions.formgrader || true
     jupyter serverextension enable --sys-prefix nbgrader.server_extensions.course_list || true
     jupyter server extension enable --sys-prefix nbgrader.server_extensions.formgrader || true
@@ -68,12 +69,12 @@ if [ "$ALUMNO_ROL" = "instructor" ]; then
         fi
     done
 
-    # Compatibilidad con la plantilla suelta de la demo, que no vivía en una
-    # subcarpeta. Se mantiene para no romper cursos ya sembrados.
-    if [ -f "/opt/plantillas/cuadernillo_ejercicios.ipynb" ]; then
-        cp -n "/opt/plantillas/cuadernillo_ejercicios.ipynb" \
-              "/srv/nbgrader/${CURSO_ID}/source/semana_1/cuadernillo_ejercicios.ipynb" 2>/dev/null || true
-    fi
+    # La plantilla suelta de la demo ya no se siembra. Creaba una actividad
+    # 'semana_1' que el docente no habia pedido, indistinguible a simple vista de
+    # 'semana_01' —las dos se leen «Semana 1»— y que volvia a aparecer cada vez
+    # que el docente entraba, por mucho que la borrara: el mkdir de arriba creaba
+    # su carpeta y este cp la rellenaba. Se borro dos veces en produccion y
+    # reaparecio las dos.
 
 else
     echo "[entrypoint] Rol: estudiante. Preparando entorno estático."
@@ -87,16 +88,24 @@ else
     jupyter serverextension disable --sys-prefix nbgrader.server_extensions.course_list || true
     jupyter server extension disable --sys-prefix nbgrader.server_extensions.formgrader || true
     jupyter server extension disable --sys-prefix nbgrader.server_extensions.course_list || true
+    # La pestaña «Assignments» de nbgrader tampoco: con el exchange por HTTP
+    # funcionaría, y el alumno tendría dos formas distintas de traer y entregar
+    # el mismo cuadernillo. La del AVA es el panel (entregar-cuadernillo y el
+    # botón de entregar dentro del cuadernillo).
+    jupyter nbextension disable   --sys-prefix assignment_list/main || true
+    jupyter serverextension disable --sys-prefix nbgrader.server_extensions.assignment_list || true
+    jupyter server extension disable --sys-prefix nbgrader.server_extensions.assignment_list || true
 
     # Cerrar la puerta a JupyterLab: el alumno solo debe ver el cuadernillo.
     # (En la imagen que está corriendo hoy, jupyterlab 3.6.8 SÍ está activo.)
     jupyter server extension disable --sys-prefix jupyterlab || true
     jupyter serverextension disable --sys-prefix jupyterlab || true
 
-    # Entregar el cuadernillo ACTIVO que publicó el instructor (nbgrader manda,
-    # no el backend). El script lee el manifest del volumen de publicados,
-    # valida la ventana de tiempo y deja el notebook en work/cuadernillo.ipynb.
-    # Devuelve el código del cuadernillo, que exportamos para la telemetría.
+    # Traer los cuadernillos que publicó el instructor (nbgrader manda, no el
+    # backend). El script pregunta al servicio de intercambio qué hay liberado
+    # para este curso, valida la ventana de tiempo y deja cada uno en
+    # work/<id>.ipynb. Devuelve el código del activo, que exportamos para la
+    # telemetría. Si el servicio no responde, se queda con lo que ya había.
     CODIGO_ENTREGADO="$(python3 /usr/local/bin/entregar-cuadernillo 2>/dev/null || echo '')"
     # Solo se pisa el valor si la entrega devolvió algo. Antes, un fallo de
     # entregar-cuadernillo dejaba CUADERNILLO_CODIGO vacío aunque el Hub hubiera

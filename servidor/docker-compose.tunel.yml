@@ -1,0 +1,27 @@
+# Ajustes para cuando el AVA corre en una máquina detrás de un túnel, no en la
+# VM con dominio propio. Se aplica ENCIMA del docker-compose.yml de la raíz:
+#
+#   docker compose -f docker-compose.yml -f servidor/docker-compose.tunel.yml up -d
+#
+# (El instalador ya lo hace; esto está aquí para poder repetirlo a mano.)
+#
+# Ojo con `!override`: sin él, Compose SUMA las listas de puertos en vez de
+# sustituirlas, así que el 80, el 443 y el 8080 de la VM seguirían publicándose
+# y el arranque falla si algo más los está usando —que es justo lo que pasa en
+# un equipo de escritorio—.
+services:
+  caddy:
+    # El túnel entrega el tráfico en un puerto local, así que Caddy no necesita
+    # el 80 ni el 443, y solo escucha en el loopback: quien entra es el túnel,
+    # que corre en esta misma máquina.
+    ports: !override
+      - "127.0.0.1:8081:8081"
+    volumes: !override
+      - ./servidor/Caddyfile.tunel:/etc/caddy/Caddyfile:ro
+
+  api_go:
+    # No se publica al host. Al backend solo tienen que llegar el Hub y los
+    # contenedores de los alumnos, y eso ocurre por la red interna de Docker.
+    # En la VM el puerto quedaba tapado por el firewall de GCP; en una casa no
+    # hay tal firewall, y este servicio acuña los tokens del curso.
+    ports: !override []

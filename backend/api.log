@@ -1,0 +1,6 @@
+2026/08/20 17:36:40 [tutor] GOOGLE_API_KEY_1 no está configurada; se omite ese cliente.
+2026/08/20 17:36:40 [tutor] GOOGLE_API_KEY_2 no está configurada; se omite ese cliente.
+2026/08/20 17:36:40 [tutor] sin claves de Gemini válidas: el tutor responderá 503. Revisa GOOGLE_API_KEY_1 y GOOGLE_API_KEY_2 en el .env.
+2026/08/20 17:36:40 {0 1 0 1 0 0s 0 0 0}
+2026/08/20 17:36:40 Servidor operando en el puerto 18080...
+2026/08/20 17:36:40 Error al arrancar el servidor: listen tcp :18080: bind: address already in use

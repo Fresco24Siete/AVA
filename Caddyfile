@@ -1,14 +1,18 @@
-jupyteruisproyecto.duckdns.org {
-    reverse_proxy jupyterhub:8000
+# Caddy cuando el AVA vive en un servidor público con dominio propio (la VM de
+# Hetzner, GCP o similar). Aquí Caddy sí saca y renueva el certificado él solo,
+# al contrario que en servidor/Caddyfile.tunel, donde el TLS lo pone el túnel.
+#
+# El dominio era una línea escrita a mano. Al mudar el AVA de máquina había que
+# acordarse de cambiarla, y si no, Caddy pedía un certificado para un nombre que
+# ya no apuntaba aquí: el AVA arranca, Moodle no entra y el error habla de TLS,
+# no de configuración. Ahora sale del .env, que es donde vive el resto.
+{$AVA_DOMINIO:localhost} {
+	reverse_proxy jupyterhub:8000
 
-    header {
-        -X-Frame-Options
-        Content-Security-Policy "frame-ancestors 'self' https://lms.uis.edu.co"
-    }
-
+	header {
+		# Sin esto el navegador se niega a pintar el AVA dentro de Moodle y el
+		# alumno ve un marco en blanco, sin ningún mensaje.
+		-X-Frame-Options
+		Content-Security-Policy "frame-ancestors 'self' {$AVA_MOODLE:https://lms.uis.edu.co}"
+	}
 }
-
-
-
-
- 

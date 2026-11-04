@@ -3,6 +3,30 @@
 
 require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
 
+    // El token xsrf, leido de la cookie.
+    //
+    // Antes se pedia con utils.get_cookie, que en nbclassic no existe: devolvia
+    // undefined y la cabecera X-XSRFToken viajaba vacia. Daba igual mientras el
+    // endpoint de telemetria estaba eximido del chequeo, pero al exigirlo —para
+    // que una pagina ajena no pudiera inyectar eventos a nombre del alumno— todos
+    // los eventos empezaron a rebotar con 403 y la telemetria dejo de llegar sin
+    // que nada en pantalla lo dijera. Se perdieron los 16 primeros.
+    function cookie_xsrf() {
+        var m = document.cookie.match(/\b_xsrf=([^;]+)/);
+        return m ? decodeURIComponent(m[1]) : '';
+    }
+
+    // El cuadernillo en el que está el alumno, por el nombre del archivo:
+    // 'semana_02.ipynb' -> 'semana_02', y 'semana_02_v3.ipynb' (una corrección
+    // entregada al lado) -> 'semana_02'. Viaja en cada evento. Antes no viajaba
+    // y el puente etiquetaba todo con el cuadernillo activo al ARRANCAR el
+    // contenedor: si el docente publicaba después, o el alumno abría otra
+    // semana, la telemetría quedaba sin cuadernillo o con el equivocado.
+    function codigo_cuadernillo() {
+        var nombre = (Jupyter && Jupyter.notebook && Jupyter.notebook.notebook_name) || '';
+        return nombre.replace(/\.ipynb$/, '').replace(/_v\d+$/, '');
+    }
+
     function meta_nbgrader(cell) {
         return (cell && cell.metadata && cell.metadata.nbgrader) ? cell.metadata.nbgrader : null;
     }
@@ -56,13 +80,21 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
             .replace(/'/g, '&#039;');
     }
 
-    function enviar_evento(payload) {
-        var xsrf = utils.get_cookie ? utils.get_cookie('_xsrf') : '';
+    // Manda un evento al puente del servidor. `al_fallar(motivo)` se llama si
+    // el puente no lo aceptó (red caída, 403 por xsrf, 502 porque el backend
+    // rechazó): quien envía decide qué reponer. Antes solo se miraba el error
+    // de red; un 403 o un 502 se daban por enviados y el intento se perdía sin
+    // que nada lo dijera (así se perdieron los 16 primeros eventos del curso).
+    function enviar_evento(payload, al_fallar) {
+        var xsrf = cookie_xsrf();
         // CORREGIDO: la URL relativa se resolvía contra la URL actual del navegador
         // (p.ej. /user/xxx/notebooks/work/...), no contra la base real del servidor,
         // así que la petición nunca llegaba a la ruta que registra metrics_bridge.py.
         var base_url = (Jupyter && Jupyter.notebook && Jupyter.notebook.base_url) || '/';
-        fetch(base_url + 'nbgrader-metrics/evento', {
+        if (!xsrf) {
+            console.warn('[nbgrader-metrics] sin cookie _xsrf: el puente va a rechazar el evento');
+        }
+        return fetch(base_url + 'nbgrader-metrics/evento', {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
@@ -70,8 +102,16 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
                 'X-XSRFToken': xsrf,
             },
             body: JSON.stringify(payload),
+        }).then(function (resp) {
+            if (resp && resp.ok) return true;
+            var motivo = 'HTTP ' + (resp ? resp.status : '?');
+            console.warn('[nbgrader-metrics] el puente no aceptó el evento (' + motivo + ')');
+            if (al_fallar) al_fallar(motivo);
+            return false;
         }).catch(function (err) {
             console.warn('[nbgrader-metrics] no se pudo enviar el evento', err);
+            if (al_fallar) al_fallar(String(err));
+            return false;
         });
     }
 
@@ -241,119 +281,21 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
         guardar_estado(estado);
     }
 
-    function verificar_finalizacion_cuadernillo() {
-        if (!Jupyter || !Jupyter.notebook) return;
-        var cells = Jupyter.notebook.get_cells();
-        var evalCells = cells.filter(function (c) {
-            return c && c.metadata && c.metadata.nbgrader && c.metadata.nbgrader.grade && c.metadata.nbgrader.grade_id;
-        });
-
-        if (evalCells.length === 0) return;
-
-        var puntajeObtenido = 0;
-        var puntajeMaximo = 0;
-        var todosAprobados = true;
-
-        for (var i = 0; i < evalCells.length; i++) {
-            var cell = evalCells[i];
-            var pMax = cell.metadata.nbgrader.points || 1;
-            puntajeMaximo += pMax;
-
-            if (evaluar_celda(cell).exito) {
-                puntajeObtenido += pMax;
-            } else {
-                todosAprobados = false;
-            }
-        }
-
-        if (!todosAprobados) return;
-
-        // Cuadernillo completo. En vez de auto-enviar una nota, se le pide al
-        // alumno que CALIFIQUE el cuadernillo (retroalimentación 1-5 + comentario,
-        // sección 4/5.2). El evento de rating se envía una sola vez por alumno /
-        // cuadernillo (flag rating_enviado). Si ya lo calificó o ya se mostró el
-        // formulario, no hacemos nada.
-        if (estado.rating_enviado) return;
-        mostrar_rating_ui();
-    }
-
-    // --- UI de calificación del cuadernillo (sección 5.2) ---------------------
-    function enviar_rating(rating, comment) {
-        if (estado.rating_enviado) return;
-        estado.rating_enviado = true;
-        guardar_estado(estado);
-        enviar_evento({
-            tipo_evento: "cuadernillo_rating",
-            submitted_at: new Date().toISOString(),
-            rating: rating,
-            comment: comment || null
-        });
-        console.log('[nbgrader-metrics] rating del cuadernillo enviado:', rating);
-    }
-
-    function mostrar_rating_ui() {
-        if (!Jupyter || !Jupyter.notebook) return;
-        if (document.getElementById('nbgrader-rating-card')) return; // ya visible
-
-        var cont = document.createElement('div');
-        cont.id = 'nbgrader-rating-card';
-        cont.style.cssText = 'margin:16px 0;padding:18px;border-radius:10px;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border:1px solid rgba(56,189,248,0.25);color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;box-shadow:0 6px 18px rgba(0,0,0,0.25);';
-
-        var estrellas = '';
-        for (var s = 1; s <= 5; s++) {
-            estrellas += '<span class="nbg-star" data-v="' + s + '" style="cursor:pointer;font-size:30px;color:#475569;transition:color .15s;">★</span>';
-        }
-
-        cont.innerHTML =
-            '<div style="font-size:16px;font-weight:700;color:#6ee7b7;margin-bottom:4px;">✅ ¡Completaste el cuadernillo!</div>' +
-            '<div style="font-size:13px;color:#94a3b8;margin-bottom:12px;">Antes de terminar, calíficalo para ayudarnos a mejorarlo.</div>' +
-            '<div id="nbg-stars" style="display:flex;gap:6px;margin-bottom:12px;">' + estrellas + '</div>' +
-            '<textarea id="nbg-comment" rows="2" placeholder="Comentario (opcional)" style="width:100%;box-sizing:border-box;background:#020617;color:#e2e8f0;border:1px solid rgba(148,163,184,0.3);border-radius:6px;padding:8px;font-size:13px;resize:vertical;"></textarea>' +
-            '<div style="margin-top:10px;display:flex;align-items:center;gap:10px;">' +
-                '<button id="nbg-rating-send" disabled style="background:#38bdf8;color:#04263a;border:none;border-radius:6px;padding:8px 16px;font-weight:700;font-size:13px;cursor:not-allowed;opacity:.5;">Enviar calificación</button>' +
-                '<span id="nbg-rating-msg" style="font-size:12px;color:#94a3b8;"></span>' +
-            '</div>';
-
-        // Insertar al final de la última celda evaluable
-        var cells = Jupyter.notebook.get_cells();
-        var last = null;
-        for (var i = 0; i < cells.length; i++) {
-            if (es_celda_de_prueba(cells[i])) last = cells[i];
-        }
-        var host = last && last.element && last.element[0] ? last.element[0] : document.body;
-        host.appendChild(cont);
-
-        var seleccion = 0;
-        var stars = cont.querySelectorAll('.nbg-star');
-        var btn = cont.querySelector('#nbg-rating-send');
-        function pintar(n) {
-            for (var k = 0; k < stars.length; k++) {
-                stars[k].style.color = (k < n) ? '#fbbf24' : '#475569';
-            }
-        }
-        for (var j = 0; j < stars.length; j++) {
-            (function (star) {
-                star.addEventListener('mouseenter', function () { pintar(parseInt(star.dataset.v, 10)); });
-                star.addEventListener('mouseleave', function () { pintar(seleccion); });
-                star.addEventListener('click', function () {
-                    seleccion = parseInt(star.dataset.v, 10);
-                    pintar(seleccion);
-                    btn.disabled = false;
-                    btn.style.cursor = 'pointer';
-                    btn.style.opacity = '1';
-                });
-            })(stars[j]);
-        }
-        btn.addEventListener('click', function () {
-            if (seleccion < 1) return;
-            var comment = cont.querySelector('#nbg-comment').value.trim();
-            enviar_rating(seleccion, comment);
-            btn.disabled = true;
-            btn.style.cursor = 'default';
-            btn.style.opacity = '.5';
-            cont.querySelector('#nbg-rating-msg').textContent = '¡Gracias por tu calificación!';
-        });
-    }
+    // `celda_recien_ejecutada` es la celda de prueba cuyo finished_execute
+    // acaba de llegar. En ese instante su input_prompt_number todavía vale '*'
+    // (ver evaluar_celda), así que sin esta salvedad la última prueba del
+    // cuadernillo siempre contaba como no ejecutada y la tarjeta de valoración
+    // no aparecía nunca: cuadernillo_ratings se quedaba vacía.
+    // La valoración del cuadernillo YA NO VIVE AQUÍ.
+    //
+    // Estaba condicionada a aprobar TODOS los ejercicios y se insertaba dentro
+    // de la última celda de prueba. Dos problemas: quien se atascó y entregó a
+    // medias —el que más tiene que contar— no la veía nunca, y quien sí la veía
+    // se la encontraba enterrada a mitad del notebook.
+    //
+    // Ahora se pide en el panel del alumno (panel_bridge.py), que es donde
+    // vuelve después de entregar, y desde ahí puede además cambiarla. La barra
+    // de abajo lo invita en el momento de máxima atención: justo al entregar.
 
     function on_execute(evt, data) {
         var cell = data.cell;
@@ -414,6 +356,7 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
         // cliente. attempts_count tampoco: lo cuenta el backend contando eventos.
         var payload = {
             tipo_evento: "exercise_attempt",
+            cuadernillo: codigo_cuadernillo(),
             exercise_id: cod,
             codigo_celda: grade_id,
             orden: obtener_orden_celda(cell),
@@ -438,23 +381,34 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
             ultimo ? ultimo.error_message : null,
             duracion_seg, payload);
 
-        enviar_evento(payload);
-        verificar_finalizacion_cuadernillo();
+        enviar_evento(payload, function () {
+            // El puente no lo aceptó: los errores vuelven al buffer, delante de
+            // los que hayan llegado mientras tanto, y viajan con el siguiente
+            // intento (o con el volcado al cerrar). Antes se vaciaba el buffer
+            // antes de saber si llegó, y un 403 o un 502 los perdía para siempre.
+            estado.errores[cod] = errores_acumulados.concat(estado.errores[cod] || []);
+            guardar_estado(estado);
+        });
     }
 
     // Al cerrar/recargar la pestaña, si quedaron errores en buffer de ejercicios
     // que el alumno NUNCA validó (no corrió el test), se envían igual para no
-    // perderlos. sendBeacon es lo único confiable durante 'unload'. El endpoint
-    // está eximido de XSRF, así que un POST sin headers especiales funciona.
+    // perderlos. sendBeacon es lo único confiable durante 'unload'.
+    //
+    // No admite cabeceras, así que el token XSRF va en la URL: tornado lo busca
+    // también ahí. Antes el endpoint estaba eximido del chequeo, y eso dejaba
+    // entrar POST anónimos a nombre del alumno.
     function flush_errores_pendientes() {
         if (!navigator.sendBeacon) return;
         var base_url = (Jupyter && Jupyter.notebook && Jupyter.notebook.base_url) || '/';
-        var url = base_url + 'nbgrader-metrics/evento';
+        var url = base_url + 'nbgrader-metrics/evento?_xsrf=' +
+                  encodeURIComponent(cookie_xsrf());
         Object.keys(estado.errores || {}).forEach(function (cod) {
             var errs = estado.errores[cod];
             if (!errs || !errs.length) return;
             var payload = {
                 tipo_evento: "exercise_attempt",
+                cuadernillo: codigo_cuadernillo(),
                 exercise_id: cod,
                 attempt_at: new Date().toISOString(),
                 validation_result: "sin_validar", // cerró sin correr el test
@@ -515,12 +469,289 @@ require(['base/js/namespace', 'base/js/utils'], function (Jupyter, utils) {
         }
     }
 
+    // El motor tiene que ejecutarse SOLO, y esto no es una comodidad: es la
+    // consecuencia de esconderlo. La celda 'ava-motor' define iniciar(), los
+    // quices, las pistas y el verificador, y justo encima se esconde para que
+    // nadie lea las respuestas. Resultado: el alumno abre el cuadernillo, ve
+    // como primera celda `iniciar()`, la ejecuta y recibe
+    //
+    //     NameError: name 'iniciar' is not defined
+    //
+    // en la PRIMERA cosa que hace en el curso. Le pasó a la clase entera el
+    // 2026-09-02. La celda estaba ahí y era correcta; simplemente nadie la
+    // había ejecutado, y estando oculta no había forma de que lo supiera.
+    //
+    // CUÁNDO se ejecuta lo decide el KERNEL, no la celda (2026-10-05).
+    //
+    // Hasta ese día se miraba `celda.input_prompt_number`: si la celda ya
+    // tenía número de ejecución, se daba el motor por arrancado. Pero ese
+    // número se GUARDA con el cuadernillo. El alumno que volvía otro día
+    // --kernel nuevo, vacío-- traía el número de la víspera, el motor no se
+    // lanzaba, y la salida guardada seguía diciendo «Motor del cuadernillo
+    // activo». Lo primero que ejecutaba le contestaba
+    //
+    //     NameError: name 'ps' is not defined
+    //
+    // (8 veces en la semana 4, más `pista`, `ava`...; un alumno lo describió
+    // así: «a veces arroja error el ejercicio incluso cuando uno no tiene nada
+    // malo y toca refrescar la página»). Y tras Kernel > Restart pasaba lo
+    // mismo, porque la marca de «ya lo lancé» vivía en la página y la página
+    // no se había recargado.
+    //
+    // Ahora se le PREGUNTA al kernel si el motor está cargado, con una
+    // ejecución silenciosa que no deja rastro ni cuenta como celda. Solo si
+    // contesta que no, se lanza. Así se cumplen las dos cosas a la vez:
+    //   - kernel nuevo o reiniciado  -> el motor se carga solo, siempre;
+    //   - página recargada con el kernel vivo -> NO se relanza, que era lo
+    //     que protegía la regla vieja: relanzarlo reinicia la barra de XP
+    //     delante del estudiante.
+    //
+    // La pregunta mira dos cosas: `ava`, que es lo que deja el motor, y una
+    // marca propia que se pone al lanzarlo, por si algún cuadernillo antiguo
+    // no deja `ava` (sin la marca se relanzaría en cada reconexión).
+    var MARCA_MOTOR = '_ava_motor_lanzado';
+    var SONDA_MOTOR = "('ava' in globals()) or bool(globals().get('" + MARCA_MOTOR + "'))";
+    var generacion_sonda = 0;        // cada pregunta al kernel lleva su número
+    var sonda_en_curso = false;
+    var motor_lanzado_aqui = false;  // en ESTA carga de la página
+    var reintentos_abortada = 0;     // preguntas descartadas seguidas (tope 3)
+
+    function celda_del_motor() {
+        var celdas = Jupyter.notebook.get_cells();
+        for (var i = 0; i < celdas.length; i++) {
+            var tags = (celdas[i].metadata && celdas[i].metadata.tags) || [];
+            if (tags.indexOf('ava-motor') !== -1) return celdas[i];
+        }
+        return null;
+    }
+
+    function lanzar_motor(celda, kernel) {
+        motor_lanzado_aqui = true;
+        try {
+            celda.execute();
+            console.log('[ava] motor del cuadernillo arrancado solo');
+        } catch (err) {
+            // Si falla, mejor dejar la celda a la vista que dejar al
+            // estudiante con un NameError y ninguna pista.
+            motor_lanzado_aqui = false;
+            console.warn('[ava] no se pudo arrancar el motor', err);
+            return;
+        }
+        try {
+            // Va en la cola detrás de la celda del motor: el kernel ejecuta
+            // en orden, así que la siguiente pregunta ya la encuentra.
+            kernel.execute(MARCA_MOTOR + ' = True', {},
+                           { silent: true, store_history: false });
+        } catch (err) { /* sin la marca se sigue decidiendo por `ava` */ }
+    }
+
+    // forzar = true cuando el que avisa es el kernel (arranque o reinicio):
+    // una pregunta que quedó pendiente en el kernel anterior ya no vale.
+    function arrancar_motor(forzar) {
+        if (sonda_en_curso && forzar !== true) return;
+        if (!Jupyter || !Jupyter.notebook || !Jupyter.notebook.kernel) return;
+        var kernel = Jupyter.notebook.kernel;
+        if (!kernel.is_connected()) return;
+        var celda = celda_del_motor();
+        if (!celda) return;
+
+        var esta = ++generacion_sonda;
+        var antes = celda.last_msg_id;   // qué ejecución llevaba la celda al preguntar
+        sonda_en_curso = true;
+        function decidir(cargado, fiable) {
+            if (esta !== generacion_sonda) return;   // llegó tarde: hay otra
+            sonda_en_curso = false;
+            reintentos_abortada = 0;
+            if (cargado) return;
+            // Si alguien ejecutó la celda del motor mientras la pregunta
+            // viajaba, ya está en la cola del kernel detrás de la pregunta
+            // (Restart & Run All hace exactamente eso): lanzarla otra vez
+            // la ejecutaría dos veces y reiniciaría la XP al final.
+            if (celda.last_msg_id !== antes) return;
+            // Si el kernel no supo contestar, se lanza una vez por página y
+            // no más: es lo que hacía la regla vieja, sin su trampa.
+            if (!fiable && motor_lanzado_aqui) return;
+            lanzar_motor(celda, kernel);
+        }
+        function abortada() {
+            // El kernel descartó la pregunta sin mirarla (iba detrás de una
+            // celda que falló, o de un input() interrumpido). No se sabe
+            // nada: no se lanza. Y como en una página abierta hace rato ya no
+            // queda ningún disparador salvo el del kernel, se vuelve a
+            // preguntar en seguida, hasta tres veces seguidas (revisión del
+            // 6-oct: Kernel > Restart y un Shift+Enter impaciente dejaban al
+            // alumno sin motor hasta recargar).
+            if (esta !== generacion_sonda) return;
+            sonda_en_curso = false;
+            if (reintentos_abortada < 3) {
+                reintentos_abortada++;
+                setTimeout(motor_por_si_acaso, 1500);
+            }
+        }
+        try {
+            kernel.execute('', { shell: { reply: function (msg) {
+                var c = msg && msg.content;
+                if (c && c.status === 'aborted') { abortada(); return; }
+                var r = c && c.user_expressions && c.user_expressions.ava_motor;
+                if (!r || r.status !== 'ok' || !r.data) { decidir(false, false); return; }
+                decidir(/True/.test(String(r.data['text/plain'] || '')), true);
+            } } }, { silent: true, store_history: false,
+                     user_expressions: { ava_motor: SONDA_MOTOR } });
+        } catch (err) {
+            decidir(false, false);
+        }
+    }
+    function motor_al_estar_el_kernel() { arrancar_motor(true); }
+    function motor_por_si_acaso() { arrancar_motor(false); }
+
     if (Jupyter && Jupyter.notebook && Jupyter.notebook.events) {
         // notebook_loaded no siempre ha llegado cuando corre custom.js, así que
         // se cubren los dos caminos y la función es idempotente.
         Jupyter.notebook.events.on('notebook_loaded.Notebook', esconder_andamiaje);
         setTimeout(esconder_andamiaje, 1200);
+
+        // El motor necesita además que el kernel esté listo: ejecutar antes de
+        // que conecte no hace nada y se pierde el arranque.
+        // kernel_ready llega al arrancar el kernel y TAMBIÉN tras cada
+        // reinicio: es la señal de que el espacio de nombres puede estar vacío.
+        Jupyter.notebook.events.on('kernel_ready.Kernel', motor_al_estar_el_kernel);
+        Jupyter.notebook.events.on('notebook_loaded.Notebook', motor_por_si_acaso);
+        setTimeout(motor_por_si_acaso, 2000);
+        setTimeout(motor_por_si_acaso, 5000);
     }
+
+
+    // --- Barra del cuadernillo ---------------------------------------------
+    // El alumno trabajaba dentro del cuadernillo pero tenía que salir al panel
+    // para entregar, y desde el cuadernillo no había forma de volver: la única
+    // salida era el botón atrás del navegador, que dentro del marco de Moodle
+    // no siempre está a la vista.
+    //
+    // Además el panel entrega el archivo tal como está en disco, así que lo que
+    // el alumno acabara de escribir y no hubiera guardado no viajaba. Aquí se
+    // guarda primero y se entrega después, que es el orden que él espera.
+    (function barra_cuadernillo() {
+        if (!Jupyter || !Jupyter.notebook) return;
+        var nombre = Jupyter.notebook.notebook_name || '';
+        if (!/\.ipynb$/.test(nombre) || nombre === 'inicio.ipynb') return;
+        var codigo = nombre.replace(/\.ipynb$/, '');
+        var base_url = Jupyter.notebook.base_url || '/';
+
+        var barra = document.createElement('div');
+        barra.id = 'ava-barra';
+        barra.style.cssText =
+            'position:sticky;top:0;z-index:20;display:flex;align-items:center;' +
+            'gap:12px;flex-wrap:wrap;background:#f7f8fa;border:1px solid #dfe3e8;' +
+            'border-radius:6px;padding:10px 14px;margin:0 0 18px;' +
+            'font:14.5px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
+        barra.innerHTML =
+            '<a href="' + base_url + 'panel" style="color:#2a78d6;text-decoration:none;' +
+            'font-weight:600">&larr; Mis cuadernillos</a>' +
+            '<span style="flex:1"></span>' +
+            '<span id="ava-barra-msg" style="color:#52514e"></span>' +
+            '<button id="ava-barra-entregar" style="background:#2a78d6;color:#fff;' +
+            'border:none;border-radius:4px;padding:7px 15px;font:600 13.5px ' +
+            'system-ui,sans-serif;cursor:pointer">Guardar y entregar</button>';
+
+        function poner() {
+            var cont = document.getElementById('notebook-container');
+            if (!cont || document.getElementById('ava-barra')) return !!cont;
+            cont.insertBefore(barra, cont.firstChild);
+            return true;
+        }
+        if (!poner()) setTimeout(poner, 1500);
+
+        // Y una copia al FINAL del cuadernillo. La barra de arriba es sticky,
+        // pero en un cuadernillo de ochenta celdas el alumno termina abajo,
+        // piensa que acabó y cierra. El profesor lo vio en la primera clase: seis
+        // estudiantes trabajaron y no llegó ninguna entrega. Es el mismo botón,
+        // en el sitio donde de verdad se termina.
+        var cierre = document.createElement('div');
+        cierre.id = 'ava-cierre';
+        cierre.style.cssText =
+            'display:flex;align-items:center;gap:14px;flex-wrap:wrap;' +
+            'background:#eef4fd;border:1px solid #cfe0f7;border-left:4px solid #2a78d6;' +
+            'border-radius:6px;padding:16px 18px;margin:28px 0 40px;' +
+            'font:15px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
+        cierre.innerHTML =
+            '<div style="flex:1;min-width:220px">' +
+            '<div style="font-weight:600;font-size:16px;margin-bottom:2px">' +
+            '¿Terminaste?</div>' +
+            '<div style="color:#52514e;font-size:14px">Tu trabajo <b>no le llega ' +
+            'a tu profesor</b> hasta que lo entregues. Puedes entregar las veces ' +
+            'que quieras.</div></div>' +
+            '<span id="ava-cierre-msg" style="color:#52514e;font-size:14px"></span>' +
+            '<button id="ava-cierre-entregar" style="background:#2a78d6;color:#fff;' +
+            'border:none;border-radius:4px;padding:10px 20px;font:600 14.5px ' +
+            'system-ui,sans-serif;cursor:pointer">Guardar y entregar</button>';
+
+        function poner_cierre() {
+            var cont = document.getElementById('notebook-container');
+            if (!cont || document.getElementById('ava-cierre')) return !!cont;
+            cont.appendChild(cierre);
+            return true;
+        }
+        if (!poner_cierre()) setTimeout(poner_cierre, 1500);
+
+        // Los dos botones hacen exactamente lo mismo; cada uno escribe en su
+        // propio hueco de mensaje para que el alumno lea la respuesta donde
+        // acaba de pulsar, no al otro extremo de la pagina.
+        function conectar(btn, msg) {
+            if (!btn || !msg) return;
+            btn.onclick = function () {
+            btn.disabled = true;
+            msg.style.color = '#52514e';
+            msg.textContent = 'Guardando…';
+            // Guardar primero: lo que se entrega es el archivo en disco.
+            var guardado = Jupyter.notebook.save_notebook();
+            var seguir = function () {
+                msg.textContent = 'Entregando…';
+                fetch(base_url + 'panel/entregar', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-XSRFToken': cookie_xsrf()
+                    },
+                    body: JSON.stringify({ id: codigo })
+                }).then(function (r) { return r.json(); }).then(function (d) {
+                    btn.disabled = false;
+                    if (d && d.ok) {
+                        msg.style.color = '#0f8a4a';
+                        // Es el instante de máxima atención: acaba de entregar y
+                        // está mirando la barra. Se le invita a valorar aquí, pero
+                        // el formulario vive en el panel, no duplicado en dos sitios.
+                        msg.innerHTML = 'Entregado. Tu profesor ya lo tiene. ' +
+                            '<a href="' + base_url + 'panel/valorar/' +
+                            encodeURIComponent(codigo) + '" style="color:#2a78d6">' +
+                            'Cuéntanos cómo te fue</a> ' +
+                            '<span style="color:#8b94a1">(30 s)</span>';
+                        btn.textContent = 'Entregar de nuevo';
+                    } else {
+                        msg.style.color = '#c8392b';
+                        msg.textContent = (d && d.mensaje) || 'No se pudo entregar.';
+                    }
+                }).catch(function () {
+                    btn.disabled = false;
+                    msg.style.color = '#c8392b';
+                    msg.textContent = 'No se pudo entregar ahora mismo.';
+                });
+            };
+            if (guardado && typeof guardado.then === 'function') {
+                guardado.then(seguir, seguir);
+            } else {
+                // notebook 6 no siempre devuelve promesa: se espera al evento.
+                Jupyter.notebook.events.one('notebook_saved.Notebook', seguir);
+                setTimeout(seguir, 4000);
+            }
+            };
+        }
+
+        conectar(barra.querySelector('#ava-barra-entregar'),
+                 barra.querySelector('#ava-barra-msg'));
+        conectar(cierre.querySelector('#ava-cierre-entregar'),
+                 cierre.querySelector('#ava-cierre-msg'));
+    })();
 
     // --- Tutor IA -----------------------------------------------------------
     // El panel del tutor vive en su propio archivo para no mezclarlo con la

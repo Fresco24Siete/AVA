@@ -1,3 +1,15 @@
+-- =============================================================================
+-- HISTORICO — este archivo NO se usa. Ver docs/flujos_obsoletos.md
+-- =============================================================================
+-- El esquema vigente es database/schema_v2.sql, que es el que monta
+-- docker-compose.yml en /docker-entrypoint-initdb.d/. Este v1 se conserva como
+-- traza de por donde empezo el modelo, no como referencia.
+--
+-- Leerlo creyendo que es el esquema actual lleva a error: le faltan las tablas
+-- de competencias, notas y estudiantes, y el CHECK de validation_result no
+-- acepta 'sin_validar'.
+-- =============================================================================
+
 -- =========================================================
 -- Esquema PostgreSQL: telemetría de cuadernillos (Jupyter <-> backend)
 -- =========================================================

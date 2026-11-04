@@ -8,11 +8,11 @@ de pseudocódigo: ejecutar, traducir a Python, dibujar el diagrama, trazar paso 
 paso y el puente a Flowgorithm. **Este módulo no repite nada de eso.** Aquí vive
 solo lo que es de esta semana y de ninguna otra:
 
-- las ilustraciones que no son diagramas de flujo (E-P-S, las cajas de memoria,
-  las tres viñetas de `x <- x + 1`, la línea de tiempo de la madrugada);
+- la ilustración de las cajas de memoria (la única que no es un diagrama de
+  flujo: las demás las dibuja `ps.diagrama`);
 - las tarjetas de referencia (la chuleta del pseudocódigo, la tabla de símbolos,
-  la de cobertura del temario, el corte Parte A / Parte B);
-- los quices y los ensayos con sus textos;
+  el corte Parte A / Parte B);
+- el quiz de calentamiento, el de predicción y el ensayo E-P-S con sus textos;
 - `corregir()`, que califica E1 y E2 contra **huellas SHA-256**.
 
 Por qué las huellas: las celdas de prueba de E1 y E2 son visibles y quedan en el
@@ -37,8 +37,7 @@ mismo espacio de nombres y **después** del motor y de `pseudo_uis`
   el aspecto —o el comportamiento— del intérprete.
 
 Dependencias: biblioteca estándar + `ipywidgets`. **Sin matplotlib**: son unos
-80 MB de RAM por kernel y la VM del curso tiene 2 GB para todos a la vez, así
-que la gráfica del gancho es un SVG escrito a mano, igual que en la semana 1.
+80 MB de RAM por kernel y la VM del curso tiene 2 GB para todos a la vez.
 Sin `ipywidgets` el módulo no se cae: degrada a una versión de solo lectura.
 """
 
@@ -170,198 +169,6 @@ def portada():
 
 
 # =============================================================================
-# Sección 2 · El gancho: la línea de tiempo de la madrugada
-# =============================================================================
-# Barras horizontales apiladas sobre un eje de tiempo real, en SVG escrito a
-# mano. Es la misma figura que el diseño pedía en matplotlib: se cambia la
-# herramienta, no el dibujo (ver el encabezado del módulo).
-
-_S2_TRAMOS = [
-    ("colchón", 15, _S2_AMBAR, "#3a2a00"),
-    ("caminata", 8, _S2_AZUL, "#ffffff"),
-    ("bus", 45, _S2_VIOLETA, "#ffffff"),
-    ("portería", 10, _S2_VERDE, "#ffffff"),
-]
-_S2_SALIDA_MIN = 282        # 04:42
-_S2_CLASE_MIN = 360         # 06:00
-
-
-def _s2_hhmm(minutos):
-    return f"{int(minutos) // 60:02d}:{int(minutos) % 60:02d}"
-
-
-def grafica_madrugada():
-    """Tu madrugada, minuto a minuto: los 78 minutos anteriores a la clase."""
-    _s2_ocultar()
-    ancho, alto = 760, 260
-    izq, der, arriba = 40, 24, 62
-    t0, t1 = 240.0, 375.0        # de las 04:00 a las 06:15
-
-    def px(minuto):
-        return izq + (minuto - t0) / (t1 - t0) * (ancho - izq - der)
-
-    y_barra, alto_barra = 118, 46
-    partes = [
-        f'<svg viewBox="0 0 {ancho} {alto}" width="100%" '
-        f'style="max-width:{ancho}px;font-family:{_S2_FUENTE}" role="img" '
-        'aria-label="Los 78 minutos entre salir de la casa y entrar a clase, '
-        'repartidos en colchón, caminata, bus y portería">',
-        f'<rect x="0" y="0" width="{ancho}" height="{alto}" fill="#fcfcfb"/>',
-        f'<text x="{izq}" y="30" font-size="16" font-weight="650" '
-        f'fill="{_S2_VIOLETA_OSC}">Tu madrugada, minuto a minuto '
-        '— 78 minutos antes de la clase</text>',
-    ]
-    # Rejilla: una marca cada media hora, con la hora escrita como HH:MM.
-    for minuto in range(240, 376, 15):
-        x = px(minuto)
-        grueso = minuto % 60 == 0
-        partes.append(
-            f'<line x1="{x:.1f}" y1="{arriba + 14}" x2="{x:.1f}" '
-            f'y2="{y_barra + alto_barra + 8}" stroke="{_S2_BORDE}" '
-            f'stroke-width="{2 if grueso else 1}"/>'
-        )
-        if grueso:
-            partes.append(
-                f'<text x="{x:.1f}" y="{y_barra + alto_barra + 26}" '
-                f'text-anchor="middle" font-size="12" fill="{_S2_GRIS}">'
-                f'{_s2_hhmm(minuto)}</text>'
-            )
-    # Los cuatro tramos, apilados de izquierda a derecha desde la hora de salir.
-    cursor = _S2_SALIDA_MIN
-    for nombre, duracion, relleno, tinta in _S2_TRAMOS:
-        x, w = px(cursor), px(cursor + duracion) - px(cursor)
-        partes.append(
-            f'<rect x="{x:.1f}" y="{y_barra}" width="{w:.1f}" '
-            f'height="{alto_barra}" fill="{relleno}" rx="3"/>'
-            f'<text x="{x + w / 2:.1f}" y="{y_barra + alto_barra / 2 + 5:.1f}" '
-            f'text-anchor="middle" font-size="13" font-weight="600" '
-            f'fill="{tinta}">{"" if w < 40 else nombre}</text>'
-            f'<text x="{x + w / 2:.1f}" y="{y_barra - 10}" text-anchor="middle" '
-            f'font-size="12" fill="{_S2_GRIS}">'
-            f'{nombre + " · " if w < 40 else ""}{duracion} min</text>'
-        )
-        cursor += duracion
-    # La línea del profesor cerrando la puerta.
-    x_clase = px(_S2_CLASE_MIN)
-    partes.append(
-        f'<line x1="{x_clase:.1f}" y1="{arriba}" x2="{x_clase:.1f}" '
-        f'y2="{y_barra + alto_barra + 8}" stroke="{_S2_ROJO}" stroke-width="2" '
-        'stroke-dasharray="6 4"/>'
-        f'<text x="{x_clase - 8:.1f}" y="{arriba + 10}" text-anchor="end" '
-        f'font-size="12.5" font-weight="600" fill="{_S2_ROJO}">'
-        '6:00 — el profesor cierra la puerta</text>'
-    )
-    # La anotación con flecha en el extremo izquierdo del apilado.
-    x_salida = px(_S2_SALIDA_MIN)
-    partes.append(
-        f'<path d="M{x_salida + 4:.1f},{y_barra + alto_barra + 50} '
-        f'L{x_salida + 4:.1f},{y_barra + alto_barra + 14} '
-        f'l-5,9 m5,-9 l5,9" fill="none" stroke="{_S2_VIOLETA_OSC}" '
-        'stroke-width="2" stroke-linecap="round"/>'
-        f'<text x="{x_salida + 14:.1f}" y="{y_barra + alto_barra + 56}" '
-        f'font-size="13" font-weight="600" fill="{_S2_VIOLETA_OSC}">'
-        '04:42 — tienes que salir a esta hora</text>'
-        f'<text x="{izq}" y="{alto - 10}" font-size="11.5" fill="{_S2_GRIS}">'
-        'Cada bloque es un tramo del recorrido. Súmalos y réstaselos a la hora '
-        'de la clase: eso es todo el algoritmo.</text>'
-        '</svg>'
-    )
-    _s2_pintar(f'<div style="margin:10px 0">{"".join(partes)}</div>')
-    print("Tienes que salir a las 04:42. Y eso si el bus no se demora.")
-
-
-# =============================================================================
-# Sección 3 · Entrada · Proceso · Salida (D2)
-# =============================================================================
-
-_S2_EPS = [
-    ("ENTRADA", _S2_AZUL, "#ffffff",
-     "Los datos que alguien te tiene que dar",
-     "hora de clase · minutos de bus · caminata · colchón"),
-    ("PROCESO", _S2_VIOLETA, "#ffffff",
-     "Lo que se hace con esos datos",
-     "sumar los tramos y restarlos a la hora de clase"),
-    ("SALIDA", _S2_VERDE, "#ffffff",
-     "Lo que el algoritmo entrega",
-     "la hora a la que debes salir"),
-]
-
-
-def _s2_lineas_svg(texto, x, y, ancho_caja, tamano, color, salto=16, peso="400"):
-    """Parte un texto en líneas que quepan y devuelve los `<text>` ya colocados.
-
-    En SVG no hay ajuste automático de línea: si no se parte a mano, el texto se
-    sale de la caja y nadie se entera hasta que el estudiante lo ve cortado.
-    """
-    cupo = max(8, int(ancho_caja / (tamano * 0.52)))
-    lineas, actual = [], ""
-    for palabra in texto.split():
-        prueba = (actual + " " + palabra).strip()
-        if len(prueba) > cupo and actual:
-            lineas.append(actual)
-            actual = palabra
-        else:
-            actual = prueba
-    if actual:
-        lineas.append(actual)
-    return "".join(
-        f'<text x="{x:.1f}" y="{y + i * salto:.1f}" text-anchor="middle" '
-        f'font-size="{tamano}" font-weight="{peso}" fill="{color}">'
-        f'{_s2_esc(linea)}</text>'
-        for i, linea in enumerate(lineas)
-    ), len(lineas)
-
-
-def figura_eps():
-    """Las tres casillas de Entrada · Proceso · Salida, con el caso del gancho."""
-    _s2_ocultar()
-    ancho, alto = 760, 250
-    w_caja, hueco = 216, 32
-    x0 = (ancho - (3 * w_caja + 2 * hueco)) / 2
-    partes = [
-        f'<svg viewBox="0 0 {ancho} {alto}" width="100%" '
-        f'style="max-width:{ancho}px;font-family:{_S2_FUENTE}" role="img" '
-        'aria-label="Estructura Entrada, Proceso y Salida aplicada al problema '
-        'de a qué hora salir de la casa">',
-        f'<rect x="0" y="0" width="{ancho}" height="{alto}" fill="#fcfcfb"/>',
-    ]
-    for i, (rotulo, relleno, tinta, generico, concreto) in enumerate(_S2_EPS):
-        x = x0 + i * (w_caja + hueco)
-        cx = x + w_caja / 2
-        partes.append(
-            f'<rect x="{x:.1f}" y="34" width="{w_caja}" height="52" rx="8" '
-            f'fill="{relleno}"/>'
-            f'<text x="{cx:.1f}" y="66" text-anchor="middle" font-size="18" '
-            f'font-weight="700" fill="{tinta}" letter-spacing="1.5">{rotulo}</text>'
-        )
-        cuerpo, n = _s2_lineas_svg(generico, cx, 112, w_caja - 12, 13, _S2_GRIS)
-        partes.append(cuerpo)
-        partes.append(
-            f'<line x1="{x + 24:.1f}" y1="{112 + n * 16 + 4}" '
-            f'x2="{x + w_caja - 24:.1f}" y2="{112 + n * 16 + 4}" '
-            f'stroke="{_S2_BORDE}" stroke-width="1"/>'
-        )
-        detalle, _ = _s2_lineas_svg(
-            concreto, cx, 112 + n * 16 + 26, w_caja - 6, 13.5, _S2_TINTA,
-            salto=18, peso="600")
-        partes.append(detalle)
-        if i < 2:
-            xf = x + w_caja + hueco / 2
-            partes.append(
-                f'<path d="M{xf - 9:.1f},60 l14,0 m-6,-6 l6,6 l-6,6" '
-                f'fill="none" stroke="{_S2_GRIS}" stroke-width="2.4" '
-                'stroke-linecap="round" stroke-linejoin="round"/>'
-            )
-    partes.append(
-        f'<text x="{ancho / 2}" y="{alto - 14}" text-anchor="middle" '
-        f'font-size="12.5" fill="{_S2_GRIS}">'
-        'Todo algoritmo tiene esta forma. Si no sabes qué va en las tres '
-        'casillas, todavía no puedes programarlo.</text></svg>'
-    )
-    _s2_pintar(f'<div style="margin:10px 0">{"".join(partes)}</div>')
-
-
-# =============================================================================
 # Sección 4.4 · Variables y memoria
 # =============================================================================
 
@@ -404,63 +211,6 @@ def figura_cajas():
         'adentro. Puedes cambiar el valor sin cambiar la caja — pero el tipo '
         'de caja decide qué le cabe.</text></svg>'
     )
-    _s2_pintar(f'<div style="margin:10px 0">{"".join(partes)}</div>')
-
-
-def figura_incremento():
-    """Las tres viñetas de `viajes <- viajes + 1`: se lee, se calcula, se guarda."""
-    _s2_ocultar()
-    partes = [
-        '<svg viewBox="0 0 720 180" width="100%" style="max-width:720px;'
-        f'font-family:{_S2_FUENTE}" role="img" aria-label="La asignación en '
-        'tres pasos: se lee el valor, se calcula afuera y se guarda de vuelta">',
-        '<rect x="0" y="0" width="720" height="180" fill="#fcfcfb"/>',
-    ]
-    for x, titulo, nota in ((40, "1. SE LEE", "saco lo que hay: 3"),
-                            (280, "2. SE CALCULA", "la cuenta se hace afuera"),
-                            (520, "3. SE GUARDA", "el 3 se perdió para siempre")):
-        partes.append(
-            f'<text x="{x}" y="30" font-size="12" letter-spacing="1.2" '
-            f'fill="#8a8987">{titulo}</text>'
-            f'<text x="{x}" y="150" font-size="12" fill="{_S2_GRIS}">{nota}</text>'
-        )
-    # Viñeta 1: la caja con el 3 adentro, borde azul.
-    partes.append(
-        f'<rect x="40" y="46" width="150" height="82" rx="8" fill="#ffffff" '
-        f'stroke="{_S2_AZUL}" stroke-width="3"/>'
-        f'<rect x="40" y="46" width="150" height="24" rx="8" fill="{_S2_AZUL}"/>'
-        '<text x="115" y="63" text-anchor="middle" font-size="13" '
-        'font-weight="700" fill="#ffffff">viajes</text>'
-        f'<text x="115" y="108" text-anchor="middle" font-size="26" '
-        f'font-family="{_S2_MONO}" fill="{_S2_TINTA}">3</text>'
-    )
-    # Viñeta 2: no hay caja; la cuenta ocurre afuera.
-    partes.append(
-        '<rect x="280" y="46" width="150" height="82" rx="8" fill="none" '
-        f'stroke="{_S2_GRIS}" stroke-width="2" stroke-dasharray="5 4"/>'
-        f'<text x="355" y="96" text-anchor="middle" font-size="20" '
-        f'font-family="{_S2_MONO}" fill="{_S2_TINTA}">3 + 1 = 4</text>'
-    )
-    # Viñeta 3: la misma caja, con el 4 adentro y el 3 tachado.
-    partes.append(
-        f'<rect x="520" y="46" width="150" height="82" rx="8" fill="#ffffff" '
-        f'stroke="{_S2_VERDE}" stroke-width="3"/>'
-        f'<rect x="520" y="46" width="150" height="24" rx="8" '
-        f'fill="{_S2_VERDE}"/>'
-        '<text x="595" y="63" text-anchor="middle" font-size="13" '
-        'font-weight="700" fill="#ffffff">viajes</text>'
-        f'<text x="595" y="108" text-anchor="middle" font-size="26" '
-        f'font-family="{_S2_MONO}" fill="{_S2_TINTA}">4</text>'
-        f'<text x="650" y="90" text-anchor="middle" font-size="16" '
-        f'font-family="{_S2_MONO}" fill="#b0afad">3</text>'
-        '<line x1="643" y1="86" x2="658" y2="84" stroke="#b0afad" '
-        'stroke-width="1.8"/>'
-    )
-    for x in (232, 472):
-        partes.append(
-            f'<text x="{x}" y="98" font-size="24" fill="#8a8987">&#8594;</text>'
-        )
-    partes.append("</svg>")
     _s2_pintar(f'<div style="margin:10px 0">{"".join(partes)}</div>')
 
 
@@ -577,7 +327,7 @@ def tabla_simbolos():
 
 
 # =============================================================================
-# Corte Parte A / Parte B y tabla de cobertura
+# Corte Parte A / Parte B
 # =============================================================================
 
 def tarjeta_corte():
@@ -598,52 +348,6 @@ def tarjeta_corte():
     )
 
 
-_S2_COBERTURA = [
-    ("Planteamiento del problema", "§3 · Concepto en corto", "E3"),
-    ("Requisitos y ficha de análisis", "§3 · La ficha de análisis", "E3"),
-    ("Variables, constantes y restricciones", "§3 y §4.4", "E3, E6"),
-    ("Metodología comprender-analizar-diseñar-verificar", "§3 · el ciclo", "E3"),
-    ("Estructura Entrada-Proceso-Salida", "§3 · E-P-S", "E3"),
-    ("Definición de casos de prueba", "§3 y §4.1 (la cola de entradas)", "E4, E8"),
-    ("Pseudocódigo", "§4.1 laboratorio", "E1, E4, E8"),
-    ("Secuencia de instrucciones", "§4.1 · el orden importa", "E1"),
-    ("Símbolos y reglas del diagrama de flujo", "§4.3", "E2"),
-    ("Trazado manual (prueba de escritorio)", "§4.2 · el trazador", "E5"),
-    ("Uso de Flowgorithm", "§4.3 puente + §6 reto", "reto"),
-    ("Variables y memoria", "§4.4 · la caja con nombre", "E5, E6"),
-    ("Tipos numéricos, cadenas y booleanos", "§4.5", "E6"),
-    ("input, print y conversiones explícitas", "§4.6", "E6, E7, E8"),
-    ("Errores de conversión (ValueError)", "§4.7 · Lee el error", "—"),
-]
-
-
-def tabla_cobertura():
-    """«Lo que cubriste hoy»: el temario oficial, tema por tema."""
-    _s2_ocultar()
-    filas = "".join(
-        f'<tr><td style="border:1px solid {_S2_BORDE};padding:6px 10px">{t}</td>'
-        f'<td style="border:1px solid {_S2_BORDE};padding:6px 10px;'
-        f'color:{_S2_GRIS}">{d}</td>'
-        f'<td style="border:1px solid {_S2_BORDE};padding:6px 10px;'
-        f'font-weight:600;color:{_S2_VIOLETA_OSC}">{e}</td></tr>'
-        for t, d, e in _S2_COBERTURA
-    )
-    _s2_pintar(
-        f'<div style="overflow-x:auto;font-family:{_S2_FUENTE};font-size:13.5px;'
-        'margin:10px 0">'
-        '<table style="border-collapse:collapse;min-width:640px">'
-        + "".join(
-            f'<th style="border:1px solid {_S2_BORDE};padding:7px 10px;'
-            f'background:{_S2_PAPEL};color:{_S2_AZUL_OSC};text-align:left">'
-            f'{c}</th>' for c in ("Tema de la Semana 2", "Dónde lo viste",
-                                  "Se evalúa en"))
-        + f"{filas}</table></div>"
-        f'<div style="font-family:{_S2_FUENTE};font-size:12.5px;'
-        f'color:{_S2_GRIS};text-align:center;font-style:italic;margin:6px 0 12px">'
-        'Quince temas oficiales, ninguno sin dueño.</div>'
-    )
-
-
 # =============================================================================
 # Quices y ensayos
 # =============================================================================
@@ -652,51 +356,25 @@ def tabla_cobertura():
 # código para saber qué marcar. La celda queda en una sola línea y el motor
 # esconde su código con CSS.
 
-def quiz_hardware():
-    """Calentamiento 1 — hardware y software (repaso de la Semana 1)."""
-    _s2_motor().quiz(
-        "C1", 8,
-        "El intérprete de Python que ejecuta este cuadernillo, ¿qué es?",
-        ["Hardware", "Software", "Un dato", "Una parte del procesador"],
-        "Software",
-        "Es un programa: se instala, se actualiza y se ejecuta. Que no se "
-        "pueda tocar no lo hace menos real.",
-        pistas=["Piensa en la clasificación de la Semana 1: lo que se toca es "
-                "hardware; lo que se ejecuta, software."],
-    )
+def quiz_tipos():
+    """Calentamiento 2 — los cuatro tipos básicos (repaso de la Semana 1).
 
-
-def quiz_niveles():
-    """Calentamiento 2 — los niveles de lenguaje (repaso de la Semana 1)."""
+    Sustituye al de niveles de lenguaje, que preguntaba por máquina y
+    ensamblador: contenido retirado de la Semana 1. Y de paso arregla un fallo
+    de presentación --usaba `&rarr;` en las opciones, y las opciones van a un
+    RadioButtons de ipywidgets, que las pinta como TEXTO PLANO: el estudiante
+    leía literalmente "&rarr;". Las entidades HTML solo valen dentro de las
+    cajas, nunca en las opciones de un quiz.
+    """
     _s2_motor().quiz(
         "C2", 8,
-        "Ordena de MÁS cercano a la máquina a MÁS cercano al humano:",
-        ["lenguaje de máquina &rarr; ensamblador &rarr; Python",
-         "Python &rarr; ensamblador &rarr; lenguaje de máquina",
-         "ensamblador &rarr; lenguaje de máquina &rarr; Python"],
-        "lenguaje de máquina &rarr; ensamblador &rarr; Python",
-        "Bajar de nivel es acercarse a la máquina y alejarse de la persona.",
-        pistas=["El lenguaje de máquina son unos y ceros; Python se parece al "
-                "inglés. El ensamblador queda en la mitad."],
-    )
-
-
-def orden_errores():
-    """Calentamiento 4 — los tres tipos de error, por cuándo te enteras."""
-    _s2_motor().ordenar(
-        "C4", 10,
-        {"A": "Error de SINTAXIS — el programa ni siquiera arranca "
-              "(te faltó una comilla)",
-         "B": "Error de EJECUCIÓN — arranca y se cae a mitad de camino "
-              "(dividiste entre cero)",
-         "C": "Error de LÓGICA — corre completo, no se queja, y da un "
-              "resultado equivocado"},
-        ["A", "B", "C"],
-        "Antes de arrancar, a mitad de camino, o nunca. El tercero es el "
-        "peligroso, y hoy vas a aprender la herramienta que lo caza: la "
-        "prueba de escritorio.",
-        pistas=["Ordénalos por el momento en que te enteras del problema: "
-                "antes de arrancar, a mitad de camino, o nunca."],
+        'Escribes `codigo = "2260123"`. ¿De qué tipo es `codigo`?',
+        ["Entero (int)", "Decimal (float)", "Texto (str)", "Booleano (bool)"],
+        "Texto (str)",
+        "Las comillas deciden el tipo. Con comillas es texto, aunque por dentro "
+        "parezca un número: por eso `\"25\" + 1` no suma, se estrella.",
+        pistas=["Fíjate solo en las comillas. Son lo único que hay que mirar "
+                "para saber si Python lo guardó como número o como texto."],
     )
 
 
@@ -712,70 +390,6 @@ def quiz_prediccion():
         "matemáticas.",
         pistas=["Sigue el orden de las líneas: primero se multiplica, después "
                 "se suma el anillado."],
-    )
-
-
-def ensayo_e1():
-    """Ensayo de E1: ordenar las siete líneas, con verificación inmediata.
-
-    No da nota: la nota sale de la celda de nbgrader. Sirve para equivocarse
-    sin costo antes de escribir la lista definitiva.
-    """
-    _s2_motor().ordenar(
-        "EN1", 12,
-        {"A": "Leer copias",
-         "B": 'Escribir "Total a pagar: $", total',
-         "C": "Algoritmo CostoDeFotocopias",
-         "D": "total <- copias * 100 + 2500",
-         "E": 'Escribir "¿Cuántas copias vas a sacar?"',
-         "F": "FinAlgoritmo",
-         "G": "Definir copias, total Como Entero"},
-        ["C", "G", "E", "A", "D", "B", "F"],
-        "Ese es el orden. Ahora escríbelo como lista de letras en la celda de "
-        "E1 — y fíjate en que el corrector no lo va a leer: lo va a "
-        "<b>ejecutar</b>.",
-        pistas=["La primera línea de cualquier algoritmo es <code>Algoritmo</code> "
-                "y la última es <code>FinAlgoritmo</code>.",
-                "Antes de usar una caja hay que crearla, y antes de pedirle algo "
-                "al usuario hay que decirle qué le vas a pedir.",
-                "Cabecera, Definir, el mensaje, el Leer, el cálculo, mostrar el "
-                "resultado, FinAlgoritmo."],
-    )
-
-
-def quiz_simbolos():
-    """Ensayo de E2: el símbolo que más se confunde."""
-    _s2_motor().quiz(
-        "EN2", 10,
-        "En un diagrama de flujo, la instrucción <code>Leer copias</code> se "
-        "dibuja con…",
-        ["un rectángulo, porque guarda un dato",
-         "un paralelogramo, porque el dato entra desde afuera",
-         "un rombo, porque hay que preguntarle al usuario",
-         "un óvalo, porque el algoritmo empieza pidiendo datos"],
-        "un paralelogramo, porque el dato entra desde afuera",
-        "El paralelogramo es la puerta del algoritmo: por ahí entran los datos "
-        "(<code>Leer</code>) y por ahí salen los resultados "
-        "(<code>Escribir</code>).",
-        pistas=["El rectángulo es para cuentas y el rombo para preguntas de "
-                "sí/no. ¿Cuál queda para los datos que cruzan la frontera del "
-                "programa?"],
-    )
-
-
-def quiz_ficha():
-    """Ensayo de E3: qué es y qué no es una entrada."""
-    _s2_motor().quiz(
-        "EN3", 8,
-        "En el problema del parqueadero, ¿cuál de estos <b>no</b> es una "
-        "entrada?",
-        ["las horas que estuvo el carro", "la tarifa por hora",
-         "el recargo fijo de la barrera", "el total a pagar"],
-        "el total a pagar",
-        "El total no entra: <b>sale</b>. Una entrada es un dato que alguien "
-        "te tiene que dar; un resultado que tú calculas es una salida.",
-        pistas=["Pregúntate cuál de los cuatro puedes calcular tú a partir de "
-                "los otros tres."],
     )
 
 
@@ -883,8 +497,8 @@ _S2_LOGROS = [
     "Llenaste una ficha de análisis: objetivo, entradas, salidas, "
     "restricciones y casos de prueba.",
     "Hiciste una prueba de escritorio a mano y la comparaste con la real.",
-    "Reconociste los cinco símbolos del diagrama de flujo y dos diagramas mal "
-    "armados.",
+    "Reconociste los cinco símbolos del diagrama de flujo y las reglas de uno "
+    "bien armado.",
     "Tradujiste el mismo algoritmo a Python y comprobaste que dicen lo mismo.",
     "Entendiste por qué <code>input()</code> siempre devuelve texto.",
 ]
@@ -1039,3 +653,10 @@ def corregir(clave, respuesta):
     if clave not in _S2_CORRECTORES:
         raise AssertionError(f"No hay clave registrada para '{clave}'.")
     _S2_CORRECTORES[clave](respuesta)
+
+
+# Los cuadernillos 1 y 2 estrenaron dos nombres para la misma tarjeta.
+# El alias hace que los dos funcionen en todas las semanas: que un alumno
+# escriba el de otro cuadernillo y le salte un NameError en la PRIMERA celda
+# es la peor bienvenida posible, y ya paso una vez.
+iniciar = portada

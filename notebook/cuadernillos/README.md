@@ -41,10 +41,11 @@ entrypoint.sh (rol instructor)   siembra source/semana_01/ en nbgrader
 formgrader -> Generate           borra soluciones y pruebas ocultas -> release/
    │
    ▼
-publicar-cuadernillo semana_01   escribe el manifest con la ventana de tiempo
-   │
+publicar-cuadernillo semana_01   libera en el servicio nbexchange, con la
+   │                             ventana de tiempo dentro (ava_publicacion.json)
    ▼
-entrypoint.sh (rol estudiante)   entregar-cuadernillo -> work/cuadernillo.ipynb
+entrypoint.sh (rol estudiante)   entregar-cuadernillo -> work/semana_01.ipynb
+   (y cada vez que abre su panel)
 ```
 
 Dos consecuencias de este camino que condicionan todo el diseño:
@@ -53,9 +54,10 @@ Dos consecuencias de este camino que condicionan todo el diseño:
   `.ipynb` y nada más. No hay imágenes, ni módulos, ni `requirements.txt` al
   lado. Por eso los diagramas van incrustados como SVG y el motor lúdico va
   incrustado como código dentro de la primera celda.
-- **El nombre de la carpeta es el `cuadernillo_id`.** `semana_01` viaja hasta el
-  manifest y de ahí a `CUADERNILLO_CODIGO`, que es la clave con la que el tutor
-  cuenta las 5 preguntas por cuadernillo y con la que se etiqueta la telemetría.
+- **El nombre de la carpeta es el `cuadernillo_id`.** `semana_01` es el
+  `assignment_id` en el exchange y de ahí pasa a `CUADERNILLO_CODIGO`, que es la
+  clave con la que el tutor cuenta las 5 preguntas por cuadernillo y con la que
+  se etiqueta la telemetría.
 
 ## Construir
 
@@ -69,6 +71,18 @@ python3 notebook/cuadernillos/build.py --legible   # motor sin comprimir, para d
 completos, `grade_id` únicos, prefijo `test_` en las celdas que califican y
 `metadata.tutor_ia` presente. Un par mal formado no falla en Jupyter — falla en
 silencio, dejando el ejercicio fuera de la nota y fuera de la analítica.
+
+`build.py` no ejecuta nada, así que un ejercicio puede construir perfecto y
+estar roto. Eso lo comprueba `verificar.py`, que corre de cada ejercicio las dos
+mitades: la solución del instructor tiene que **pasar** las pruebas visibles y
+las ocultas, y la plantilla que ve el alumno tiene que **fallar**. Lo segundo es
+lo que nunca se ve mirando el notebook: una plantilla demasiado completa aprueba
+sola y el ejercicio deja de medir nada.
+
+```bash
+python3 notebook/cuadernillos/verificar.py             # todos
+python3 notebook/cuadernillos/verificar.py semana_01   # uno
+```
 
 Si cambias un diagrama:
 
@@ -116,8 +130,19 @@ Regla: **nada que cuente para la nota depende del motor.**
 2. Define `construir(motor_comprimido=True)` y devuelve el `Cuadernillo`.
 3. Los diagramas nuevos, a `diagramas/mmd/` y `render.py`.
 4. `build.py semana_03` y revisa que la validación pase.
-5. Añade la carpeta a `notebook_semana/` (la crea `build.py`) y reconstruye la
-   imagen: `docker build -t mi_imagen_jupyterlab:latest ./notebook`.
+5. Añade la carpeta a `notebook_semana/` (la crea `build.py`) y reconstruye las
+   **dos** imágenes, en este orden:
+
+   ```
+   docker build -t mi_imagen_jupyterlab:latest ./notebook
+   docker build -t mi_imagen_jupyterlab_docente:latest -f ./notebook/Dockerfile.docente ./notebook
+   ```
+
+   Son dos porque las plantillas llevan las soluciones dentro y solo pueden
+   viajar en la del docente: el kernel del alumno corre como el mismo usuario
+   que las posee, así que si estuvieran en su imagen podría leerlas con un
+   `open()` desde una celda. La del docente se construye encima de la del
+   alumno, de ahí el orden.
 
 ### Al escribir contenido
 

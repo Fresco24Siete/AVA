@@ -1,0 +1,26 @@
+# Caddy cuando el AVA vive detrás de un túnel (Tailscale Funnel o Cloudflare).
+#
+# Diferencia con el Caddyfile de la raíz: aquí Caddy NO hace TLS ni conoce el
+# dominio. El certificado lo pone el túnel en su borde, y a Caddy le llega
+# tráfico HTTP plano por un puerto interno. Por eso escucha en :8081 y no en
+# 80/443: en una máquina de escritorio esos dos puertos suelen estar ocupados,
+# y con túnel no hacen ninguna falta.
+#
+# Lo que sí sigue haciendo, y es imprescindible: quitar X-Frame-Options y
+# declarar quién puede embeber el AVA. Sin esta cabecera el navegador bloquea
+# el iframe y en Moodle se ve una página en blanco.
+:8081 {
+	# El túnel termina el TLS y le pasa a Caddy tráfico HTTP plano. Sin corregir
+	# esto, Caddy anuncia X-Forwarded-Proto: http, el Hub reconstruye la URL del
+	# lanzamiento como http://… y la firma OAuth de Moodle —calculada sobre
+	# https://…— deja de cuadrar: "401 Invalid oauth_signature", que es lo que
+	# el docente ve como una actividad en blanco. El de fuera siempre es https.
+	reverse_proxy jupyterhub:8000 {
+		header_up X-Forwarded-Proto https
+	}
+
+	header {
+		-X-Frame-Options
+		Content-Security-Policy "frame-ancestors 'self' https://lms.uis.edu.co"
+	}
+}

@@ -24,6 +24,7 @@ que ya está documentado en metrics_bridge.py para STUDENT_METRICS_TOKEN.
 """
 
 import json
+import re
 import logging
 import os
 
@@ -70,13 +71,22 @@ MAX_MENSAJE = int(os.environ.get("TUTOR_MAX_MENSAJE", "2000"))
 MAX_CONTEXTO = int(os.environ.get("TUTOR_MAX_CONTEXTO", "4000"))
 MAX_HISTORIAL = int(os.environ.get("TUTOR_MAX_HISTORIAL", "4000"))
 
-# Fuera de root_dir (/home/jovyan/work), así no aparece en el explorador de
-# archivos del alumno.
-DIR_ESTADO = os.environ.get("TUTOR_ESTADO_DIR", "/home/jovyan/.tutor_ia")
+# Dentro del volumen del alumno (/home/jovyan/work) y oculto: los nombres que
+# empiezan por punto no se listan en el explorador de archivos (allow_hidden es
+# False por defecto), igual que .ava_publicados.json y .ava_entregas.json.
+#
+# Estuvo en /home/jovyan/.tutor_ia, que NO se conserva: ahí el contador de
+# preguntas se reiniciaba cada vez que el contenedor se recreaba —parar y
+# arrancar el servidor desde el Control Panel, cambiar de rol, o un despliegue—,
+# así que el tope de 5 preguntas se saltaba con dos clics.
+DIR_ESTADO = os.environ.get("TUTOR_ESTADO_DIR", "/home/jovyan/work/.ava_tutor")
 ARCHIVO_ESTADO = os.path.join(DIR_ESTADO, "estado.json")
 
 
 def _base_backend():
+    # Igual que en metrics_bridge: la rama de STUDENT_METRICS_API_URL es un
+    # resto y ya no se ejecuta, porque el Hub dejo de exportar esa variable el
+    # 2026-09-20 (ver docs/flujos_obsoletos.md). Resolvia a la misma URL.
     base = os.environ.get("TUTOR_API_BASE") or os.environ.get("STUDENT_METRICS_API_BASE")
     if not base:
         vieja = os.environ.get("STUDENT_METRICS_API_URL", "")
@@ -92,6 +102,14 @@ _MARCAS_ESTADO = (
     "estado para la siguiente",
     "[estado para la",
     "estado para la próxima",
+    # Gemini varía la redacción: el 2026-08-23 tituló el bloque
+    # «Estado de la sesión (Historial para la siguiente interacción)» y el
+    # alumno lo vio entero.
+    "estado de la sesión",
+    "estado de la sesion",
+    "historial para la siguiente",
+    "para la siguiente interacción",
+    "para la siguiente interaccion",
 )
 
 
@@ -199,12 +217,38 @@ class _TutorHandlerBase(_BaseHandler):
         return
 
 
+_CUADERNILLO_VALIDO = re.compile(r"^[A-Za-z0-9_.-]{1,120}$")
+
+
+def _cuadernillo_pedido(handler):
+    """El cuadernillo sobre el que se pregunta.
+
+    Lo manda el navegador (?cuadernillo= o en el cuerpo), porque el del entorno
+    es el que estaba activo cuando NACIÓ el contenedor: con ese, preguntar desde
+    semana_01 gastaba el cupo de semana_02, y un cuadernillo publicado después
+    del arranque compartía el contador del anterior. Mismo fallo (y misma
+    solución) que el cuadernillo_id de la telemetría. Si no viene o viene raro,
+    se cae al del entorno, que es lo que había.
+    """
+    valor = handler.get_query_argument("cuadernillo", "")
+    if not valor:
+        try:
+            valor = str(json.loads(handler.request.body).get("cuadernillo", ""))
+        except Exception:
+            valor = ""
+    valor = valor.removesuffix(".ipynb")
+    valor = re.sub(r"_v\d+$", "", valor)
+    if valor and _CUADERNILLO_VALIDO.match(valor):
+        return valor
+    return IDENTIDAD["cuadernillo_id"]
+
+
 class TutorEstadoHandler(_TutorHandlerBase):
     """Cuántas preguntas le quedan al alumno en este cuadernillo."""
 
     @web.authenticated
     def get(self):
-        cuadernillo = IDENTIDAD["cuadernillo_id"]
+        cuadernillo = _cuadernillo_pedido(self)
         self.set_header("Content-Type", "application/json")
         self.finish(json.dumps({
             "habilitado": HABILITADO,
@@ -241,7 +285,7 @@ class TutorPreguntaHandler(_TutorHandlerBase):
             self._responder(400, {"error": "El mensaje viene vacío."})
             return
 
-        cuadernillo = IDENTIDAD["cuadernillo_id"]
+        cuadernillo = _cuadernillo_pedido(self)
 
         if ESTADO.restantes(cuadernillo) <= 0:
             self._responder(429, {
@@ -291,7 +335,21 @@ class TutorPreguntaHandler(_TutorHandlerBase):
             if resp.code >= 300:
                 cuerpo = (resp.body or b"")[:500].decode("utf-8", "replace")
                 log.error("[tutor_bridge] el backend rechazó la pregunta: %s %s", resp.code, cuerpo)
-                self._responder(502, {"error": "El tutor no está disponible en este momento."})
+                # Si el backend explica qué pasa, se le pasa al alumno tal cual.
+                # El mensaje genérico de antes ("no está disponible") sonaba a
+                # avería permanente incluso cuando era una saturación de Google
+                # que se pasa en un minuto: el alumno cerraba y no volvía.
+                detalle = ""
+                try:
+                    detalle = (json.loads(cuerpo) or {}).get("error", "")
+                except (ValueError, AttributeError):
+                    detalle = ""
+                self._responder(502, {
+                    "error": detalle or "El tutor no está disponible en este momento.",
+                    "restantes": ESTADO.restantes(cuadernillo),
+                    "usadas": ESTADO.usadas(cuadernillo),
+                    "max": MAX_PREGUNTAS,
+                })
                 return
 
             # El backend ha respondido de las dos formas: antes JSON con
@@ -363,7 +421,7 @@ def load_jupyter_server_extension(nbapp):
         # cuadernillo y pasa a ser uno solo para todo el curso.
         log.warning("[tutor_bridge] AVISO: no llegó CUADERNILLO_CODIGO. Las %d preguntas "
                     "se contarán de forma global, no por cuadernillo. Revisa "
-                    "entregar-cuadernillo y el manifest de /srv/publicados.", MAX_PREGUNTAS)
+                    "entregar-cuadernillo y el servicio nbexchange.", MAX_PREGUNTAS)
 
 
 def _load_jupyter_server_extension(server_app):
